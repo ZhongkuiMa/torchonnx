@@ -1,3 +1,6 @@
+__docformat__ = "restructuredtext"
+__all__ = ["TorchONNX"]
+
 import time
 
 import onnx
@@ -6,7 +9,7 @@ from torch import Tensor
 
 from .forward_part import gen_forward
 from .header_part import gen_header
-from .init_part import gen_init
+from .init_part import gen_init_code
 
 
 def _gen_module_name(file_path: str) -> str:
@@ -68,7 +71,7 @@ class TorchONNX:
             t = time.perf_counter()
 
         content = gen_header(model, module_class_name)
-        content += gen_init(model)
+        content += gen_init_code(model)
         content += gen_forward(model)
 
         with open(target_py_path, "w") as f:
