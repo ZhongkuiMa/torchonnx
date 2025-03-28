@@ -4,3 +4,5 @@
 *.pyc
 # ignore the cache directory
 __pycache__
+# ignore the DS_Store file
+.DS_Store
