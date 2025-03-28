@@ -1,35 +1,39 @@
-# torchonnx: Convert ONNX Model to PyTorch Model
+# 🚀 torchonnx: Convert ONNX Model to PyTorch Model 🔥
 
-**torchonnx** is a tool that helps you convert an **ONNX model** (.onnx file) into a **PyTorch model** (.pth file for model parameters and .py file for neural network structure). 
+**torchonnx** is an amazing tool that lets you easily convert an **ONNX model** (.onnx file) into a **PyTorch model** (.pth file for model parameters and .py file for neural network structure). ⚡
 
-## Why We Do This?
+## Why We Do This? 🤔
 
-While PyTorch provides the `torch.onnx` module to convert a PyTorch model to an ONNX model, the reverse process—converting an ONNX model to PyTorch—is not straightforward. Here are the reasons why:
+While PyTorch provides the `torch.onnx` module to convert a PyTorch model to an ONNX model, the reverse process—converting an ONNX model to PyTorch—is not straightforward. So, why are we doing this? Here's why! 💥
 
-- **Too many versions of ONNX**: The ONNX model format evolves across versions, and different versions contain different operations, which can be confusing. Unfortunately, there's little you can do about this. Maybe this tool has to face such case in the future.
-- **Inconsistencies between ONNX and PyTorch**: There are many inconsistencies (names, parameters, even logic, etc.) between ONNX and PyTorch models. This makes it difficult to automatically convert the ONNX model back into a PyTorch model. Perhaps PyTorch doesn't officially support this because they don't think it’s necessary. However, for us in the **NNV (Neural Network Verification)** community, it's essential because ONNX has become the unified model format.
-- **Unfriendly ONNX**: ONNX doesn't seem to care about the logic behind operations. It just reads and generates code without concern for how the operations fit together.
+- **Too many versions of ONNX** 😖: The ONNX model format evolves across versions, and different versions have different operations. It’s messy, confusing, and frustrating! 😤 Unfortunately, we might have to deal with this in the future... but we'll face it head-on! 💪
+- **Inconsistencies between ONNX and PyTorch** ⚡: There are tons of inconsistencies between ONNX and PyTorch models (names, parameters, even logic 🤯)! This makes converting ONNX back into PyTorch tricky. PyTorch doesn’t officially support this conversion, probably because they think it’s unnecessary. But for us in the **NNV (Neural Network Verification)** community, it’s essential! ONNX has become the **unified model format**! 🌍
+- **Unfriendly ONNX** 😩: ONNX doesn’t care about how operations should logically fit together! It just generates code without understanding the real flow. We need something better! 💥
 
-## What We Do?
+## What We Do? 🔥
 
-I acknowledge that some tools exist to convert ONNX models to PyTorch models, and I appreciate their work. Currently, the most well-known tool is [onnx2pytorch](https://github.com/Talmaj/onnx2pytorch). However, its code is not optimized for performance and may make the conversion process cumbersome. For example, its `forward` method still requires iterating over all ONNX nodes instead of just using the PyTorch model. In other words, it's more of a decorator for the ONNX model than a true PyTorch model.
+I know there are some tools out there to convert ONNX models to PyTorch models, and I appreciate their efforts 🙌. But let’s be real—most of them fall short in terms of performance and ease of use. The most well-known tool, [onnx2pytorch](https://github.com/Talmaj/onnx2pytorch), is great but... its code isn’t optimized for performance, and it often makes the process unnecessarily complicated. 😵
 
-Additionally, onnx2pytorch suffers from inefficiencies, especially when converting the ONNX model's initializers to PyTorch tensor parameters. There are repeated operations and significant time-wasting.
+For example, the `forward` method still iterates over **all ONNX nodes** instead of just using the PyTorch model! 😱 It’s more of a **decorator** for the ONNX model than a true PyTorch model. And don’t even get me started on the inefficiencies when converting the ONNX model’s initializers to PyTorch tensor parameters. 🙄
 
-To solve these issues, I decided to write my own tool for converting ONNX models to PyTorch models. The idea is simple: convert the ONNX model into two files:
+So, I decided to take matters into my own hands and build a tool that converts ONNX models to PyTorch models **efficiently** and **effectively**. 💥 
+
+Here’s the simple and powerful idea: we’ll convert the ONNX model into **two files**:
 1. A `.py` file defining the neural network structure.
 2. A `.pth` file saving the model parameters.
 
-This method avoids dealing with the conversion or construction of PyTorch module objects in code and is both **simple** and **efficient**.
+This means no hassle with constructing PyTorch module objects in code. It’s **simple**, **clean**, and **super-efficient**! 🚀
 
-## How to Use?
+## How to Use? 🔧
 
-### Installation Guide
+### Installation Guide 🛠️
 
-There are no significant installation requirements for this tool. All you need is:
-- **PyTorch**: `torch`
-- **ONNX**: `onnx`
+Good news—there are **no complicated installation steps**! 🎉 All you need is:
+- **PyTorch**: `torch` ✅
+- **ONNX**: `onnx` ✅
 
-### Current Supported Features
+If you haven’t installed them yet, just refer to how to install [PyTorch](https://pytorch.org/) and [ONNX](https://github.com/onnx/onnx) on their official websites. 🌐
 
-I have implemented the common operations for feedforward neural networks. I think it is enough for most of the cases. If you find some operations are not supported, please let me know.
+## Current Supported Features 🌟
+
+I have implemented most of commonly used operations in feedforward neural networks.
