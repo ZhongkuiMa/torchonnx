@@ -1,4 +1,4 @@
-# 🚀 torchonnx: Convert ONNX Model to PyTorch Model 🔥
+# torchonnx: Convert ONNX Model to PyTorch Model 🔥
 
 **torchonnx** is an amazing tool that lets you easily convert an **ONNX model** (.onnx file) into a **PyTorch model** (.pth file for model parameters and .py file for neural network structure). ⚡
 
@@ -40,8 +40,6 @@ If you haven’t installed them yet, just refer to how to install [PyTorch](http
 
 There is an example about ViT model in `test` folder ([ViT benchmark](https://github.com/ChristopherBrix/vnncomp2023_benchmarks/tree/main/benchmarks/vit/onnx) from [VNNCOMP'23](https://sites.google.com/view/vnn2023/home)). Note that you need to use [slimonnx](https://github.com/ZhongkuiMa/slimonnx) to simplify the model first and take its simplified version to generate the pytorch code because there are some unsupported operations in the original model.
 
-```bash
-
 ```python
 from torchonnx import TorchONNX
 
@@ -54,4 +52,4 @@ if __name__ == "__main__":
 
 ## Current Supported Features 🌟
 
-I have implemented most of commonly used operations in feedforward neural networks.
+I have implemented most of commonly used operations in feedforward neural networks. Transformer-based architectures will be treated as several basic operations.
