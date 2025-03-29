@@ -69,6 +69,12 @@ import torch.nn as nn
 from torch.nn import Module
 
 
+# Model name: torch_jit_slimmed
+# Input name: input_0
+# Input shape: [1, 3, 32, 32]
+# Output name: output_77
+# Output shape: [1, 10]
+
 class Ibp338V22Simplified(Module):
 
     def __init__(self):
@@ -244,5 +250,6 @@ class Ibp338V22Simplified(Module):
         output_77 = self.Gemm_76(ReduceMean_75_0)
 
         return output_77
+
 
 ```
