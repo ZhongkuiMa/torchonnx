@@ -5,11 +5,12 @@ import onnx
 
 from .onnx_attrs import get_attrs_of_onnx_node
 from .torch_args import get_torch_args_of_onnx_attrs
+from .utils import *
 
 _INDENT = "    "
 
 
-def _gen_code_of_add(*args, **kwargs) -> str:
+def _gen_nothing(*args, **kwargs) -> str:
     return ""
 
 
@@ -56,6 +57,18 @@ def _gen_code_of_batchnorm(
     if not torch_args["track_running_stats"]:
         code += f"track_running_stats={torch_args['track_running_stats']}, "
     code = code[:-2] + ")\n"
+
+    # Set parameters
+    input_names = parse_input_names(node, initializer_shapes.keys())  # noqa
+    scale = input_names[1]
+    b = input_names[2]
+    mean = input_names[3]
+    variance = input_names[4]
+    code += _INDENT * 2 + f"self.{node.name}.weight.data = {scale}\n"
+    code += _INDENT * 2 + f"self.{node.name}.bias.data = {b}\n"
+    code += _INDENT * 2 + f"self.{node.name}.running_mean.data = {mean}\n"
+    code += _INDENT * 2 + f"self.{node.name}.running_var.data = {variance}\n"
+
     return code
 
 
@@ -80,6 +93,19 @@ def _gen_code_of_conv(
     if torch_args["groups"] != 1:
         code += f"groups={torch_args['groups']}, "
     code = code[:-2] + ")\n"
+
+    # Set parameters
+    input_names = parse_input_names(node, initializer_shapes.keys())  # noqa
+    weight = input_names[1]
+    code += _INDENT * 2 + f"self.{node.name}.weight.data = {weight}\n"
+    if len(node.input) == 3:
+        assert torch_args["bias"] is not None
+        bias = input_names[2]
+        code += _INDENT * 2 + f"self.{node.name}.bias.data = {bias}\n"
+    else:
+        assert torch_args["bias"] is None
+    code += "\n"
+
     return code
 
 
@@ -108,11 +134,20 @@ def _gen_code_of_convtranspose(
     if not torch_args["bias"]:
         code += f"bias={torch_args['bias']}, "
     code = code[:-2] + ")\n"
+
+    # Set parameters
+    input_names = parse_input_names(node, initializer_shapes.keys())  # noqa
+    weight = input_names[1]
+    code += _INDENT * 2 + f"self.{node.name}.weight.data = {weight}\n"
+    if len(node.input) == 3:
+        assert torch_args["bias"] is not None
+        bias = input_names[2]
+        code += _INDENT * 2 + f"self.{node.name}.bias.data = {bias}\n"
+    else:
+        assert torch_args["bias"] is None
+    code += "\n"
+
     return code
-
-
-def _gen_code_of_div(*args, **kwargs) -> str:
-    return ""
 
 
 def _gen_code_of_elu(
@@ -136,6 +171,7 @@ def _gen_code_of_flatten(
     if torch_args["start_dim"] != 1:
         code += f"start_dim={torch_args['start_dim']}"
     code += ")\n"
+
     return code
 
 
@@ -164,6 +200,19 @@ def _gen_code_of_gemm(
     if not torch_args["bias"]:
         code += f"bias={torch_args['bias']}, "
     code = code[:-2] + ")\n"
+
+    # Set parameters
+    input_names = parse_input_names(node, initializer_shapes.keys())  # noqa
+    weight = input_names[1]
+    code += _INDENT * 2 + f"self.{node.name}.weight.data = {weight}\n"
+    if len(node.input) == 3:
+        assert torch_args["bias"] is not None
+        bias = input_names[2]
+        code += _INDENT * 2 + f"self.{node.name}.bias.data = {bias}\n"
+    else:
+        assert torch_args["bias"] is None
+    code += "\n"
+
     return code
 
 
@@ -204,10 +253,6 @@ def _gen_code_of_maxpool(
     return code
 
 
-def _gen_code_of_mul(*args, **kwargs) -> str:
-    return ""
-
-
 def _gen_code_of_relu(
     node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
 ) -> str:
@@ -226,14 +271,10 @@ def _gen_code_of_softmax(
     onnx_attrs = get_attrs_of_onnx_node(node)
     torch_args = get_torch_args_of_onnx_attrs(node, onnx_attrs, initializer_shapes)
     code = _INDENT * 2 + f"self.{node.name} = nn.Softmax("
-    if torch_args["axis"] is not None:
-        code += f'dim={torch_args["axis"]})\n'
-    code = ")\n"
+    if torch_args["dim"] is not None:
+        code += f'dim={torch_args["dim"]}'
+    code += ")\n"
     return code
-
-
-def _gen_code_of_sub(*args, **kwargs) -> str:
-    return ""
 
 
 def _gen_code_of_tanh(
@@ -257,24 +298,29 @@ def _gen_code_of_upsample(
 
 
 _GEN_CODE_MAP = {
-    "Add": _gen_code_of_add,
+    "Add": _gen_nothing,
     "AveragePool": _gen_code_of_avgpool,
     "BatchNormalization": _gen_code_of_batchnorm,
+    "Concat": _gen_nothing,
     "Conv": _gen_code_of_conv,
     "ConvTranspose": _gen_code_of_convtranspose,
-    "Div": _gen_code_of_div,
+    "Div": _gen_nothing,
     "Elu": _gen_code_of_elu,
     "Flatten": _gen_code_of_flatten,
     "Gelu": _gen_code_of_gelu,
     "Gemm": _gen_code_of_gemm,
     "LeakyRelu": _gen_code_of_leakyrelu,
+    "MatMul": _gen_nothing,
     "MaxPool": _gen_code_of_maxpool,
-    "Mul": _gen_code_of_mul,
+    "Mul": _gen_nothing,
+    "ReduceMean": _gen_nothing,
     "Relu": _gen_code_of_relu,
+    "Reshape": _gen_nothing,
     "Sigmoid": _gen_code_of_sigmoid,
     "Softmax": _gen_code_of_softmax,
-    "Sub": _gen_code_of_sub,
+    "Sub": _gen_nothing,
     "Tanh": _gen_code_of_tanh,
+    "Transpose": _gen_nothing,
     "Upsample": _gen_code_of_upsample,
 }
 
@@ -289,28 +335,23 @@ def _gen_init_header_code() -> str:
     )
 
 
-def _get_initializer_shapes(model: onnx.ModelProto) -> dict[str, tuple]:
-    initializer_shapes = {}
-    for initializer in model.graph.initializer:
-        shape = []
-        for dim in initializer.dims:
-            shape.append(dim)
-        initializer_shapes[initializer.name] = tuple(shape)
-
-    return initializer_shapes
+def _gen_load_pth_data_code(model: onnx.ModelProto, pth_path: str) -> str:
+    return _INDENT * 2 + f"self.data = torch.load('{pth_path}')\n" + "\n"
 
 
-def gen_init_code(model: onnx.ModelProto) -> str:
-    initializer_shapes = _get_initializer_shapes(model)
+def gen_init_code(model: onnx.ModelProto, pth_path: str) -> str:
+    initializer_shapes = get_initializer_shapes(model)
 
     content = _gen_init_header_code()
+    content += _gen_load_pth_data_code(model, pth_path)
 
     for node in model.graph.node:
         op_type = node.op_type
         _gen_node = _GEN_CODE_MAP.get(op_type)
         if _gen_node is None:
-            raise NotImplementedError(f"Invalid op_type: {op_type}")
-        content += _gen_node(node, initializer_shapes)
+            raise NotImplementedError(f"Invalid op_type: {op_type}\n{node}")
+        code = _gen_node(node, initializer_shapes)
+        content += code
     content += "\n"
 
     return content
