@@ -7,8 +7,8 @@ import onnx
 import torch
 from torch import Tensor
 
-from .forward_part import gen_forward
-from .header_part import gen_header
+from .forward_part import gen_forward_code
+from .header_part import gen_header_code
 from .init_part import gen_init_code
 
 
@@ -70,11 +70,16 @@ class TorchONNX:
             print(f"Generating pytorch code...")
             t = time.perf_counter()
 
-        content = gen_header(model, module_class_name)
-        content += gen_init_code(model)
-        content += gen_forward(model)
-
+        content = gen_header_code(model, module_class_name)
         with open(target_py_path, "w") as f:
+            f.write(content)
+
+        content = gen_init_code(model, target_pth_path)
+        with open(target_py_path, "a") as f:
+            f.write(content)
+
+        content = gen_forward_code(model)
+        with open(target_py_path, "a") as f:
             f.write(content)
 
         if self.verbose:

@@ -91,8 +91,8 @@ def _torch_attrs_conv(
         "bias": True,
     }
 
-    inputs = parse_node_inputs(node)
-    weight_shape = initializer_shapes[inputs[1]]
+    inputs = parse_input_names(node, initializer_shapes.keys())  # type: ignore
+    weight_shape = initializer_shapes[node.input[1]]
     torch_args["in_channels"] = weight_shape[1]
     torch_args["out_channels"] = weight_shape[0]
     torch_args["bias"] = bool(len(inputs) == 3)
@@ -134,7 +134,7 @@ def _torch_attrs_convtranspose(
         "bias": True,
     }
 
-    inputs = parse_node_inputs(node)
+    inputs = parse_input_names(node, initializer_shapes.keys())  # type: ignore
     weight_shape = initializer_shapes[inputs[1]]
     torch_args["in_channels"] = weight_shape[1]
     torch_args["out_channels"] = weight_shape[0]
@@ -207,8 +207,8 @@ def _torch_attrs_gemm(
 ) -> dict[str, Any]:
     torch_args = {}
 
-    input_names = parse_node_inputs(node)
-    weight_shape = initializer_shapes[input_names[1]]
+    input_names = parse_input_names(node, initializer_shapes.keys())  # type: ignore
+    weight_shape = initializer_shapes[node.input[1]]
     if attrs["transB"] == 1:
         torch_args["input_features"] = weight_shape[1]
         torch_args["output_features"] = weight_shape[0]
@@ -307,6 +307,19 @@ def _torch_attrs_upsample(
     return torch_args
 
 
+def _torch_attrs_reducemean(
+    node: onnx.NodeProto,
+    attrs: dict[str, Any],
+    initializer_shapes: dict[str, tuple[int, ...]],
+) -> dict[str, Any]:
+    torch_args = {"keepdims": True}
+    for k, v in attrs.items():
+        if k == "keepdims":
+            torch_args["keepdim"] = bool(v)
+
+    return torch_args
+
+
 _TORCH_ATTRS_MAP = {
     "AveragePool": _torch_attrs_avgpool,
     "BatchNormalization": _torch_attrs_batchnorm,
@@ -320,6 +333,7 @@ _TORCH_ATTRS_MAP = {
     "MaxPool": _torch_attrs_maxpool,
     "Softmax": _torch_attrs_softmax,
     "Upsample": _torch_attrs_upsample,
+    "ReduceMean": _torch_attrs_reducemean,
 }
 
 

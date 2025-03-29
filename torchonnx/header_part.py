@@ -1,5 +1,5 @@
 __docformat__ = "restructuredtext"
-__all__ = ["gen_header"]
+__all__ = ["gen_header_code"]
 
 import onnx
 
@@ -24,7 +24,7 @@ def _gen_class_header(model_name: str) -> str:
     return s
 
 
-def gen_header(model: onnx.ModelProto, model_name: str) -> str:
+def gen_header_code(model: onnx.ModelProto, model_name: str) -> str:
     content = _gen_imports()
     content += _gen_class_header(model_name)
 

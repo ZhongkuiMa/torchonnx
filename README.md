@@ -16,9 +16,10 @@ I know there are some tools out there to convert ONNX models to PyTorch models, 
 
 For example, the `forward` method still iterates over **all ONNX nodes** instead of just using the PyTorch model! 😱 It’s more of a **decorator** for the ONNX model than a true PyTorch model. And don’t even get me started on the inefficiencies when converting the ONNX model’s initializers to PyTorch tensor parameters. 🙄
 
-So, I decided to take matters into my own hands and build a tool that converts ONNX models to PyTorch models **efficiently** and **effectively**. 💥 
+So, I decided to take matters into my own hands and build a tool that converts ONNX models to PyTorch models **efficiently** and **effectively**. 💥
 
 Here’s the simple and powerful idea: we’ll convert the ONNX model into **two files**:
+
 1. A `.py` file defining the neural network structure.
 2. A `.pth` file saving the model parameters.
 
@@ -29,10 +30,27 @@ This means no hassle with constructing PyTorch module objects in code. It’s **
 ### Installation Guide 🛠️
 
 Good news—there are **no complicated installation steps**! 🎉 All you need is:
+
 - **PyTorch**: `torch` ✅
 - **ONNX**: `onnx` ✅
 
 If you haven’t installed them yet, just refer to how to install [PyTorch](https://pytorch.org/) and [ONNX](https://github.com/onnx/onnx) on their official websites. 🌐
+
+### Example Usage 📚
+
+There is an example about ViT model in `test` folder ([ViT benchmark](https://github.com/ChristopherBrix/vnncomp2023_benchmarks/tree/main/benchmarks/vit/onnx) from [VNNCOMP'23](https://sites.google.com/view/vnn2023/home)). Note that you need to use [slimonnx](https://github.com/ZhongkuiMa/slimonnx) to simplify the model first and take its simplified version to generate the pytorch code because there are some unsupported operations in the original model.
+
+```bash
+
+```python
+from torchonnx import TorchONNX
+
+if __name__ == "__main__":
+    # The following
+    file_path = "../nets/ibp_3_3_8_v22_simplified.onnx"
+    converter = TorchONNX(verbose=True)
+    converter.convert(file_path)
+```
 
 ## Current Supported Features 🌟
 
