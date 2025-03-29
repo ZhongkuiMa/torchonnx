@@ -29,10 +29,10 @@ This means no hassle with constructing PyTorch module objects in code. It’s **
 
 ### Installation Guide 🛠️
 
-Good news—there are **no complicated installation steps**! 🎉 All you need is:
+Good news—there are **no complicated installation steps**! 🎉 All you need is ✅:
 
-- **PyTorch**: `torch` ✅
-- **ONNX**: `onnx` ✅
+- `onnx=1.17.0`
+- `numpy=1.24.3`
 
 If you haven’t installed them yet, just refer to how to install [PyTorch](https://pytorch.org/) and [ONNX](https://github.com/onnx/onnx) on their official websites. 🌐
 
@@ -49,6 +49,8 @@ if __name__ == "__main__":
     converter = TorchONNX(verbose=True)
     converter.convert(file_path)
 ```
+
+[netron.app](netron.app) is a good way to check the computation graph of the onnx file.
 
 ## Current Supported Features 🌟
 
