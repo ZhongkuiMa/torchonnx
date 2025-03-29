@@ -8,6 +8,12 @@ import torch.nn as nn
 from torch.nn import Module
 
 
+# Model name: torch-jit-export_slimmed
+# Input name: input_0
+# Input shape: [1, 3, 56, 56]
+# Output name: output_41
+# Output shape: [1, 200]
+
 class TinyimagenetResnetMediumV22Simplified(Module):
     def __init__(self):
         super(Module, self).__init__()
