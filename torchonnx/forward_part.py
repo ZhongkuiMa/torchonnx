@@ -28,6 +28,7 @@ def _gen_code_of_binary_op(
 def _gen_code_of_concat(
     node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
 ) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.cat.html
     input_names = parse_input_names(node, initializer_shapes)
     output_names = parse_output_names(node, initializer_shapes)
     axis = get_attrs_of_onnx_node(node)["axis"]
@@ -62,6 +63,7 @@ def _gen_code_of_mul(
 def _gen_code_of_reducemean(
     node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
 ) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.mean.html
     input_names = parse_input_names(node, initializer_shapes)
     output_names = parse_output_names(node, initializer_shapes)
     attrs = get_attrs_of_onnx_node(node)
@@ -77,6 +79,7 @@ def _gen_code_of_reducemean(
 def _gen_code_of_reshape(
     node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
 ) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.reshape.html
     input_names = parse_input_names(node, initializer_shapes)
     output_names = parse_output_names(node, initializer_shapes)
     return _INDENT * 2 + (
@@ -93,6 +96,7 @@ def _gen_code_of_sub(
 def _gen_code_of_transpose(
     node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
 ) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.permute.html
     input_names = parse_input_names(node, initializer_shapes)
     output_names = parse_output_names(node, initializer_shapes)
     perm = get_attrs_of_onnx_node(node)["perm"]
