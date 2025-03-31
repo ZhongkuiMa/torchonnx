@@ -17,6 +17,7 @@ def _gen_nothing(*args, **kwargs) -> str:
 def _gen_code_of_avgpool(
     node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
 ) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.nn.AvgPool2d.html
     onnx_attrs = get_attrs_of_onnx_node(node)
     torch_args = get_torch_args_of_onnx_attrs(node, onnx_attrs, initializer_shapes)
     dim = len(torch_args["kernel_size"])
@@ -43,6 +44,7 @@ def _gen_code_of_avgpool(
 def _gen_code_of_batchnorm(
     node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
 ) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.nn.BatchNorm2d.html
     onnx_attrs = get_attrs_of_onnx_node(node)
     torch_args = get_torch_args_of_onnx_attrs(node, onnx_attrs, initializer_shapes)
     dim = len(torch_args["num_features"])
@@ -75,6 +77,7 @@ def _gen_code_of_batchnorm(
 def _gen_code_of_conv(
     node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
 ) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.nn.Conv2d.html
     onnx_attrs = get_attrs_of_onnx_node(node)
     torch_args = get_torch_args_of_onnx_attrs(node, onnx_attrs, initializer_shapes)
     dim = len(torch_args["kernel_size"])
@@ -112,6 +115,7 @@ def _gen_code_of_conv(
 def _gen_code_of_convtranspose(
     node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
 ) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.nn.ConvTranspose2d.html
     onnx_attrs = get_attrs_of_onnx_node(node)
     torch_args = get_torch_args_of_onnx_attrs(node, onnx_attrs, initializer_shapes)
     dim = len(torch_args["kernel_size"])
@@ -153,6 +157,7 @@ def _gen_code_of_convtranspose(
 def _gen_code_of_elu(
     node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
 ) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.nn.ELU.html
     onnx_attrs = get_attrs_of_onnx_node(node)
     torch_args = get_torch_args_of_onnx_attrs(node, onnx_attrs, initializer_shapes)
     code = _INDENT * 2 + f"self.{node.name} = nn.ELU("
@@ -165,6 +170,7 @@ def _gen_code_of_elu(
 def _gen_code_of_flatten(
     node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
 ) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.nn.Flatten.html
     onnx_attrs = get_attrs_of_onnx_node(node)
     torch_args = get_torch_args_of_onnx_attrs(node, onnx_attrs, initializer_shapes)
     code = _INDENT * 2 + f"self.{node.name} = nn.Flatten("
@@ -178,6 +184,7 @@ def _gen_code_of_flatten(
 def _gen_code_of_gelu(
     node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
 ) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.nn.GELU.html
     onnx_attrs = get_attrs_of_onnx_node(node)
     torch_args = get_torch_args_of_onnx_attrs(node, onnx_attrs, initializer_shapes)
     code = _INDENT * 2 + f"self.{node.name} = nn.GELU("
@@ -187,9 +194,10 @@ def _gen_code_of_gelu(
     return code
 
 
-def _gen_code_of_gemm(
+def _gen_code_of_linear(
     node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
 ) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.nn.Linear.html
     onnx_attrs = get_attrs_of_onnx_node(node)
     torch_args = get_torch_args_of_onnx_attrs(node, onnx_attrs, initializer_shapes)
     code = (
@@ -219,6 +227,7 @@ def _gen_code_of_gemm(
 def _gen_code_of_leakyrelu(
     node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
 ) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.nn.LeakyReLU.html
     onnx_attrs = get_attrs_of_onnx_node(node)
     torch_args = get_torch_args_of_onnx_attrs(node, onnx_attrs, initializer_shapes)
     code = _INDENT * 2 + f"self.{node.name} = nn.LeakyReLU("
@@ -231,6 +240,7 @@ def _gen_code_of_leakyrelu(
 def _gen_code_of_maxpool(
     node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
 ) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.nn.MaxPool2d.html
     onnx_attrs = get_attrs_of_onnx_node(node)
     torch_args = get_torch_args_of_onnx_attrs(node, onnx_attrs, initializer_shapes)
     dim = len(torch_args["kernel_size"])
@@ -256,18 +266,21 @@ def _gen_code_of_maxpool(
 def _gen_code_of_relu(
     node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
 ) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.nn.ReLU.html
     return _INDENT * 2 + f"self.{node.name} = nn.ReLU()\n"
 
 
 def _gen_code_of_sigmoid(
     node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
 ) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.nn.Sigmoid.html
     return _INDENT * 2 + f"self.{node.name} = nn.Sigmoid()\n"
 
 
 def _gen_code_of_softmax(
     node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
 ) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.nn.Softmax.html
     onnx_attrs = get_attrs_of_onnx_node(node)
     torch_args = get_torch_args_of_onnx_attrs(node, onnx_attrs, initializer_shapes)
     code = _INDENT * 2 + f"self.{node.name} = nn.Softmax("
@@ -280,12 +293,14 @@ def _gen_code_of_softmax(
 def _gen_code_of_tanh(
     node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
 ) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.nn.Tanh.html
     return _INDENT * 2 + f"self.{node.name} = nn.Tanh()\n"
 
 
 def _gen_code_of_upsample(
     node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
 ) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.nn.Upsample.html
     onnx_attrs = get_attrs_of_onnx_node(node)
     torch_args = get_torch_args_of_onnx_attrs(node, onnx_attrs, initializer_shapes)
     code = _INDENT * 2 + f"self.{node.name} = nn.Upsample("
@@ -308,7 +323,7 @@ _GEN_CODE_MAP = {
     "Elu": _gen_code_of_elu,
     "Flatten": _gen_code_of_flatten,
     "Gelu": _gen_code_of_gelu,
-    "Gemm": _gen_code_of_gemm,
+    "Gemm": _gen_code_of_linear,
     "LeakyRelu": _gen_code_of_leakyrelu,
     "MatMul": _gen_nothing,
     "MaxPool": _gen_code_of_maxpool,
