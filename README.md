@@ -12,18 +12,26 @@ While PyTorch provides the `torch.onnx` module to convert a PyTorch model to an 
 
 ## What We Do? 🔥
 
-I know there are some tools out there to convert ONNX models to PyTorch models, and I appreciate their efforts 🙌. But let’s be real—most of them fall short in terms of performance and ease of use. The most well-known tool, [onnx2pytorch](https://github.com/Talmaj/onnx2pytorch), is great but... its code isn’t optimized for performance, and it often makes the process unnecessarily complicated. 😵
+I know there are some tools out there to convert ONNX models to PyTorch models, and I appreciate their efforts 🙌. But let’s be real — most of them fall short in terms of performance and ease of use. The most well-known tool, [onnx2pytorch](https://github.com/Talmaj/onnx2pytorch), is great but... its code isn’t optimized for performance, and it often makes the process unnecessarily complicated.
 
-For example, the `forward` method still iterates over **all ONNX nodes** instead of just using the PyTorch model! 😱 It’s more of a **decorator** for the ONNX model than a true PyTorch model. And don’t even get me started on the inefficiencies when converting the ONNX model’s initializers to PyTorch tensor parameters. 🙄
+For example, the `forward` method still iterates over **all ONNX nodes** instead of just using the PyTorch model! It’s more of a **decorator** for the ONNX model than a true PyTorch model. And don’t even get me started on the inefficiencies when converting the ONNX model’s initializers to PyTorch tensor parameters.
+
+## Features
 
 So, I decided to take matters into my own hands and build a tool that converts ONNX models to PyTorch models **efficiently** and **effectively**. 💥
 
 Here’s the simple and powerful idea: we’ll convert the ONNX model into **two files**:
 
-1. A `.py` file defining the neural network structure.
-2. A `.pth` file saving the model parameters.
+1. A .py file defining the neural network structure.
+2. A .pth file saving the model parameters.
 
 This means no hassle with constructing PyTorch module objects in code. It’s **simple**, **clean**, and **super-efficient**! 🚀
+
+More, this tool is **pure Python**, **structured**, and **easy to read**. It’s designed for designers and researchers who have the same goal as me, so it aims to be **easily extensible**. You can add new operations or modify existing ones without breaking the code. It’s all about **flexibility** and **adaptability**! 🌈
+
+### Current Supported Features 🌟
+
+I have implemented most of commonly used operations in feedforward neural networks. Transformer-based architectures will be treated as several basic operations.
 
 ## How to Use? 🔧
 
@@ -35,10 +43,6 @@ Good news—there are **no complicated installation steps**! 🎉 All you need i
 - `numpy=1.24.3`
 
 If you haven’t installed them yet, just refer to how to install [PyTorch](https://pytorch.org/) and [ONNX](https://github.com/onnx/onnx) on their official websites. 🌐
-
-### Current Supported Features 🌟
-
-I have implemented most of commonly used operations in feedforward neural networks. Transformer-based architectures will be treated as several basic operations.
 
 ### Example Usage 📚
 
