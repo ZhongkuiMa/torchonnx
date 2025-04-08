@@ -6,7 +6,7 @@ from typing import Any
 
 import onnx
 
-from .utils import EXTRACT_ATTR_MAP
+from ._utils import EXTRACT_ATTR_MAP
 
 
 def _scan_attrs(default_attrs: dict[str, Any], attrs) -> dict[str, Any]:

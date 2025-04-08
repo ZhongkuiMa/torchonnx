@@ -3,9 +3,9 @@ __all__ = ["gen_forward_code"]
 
 import onnx
 
-from .onnx_attrs import *
-from .torch_args import *
-from .utils import *
+from ._onnx_attrs import *
+from ._torch_args import *
+from ._utils import *
 
 _INDENT = "    "
 

@@ -5,7 +5,7 @@ from typing import Any
 
 import onnx
 
-from .utils import *
+from ._utils import *
 
 
 def _simplify_pool_args(arg: int | tuple[int, ...]) -> int | tuple[int, ...]:

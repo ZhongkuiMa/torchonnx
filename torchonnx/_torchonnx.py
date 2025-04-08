@@ -7,9 +7,9 @@ import onnx
 import torch
 from torch import Tensor
 
-from .forward_part import gen_forward_code
-from .header_part import gen_header_code
-from .init_part import gen_init_code
+from ._forward_part import gen_forward_code
+from ._header_part import gen_header_code
+from ._init_part import gen_init_code
 
 
 def _gen_module_name(file_path: str) -> str:
