@@ -37,10 +37,10 @@ I have implemented most of commonly used operations in feedforward neural networ
 
 ### Installation Guide 🛠️
 
-Good news—there are **no complicated installation steps**! 🎉 All you need is Python>=3.10 with the following libraries✅:
+Good news—there are **no complicated installation steps**! 🎉 All you need is Python>=3.10 (we are using Python 3.12) with the following libraries✅:
 
 - `onnx=1.17.0`
-- `numpy=1.24.3`
+- `numpy=2.2.4`
 
 If you haven’t installed them yet, just refer to how to install [PyTorch](https://pytorch.org/) and [ONNX](https://github.com/onnx/onnx) on their official websites. 🌐
 
