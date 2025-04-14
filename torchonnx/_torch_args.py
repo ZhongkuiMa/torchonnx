@@ -61,6 +61,7 @@ def _torch_attrs_batchnorm(
         "momentum": 0.1,
         "track_running_stats": True,
     }
+    # TODO: Add support for num_features
     raise NotImplementedError("The num_feature needs shape inference.")
     # torch_args["num_features"] = input_size[1] # Channel size
 
