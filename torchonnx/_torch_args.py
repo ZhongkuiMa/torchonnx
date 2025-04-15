@@ -1,9 +1,12 @@
 __docformat__ = "restructuredtext"
-__all__ = ["get_torch_args_of_onnx_attrs"]
+__all__ = ["get_torch_args"]
 
+import warnings
 from typing import Any
 
-import onnx
+import onnx.numpy_helper
+import torch
+from onnx import NodeProto, TensorProto
 
 from ._utils import *
 
@@ -14,14 +17,44 @@ def _simplify_pool_args(arg: int | tuple[int, ...]) -> int | tuple[int, ...]:
             return arg[0]
         elif all(x == arg[0] for x in arg):  # all elements are the same
             return arg[0]
+        else:
+            raise ValueError(f"Unsupported pooling argument: {arg}")
     return arg
 
 
-def _torch_attrs_avgpool(
-    node: onnx.NodeProto,
+def _torch_add(*args, **kwargs) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.add.html
+    return {}
+
+
+def _torch_argmax(
+    node: NodeProto,
     attrs: dict[str, Any],
-    initializer_shapes: dict[str, tuple[int, ...]],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.argmax.html
+    torch_args = {
+        "dim": None,
+        "keepdim": False,
+    }
+
+    for k, v in attrs.items():
+        if k == "axis":
+            torch_args["dim"] = v
+        elif k == "keepdims":
+            torch_args["keepdim"] = bool(v)
+
+    return torch_args
+
+
+def _torch_avgpool(
+    node: NodeProto,
+    attrs: dict[str, Any],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
+) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.nn.AvgPool2d.html
     torch_attrs = {
         "kernel_size": None,
         "stride": None,
@@ -36,12 +69,7 @@ def _torch_attrs_avgpool(
         elif k == "strides":
             torch_attrs["stride"] = _simplify_pool_args(v)
         elif k == "pads":
-            if len(v) == 4:
-                if v[0] != v[2] or v[1] != v[3]:
-                    raise ValueError(f"Unsupported padding: {v}")
-                torch_attrs["padding"] = _simplify_pool_args(v[:2])
-            else:
-                raise NotImplementedError
+            torch_attrs["padding"] = _simplify_pool_args(v[:2])
         elif k == "ceil_mode":
             torch_attrs["ceil_mode"] = bool(v)
         elif k == "count_include_pad":
@@ -50,20 +78,23 @@ def _torch_attrs_avgpool(
     return torch_attrs
 
 
-def _torch_attrs_batchnorm(
-    node: onnx.NodeProto,
+def _torch_batchnorm(
+    node: NodeProto,
     attrs: dict[str, Any],
-    initializer_shapes: dict[str, tuple[int, ...]],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.nn.BatchNorm2d.html
     torch_args = {
         "num_features": None,
         "eps": 1e-5,
         "momentum": 0.1,
         "track_running_stats": True,
+        "weight": None,
+        "bias": None,
+        "running_mean": None,
+        "running_var": None,
     }
-    # TODO: Add support for num_features
-    raise NotImplementedError("The num_feature needs shape inference.")
-    # torch_args["num_features"] = input_size[1] # Channel size
 
     for k, v in attrs.items():
         if k == "epsilon":
@@ -71,16 +102,65 @@ def _torch_attrs_batchnorm(
         elif k == "momentum":
             torch_args["momentum"] = 1.0 - v
         elif k == "training_mode":
-            torch_args["track_running_stats"] = v
+            torch_args["track_running_stats"] = bool(v)
+
+    input_node = nodes[node.input[0]]
+    input_node_weight = initializers[input_node.input[1]]
+    input_channels = input_node_weight.dims[1]
+    torch_args["num_features"] = input_channels
+
+    scale = initializers[node.input[1]]
+    weight = torch.tensor(onnx.numpy_helper.to_array(scale))
+    torch_args["weight"] = weight
+
+    bias = initializers[node.input[2]]
+    bias = torch.tensor(onnx.numpy_helper.to_array(bias))
+    torch_args["bias"] = bias
+
+    input_mean = initializers[node.input[3]]
+    running_mean = torch.tensor(onnx.numpy_helper.to_array(input_mean))
+    torch_args["running_mean"] = running_mean
+
+    input_var = initializers[node.input[4]]
+    running_var = torch.tensor(onnx.numpy_helper.to_array(input_var))
+    torch_args["running_var"] = running_var
 
     return torch_args
 
 
-def _torch_attrs_conv(
-    node: onnx.NodeProto,
+def _torch_cast(
+    node: NodeProto,
     attrs: dict[str, Any],
-    initializer_shapes: dict[str, tuple[int, ...]],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.Tensor.to.html
+    # TODO: Support this operation
+    raise NotImplementedError("This method has not been implemented yet.")
+
+
+def _torch_concat(
+    node: NodeProto,
+    attrs: dict[str, Any],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
+) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.cat.html
+    torch_args = {"dim": None}
+    for k, v in attrs.items():
+        if k == "axis":
+            torch_args["dim"] = v
+
+    return torch_args
+
+
+def _torch_conv(
+    node: NodeProto,
+    attrs: dict[str, Any],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
+) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.nn.Conv2d.html
     torch_args = {
         "in_channels": None,
         "out_channels": None,
@@ -92,8 +172,8 @@ def _torch_attrs_conv(
         "bias": True,
     }
 
-    inputs = parse_input_names(node, initializer_shapes.keys())  # type: ignore
-    weight_shape = initializer_shapes[node.input[1]]
+    inputs = parse_input_names(node, initializers)
+    weight_shape = tuple(initializers[node.input[1]].dims)
     torch_args["in_channels"] = weight_shape[1]
     torch_args["out_channels"] = weight_shape[0]
     torch_args["bias"] = bool(len(inputs) == 3)
@@ -104,12 +184,7 @@ def _torch_attrs_conv(
         elif k == "strides":
             torch_args["stride"] = _simplify_pool_args(v)
         elif k == "pads":
-            if len(v) == 4:
-                if v[0] != v[2] or v[1] != v[3]:
-                    raise ValueError(f"Unsupported padding: {v}")
-                torch_args["padding"] = _simplify_pool_args(v[:2])
-            else:
-                raise NotImplementedError
+            torch_args["padding"] = _simplify_pool_args(v[:2])
         elif k == "dilations":
             torch_args["dilation"] = _simplify_pool_args(v)
         elif k == "group":
@@ -118,11 +193,13 @@ def _torch_attrs_conv(
     return torch_args
 
 
-def _torch_attrs_convtranspose(
-    node: onnx.NodeProto,
+def _torch_convtranspose(
+    node: NodeProto,
     attrs: dict[str, Any],
-    initializer_shapes: dict[str, tuple[int, ...]],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.nn.ConvTranspose2d.html
     torch_args = {
         "in_channels": None,
         "out_channels": None,
@@ -135,8 +212,8 @@ def _torch_attrs_convtranspose(
         "bias": True,
     }
 
-    inputs = parse_input_names(node, initializer_shapes.keys())  # type: ignore
-    weight_shape = initializer_shapes[inputs[1]]
+    inputs = parse_input_names(node, initializers)
+    weight_shape = tuple(initializers[node.input[1]].dims)
     torch_args["in_channels"] = weight_shape[1]
     torch_args["out_channels"] = weight_shape[0]
     torch_args["bias"] = bool(len(inputs) == 3)
@@ -147,12 +224,7 @@ def _torch_attrs_convtranspose(
         elif k == "strides":
             torch_args["stride"] = _simplify_pool_args(v)
         elif k == "pads":
-            if len(v) == 4:
-                if v[0] != v[2] or v[1] != v[3]:
-                    raise ValueError(f"Unsupported padding: {v}")
-                torch_args["padding"] = _simplify_pool_args(v[:2])
-            else:
-                raise NotImplementedError
+            torch_args["padding"] = _simplify_pool_args(v[:2])
         elif k == "dilations":
             torch_args["dilation"] = _simplify_pool_args(v)
         elif k == "group":
@@ -163,11 +235,23 @@ def _torch_attrs_convtranspose(
     return torch_args
 
 
-def _torch_attrs_elu(
-    node: onnx.NodeProto,
+def _torch_constantofshape(*args, **kwargs) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.full.html
+    raise RuntimeError("This method is unnecessary and slim it to an initializer.")
+
+
+def _torch_div(*args, **kwargs) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.div.html
+    return {}
+
+
+def _torch_elu(
+    node: NodeProto,
     attrs: dict[str, Any],
-    initializer_shapes: dict[str, tuple[int, ...]],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.nn.ELU.html
     torch_args = {"alpha": 1.0}
     for k, v in attrs.items():
         if k == "alpha":
@@ -175,11 +259,13 @@ def _torch_attrs_elu(
     return torch_args
 
 
-def _torch_attrs_flatten(
-    node: onnx.NodeProto,
+def _torch_flatten(
+    node: NodeProto,
     attrs: dict[str, Any],
-    initializer_shapes: dict[str, tuple[int, ...]],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.nn.Flatten.html
     torch_args = {"start_dim": 1}
     for k, v in attrs.items():
         if k == "axis":
@@ -188,11 +274,31 @@ def _torch_attrs_flatten(
     return torch_args
 
 
-def _torch_attrs_gelu(
-    node: onnx.NodeProto,
+def _torch_gather(
+    node: NodeProto,
     attrs: dict[str, Any],
-    initializer_shapes: dict[str, tuple[int, ...]],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.gather.html
+    torch_args = {"dim": None, "index": None}
+
+    for k, v in attrs.items():
+        if k == "axis":
+            torch_args["dim"] = v
+        elif k == "index":
+            torch_args["index"] = initializers[node.input[1]]
+
+    return torch_args
+
+
+def _torch_gelu(
+    node: NodeProto,
+    attrs: dict[str, Any],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
+) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.nn.GELU.html
     torch_args = {"approximation": "none"}
     for k, v in attrs.items():
         if k == "approximation":
@@ -201,15 +307,32 @@ def _torch_attrs_gelu(
     return torch_args
 
 
-def _torch_attrs_gemm(
-    node: onnx.NodeProto,
+def _torch_gemm(
+    node: NodeProto,
     attrs: dict[str, Any],
-    initializer_shapes: dict[str, tuple[int, ...]],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
-    torch_args = {}
+    # https://pytorch.org/docs/stable/generated/torch.nn.Linear.html
+    torch_args = {  # We need those to set transpose in code generation
+        "transA": 0,
+        "transB": 0,
+        "alpha": 1.0,
+        "beta": 1.0,
+    }
 
-    input_names = parse_input_names(node, initializer_shapes.keys())  # type: ignore
-    weight_shape = initializer_shapes[node.input[1]]
+    for k, v in attrs.items():
+        if k == "transA":
+            torch_args["transA"] = v
+        elif k == "transB":
+            torch_args["transB"] = v
+        elif k == "alpha":
+            torch_args["alpha"] = v
+        elif k == "beta":
+            torch_args["beta"] = v
+
+    input_names = parse_input_names(node, initializers)
+    weight_shape = tuple(initializers[node.input[1]].dims)
     if attrs["transB"] == 1:
         torch_args["input_features"] = weight_shape[1]
         torch_args["output_features"] = weight_shape[0]
@@ -218,21 +341,16 @@ def _torch_attrs_gemm(
         torch_args["output_features"] = weight_shape[1]
     torch_args["bias"] = bool(len(input_names) == 3)
 
-    if attrs["alpha"] != 1.0:
-        raise ValueError(f"Invalid alpha: {attrs['alpha']}")
-    if attrs["beta"] != 1.0:
-        raise ValueError(f"Invalid beta: {attrs['beta']}")
-    if attrs["transA"] != 0:
-        raise ValueError(f"Invalid transA: {attrs['transA']}")
-
     return torch_args
 
 
-def _torch_attrs_leakyrelu(
-    node: onnx.NodeProto,
+def _torch_leakyrelu(
+    node: NodeProto,
     attrs: dict[str, Any],
-    initializer_shapes: dict[str, tuple[int, ...]],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.nn.LeakyReLU.html
     torch_args = {"negative_slope": 0.01}
     for k, v in attrs.items():
         if k == "alpha":
@@ -240,11 +358,18 @@ def _torch_attrs_leakyrelu(
     return torch_args
 
 
-def _torch_attrs_maxpool(
-    node: onnx.NodeProto,
+def _torch_matmul(*args, **kwargs) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.matmul.html
+    return {}
+
+
+def _torch_maxpool(
+    node: NodeProto,
     attrs: dict[str, Any],
-    initializer_shapes: dict[str, tuple[int, ...]],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.nn.MaxPool2d.html
     torch_args = {
         "kernel_size": None,
         "stride": None,  # Default value is kernel_size in torch.nn.MaxPool
@@ -259,12 +384,7 @@ def _torch_attrs_maxpool(
         elif k == "strides":
             torch_args["stride"] = _simplify_pool_args(v)
         elif k == "pads":
-            if len(v) == 4:
-                if v[0] != v[2] or v[1] != v[3]:
-                    raise ValueError(f"Unsupported padding: {v}")
-                torch_args["padding"] = _simplify_pool_args(v[:2])
-            else:
-                raise NotImplementedError
+            torch_args["padding"] = _simplify_pool_args(v[:2])
         elif k == "dilations":
             torch_args["dilation"] = _simplify_pool_args(v)
         elif k == "ceil_mode":
@@ -273,25 +393,296 @@ def _torch_attrs_maxpool(
     return torch_args
 
 
-def _torch_attrs_softmax(
-    node: onnx.NodeProto,
+def _torch_mul(*args, **kwargs) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.mul.html
+    return {}
+
+
+def _torch_pad(
+    node: NodeProto,
     attrs: dict[str, Any],
-    initializer_shapes: dict[str, tuple[int, ...]],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
+    warnings.warn("This method has not been tested yet.")
+    # https://pytorch.org/docs/stable/generated/torch.nn.functional.pad.html
+    torch_args = {
+        "pad": None,
+        "mode": "constant",
+        "value": 0.0,
+    }
+    for k, v in attrs.items():
+        if k == "mode":
+            torch_args["mode"] = v
+
+    """
+    Note:
+    Convert ONNX pad [start_1, start_2, start_3, ..., end_1, end_2, end_3, ...]
+    to PyTorch pad [..., start_3, end_3, start_2, end_2, start_1, end_1]
+    """
+    pads = onnx.numpy_helper.to_array(initializers[node.input[1]]).tolist()
+    pads = [int(x) for x in pads]
+    reversed_onnx_pad = list(pads[::-1])
+    torch_pad = [0] * len(reversed_onnx_pad)
+    dims = len(reversed_onnx_pad) // 2
+    for i in range(0, len(reversed_onnx_pad), 2):
+        torch_pad[i] = reversed_onnx_pad[i // 2]
+        torch_pad[i + 1] = reversed_onnx_pad[i // 2 + dims]
+    torch_args["pad"] = tuple(torch_pad)
+
+    constant_value = onnx.numpy_helper.to_array(initializers[node.input[2]])
+    torch_args["value"] = constant_value
+
+    if len(node.input) > 3:
+        axes = onnx.numpy_helper.to_array(initializers[node.input[3]]).tolist()
+        raise ValueError(f"We haven't support partial axes yet with axes={axes}")
+
+    return torch_args
+
+
+def _torch_reducemean(
+    node: NodeProto,
+    attrs: dict[str, Any],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
+) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.mean.html
+    torch_args = {"keepdims": True}
+    for k, v in attrs.items():
+        if k == "keepdims":
+            torch_args["keepdim"] = bool(v)
+
+    axes = initializers[node.input[1]]
+    dim = onnx.numpy_helper.to_array(axes).tolist()
+    dim = tuple(int(x) for x in dim)
+    torch_args["dim"] = dim
+
+    return torch_args
+
+
+def _torch_reducesum(
+    node: NodeProto,
+    attrs: dict[str, Any],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
+) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.sum.html
+    torch_args = {"keepdims": True}
+    for k, v in attrs.items():
+        if k == "keepdims":
+            torch_args["keepdim"] = bool(v)
+
+    axes = initializers[node.input[1]]
+    dim = onnx.numpy_helper.to_array(axes).tolist()
+    dim = tuple(int(x) for x in dim)
+    torch_args["dim"] = dim
+
+    return torch_args
+
+
+def _torch_relu(
+    node: NodeProto,
+    attrs: dict[str, Any],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
+) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.nn.ReLU.html
+    return {}
+
+
+def _torch_reshape(
+    node: NodeProto,
+    attrs: dict[str, Any],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
+) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.reshape.html
+    torch_args = {"shape": None}
+    shape = initializers[node.input[1]]
+    shape = tuple(onnx.numpy_helper.to_array(shape))
+    torch_args["shape"] = shape
+
+    return torch_args
+
+
+def _torch_resize(
+    node: NodeProto,
+    attrs: dict[str, Any],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
+) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.nn.functional.interpolate.html
+    # TODO: Support this operation
+    raise NotImplementedError("This method has not been implemented yet.")
+
+
+def _torch_scatter(*args, **kwargs) -> dict[str, Any]:
+    return _torch_scatterelement(*args, **kwargs)
+
+
+def _torch_scatterelement(
+    node: NodeProto,
+    attrs: dict[str, Any],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
+) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.scatter.html
+    torch_args = {"dim": None, "index": None, "src": None}
+
+    for k, v in attrs.items():
+        if k == "axis":
+            torch_args["dim"] = v
+
+    indices = onnx.numpy_helper.to_array(initializers[node.input[1]])
+    torch_args["index"] = torch.tensor(indices, dtype=torch.long)
+
+    updates = onnx.numpy_helper.to_array(initializers[node.input[2]])
+    torch_args["src"] = torch.tensor(updates)
+
+    return torch_args
+
+
+def _torch_scatternd(*args, **kwargs) -> dict[str, Any]:
+    return _torch_scatterelement(*args, **kwargs)
+
+
+def _torch_sigmoid(*args, **kwargs) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.sigmoid.html
+    return {}
+
+
+def _torch_slice(
+    node: NodeProto,
+    attrs: dict[str, Any],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
+) -> dict[str, Any]:
+    # https://onnx.ai/onnx/operators/onnx__Slice.html
+    torch_args = {
+        "starts": None,
+        "ends": None,
+        "axes": None,
+        "steps": None,
+    }
+
+    starts = initializers[node.input[1]]
+    starts = onnx.numpy_helper.to_array(starts).tolist()
+    starts = [int(x) for x in starts]
+    torch_args["starts"] = starts
+
+    ends = initializers[node.input[2]]
+    ends = onnx.numpy_helper.to_array(ends).tolist()
+    ends = [int(x) for x in ends]
+    torch_args["ends"] = ends
+
+    axes = initializers[node.input[3]]
+    axes = onnx.numpy_helper.to_array(axes).tolist()
+    axes = [int(x) for x in axes]
+    torch_args["axes"] = axes
+
+    steps = initializers[node.input[4]]
+    steps = onnx.numpy_helper.to_array(steps).tolist()
+    steps = [int(x) for x in steps]
+    torch_args["steps"] = steps
+
+    return torch_args
+
+
+def _torch_softmax(
+    node: NodeProto,
+    attrs: dict[str, Any],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
+) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.nn.Softmax.html
     torch_args = {"dim": None}
     for k, v in attrs.items():
         if k == "axis":
-            if v not in {0, -1}:
-                raise NotImplementedError(f"Unsupported axis: {v}")
+            assert v >= 0 or v == -1
+            if v == -1:
+                v = None
             torch_args["dim"] = v
     return torch_args
 
 
-def _torch_attrs_upsample(
-    node: onnx.NodeProto,
+def _torch_split(
+    node: NodeProto,
     attrs: dict[str, Any],
-    initializer_shapes: dict[str, tuple[int, ...]],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.split.html
+    torch_args = {
+        "split_size_or_sections": None,
+        "dim": 0,
+    }
+
+    for k, v in attrs.items():
+        if k == "axis":
+            torch_args["dim"] = v
+
+    if len(node.input) > 1:
+        split = initializers[node.input[1]]
+        split = int(onnx.numpy_helper.to_array(split))
+        torch.args["split_size_or_sections"] = split
+    else:
+        # TODO: We need the node shapes to infer the split size.
+        raise ValueError(
+            "We only support split with split_size_or_sections is given in ONNX."
+        )
+
+    return torch_args
+
+
+def _torch_sub(*args, **kwargs) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.sub.html
+    return {}
+
+
+def _torch_tanh(*args, **kwargs) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.tanh.html
+    return {}
+
+
+def _torch_transpose(
+    node: NodeProto,
+    attrs: dict[str, Any],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
+) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.permute.html
+    torch_args = {"dims": None}
+    for k, v in attrs.items():
+        if k == "perm":
+            torch_args["dims"] = v
+
+    return torch_args
+
+
+def _torch_unsqueeze(
+    node: NodeProto,
+    attrs: dict[str, Any],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
+) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.unsqueeze.html
+    torch_args = {"dim": None}
+    for k, v in attrs.items():
+        if k == "axes":
+            torch_args["dim"] = v
+
+    return torch_args
+
+
+def _torch_upsample(
+    node: NodeProto,
+    attrs: dict[str, Any],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
+) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.nn.Upsample.html
+    # TODO: Support this operation
+    raise NotImplementedError("This method has not been implemented yet.")
     torch_args = {
         # "size":None,
         "scale_factor": None,
@@ -300,52 +691,66 @@ def _torch_attrs_upsample(
         # "recompute_scale_factor": None,
     }
     for k, v in attrs.items():
-        if k == "scales":
-            torch_args["scale_factor"] = v
-        elif k == "mode":
+        if k == "mode":
             torch_args["mode"] = v
-    raise NotImplementedError("This method needs confirmation.")
-    return torch_args
 
-
-def _torch_attrs_reducemean(
-    node: onnx.NodeProto,
-    attrs: dict[str, Any],
-    initializer_shapes: dict[str, tuple[int, ...]],
-) -> dict[str, Any]:
-    torch_args = {"keepdims": True}
-    for k, v in attrs.items():
-        if k == "keepdims":
-            torch_args["keepdim"] = bool(v)
+    scales = onnx.numpy_helper.to_array(initializers[node.input[1]])
+    scales = (float(x) for x in scales)
+    torch_args["scale_factor"] = scales
 
     return torch_args
 
 
 _TORCH_ATTRS_MAP = {
-    "AveragePool": _torch_attrs_avgpool,
-    "BatchNormalization": _torch_attrs_batchnorm,
-    "Conv": _torch_attrs_conv,
-    "ConvTranspose": _torch_attrs_convtranspose,
-    "Elu": _torch_attrs_elu,
-    "Flatten": _torch_attrs_flatten,
-    "GELU": _torch_attrs_gelu,
-    "Gemm": _torch_attrs_gemm,
-    "LeakyRelu": _torch_attrs_leakyrelu,
-    "MaxPool": _torch_attrs_maxpool,
-    "Softmax": _torch_attrs_softmax,
-    "Upsample": _torch_attrs_upsample,
-    "ReduceMean": _torch_attrs_reducemean,
+    "Add": _torch_add,
+    "ArgMax": _torch_argmax,
+    "AveragePool": _torch_avgpool,
+    "BatchNormalization": _torch_batchnorm,
+    "Cast": _torch_cast,
+    "Concat": _torch_concat,
+    "Conv": _torch_conv,
+    "ConvTranspose": _torch_convtranspose,
+    "ConstantOfShape": _torch_constantofshape,
+    "Div": _torch_div,
+    "Elu": _torch_elu,
+    "Flatten": _torch_flatten,
+    "Gather": _torch_gather,
+    "Gelu": _torch_gelu,
+    "Gemm": _torch_gemm,
+    "LeakyRelu": _torch_leakyrelu,
+    "MatMul": _torch_matmul,
+    "MaxPool": _torch_maxpool,
+    "Mul": _torch_mul,
+    "Pad": _torch_pad,
+    "ReduceMean": _torch_reducemean,
+    "ReduceSum": _torch_reducesum,
+    "Relu": _torch_relu,
+    "Reshape": _torch_reshape,
+    "Resize": _torch_resize,
+    "Sigmoid": _torch_sigmoid,
+    "Scatter": _torch_scatter,
+    "ScatterElements": _torch_scatterelement,
+    "ScatterND": _torch_scatternd,
+    "Slice": _torch_slice,
+    "Softmax": _torch_softmax,
+    "Split": _torch_split,
+    "Sub": _torch_sub,
+    "Tanh": _torch_tanh,
+    "Transpose": _torch_transpose,
+    "Unsqueeze": _torch_unsqueeze,
+    "Upsample": _torch_upsample,
 }
 
 
-def get_torch_args_of_onnx_attrs(
-    node: onnx.NodeProto,
+def get_torch_args(
+    node: NodeProto,
     attrs: dict[str, Any],
-    initializer_shapes: dict[str, tuple[int, ...]],
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
-    _torch_attrs = _TORCH_ATTRS_MAP.get(node.op_type)
-    if _torch_attrs is None:
-        raise ValueError(f"Invalid onnx.op_type: {node.op_type}")
-    torch_args = _torch_attrs(node, attrs, initializer_shapes)
+    _torch = _TORCH_ATTRS_MAP.get(node.op_type)
+    if _torch is None:
+        raise ValueError(f"Invalid op_type: {node.op_type}")
+    torch_args = _torch(node, attrs, nodes, initializers)
 
     return torch_args

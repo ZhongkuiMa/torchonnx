@@ -1,7 +1,7 @@
 __docformat__ = "restructuredtext"
 __all__ = ["gen_header_code"]
 
-import onnx
+from onnx import ModelProto, ValueInfoProto
 
 
 def _gen_imports() -> str:
@@ -19,7 +19,7 @@ def _gen_imports() -> str:
     return content
 
 
-def _get_input_output_shape(node: onnx.ValueInfoProto):
+def _get_input_output_shape(node: ValueInfoProto):
     shape = []
     for dim in node.type.tensor_type.shape.dim:
         if dim.dim_param:
@@ -29,7 +29,7 @@ def _get_input_output_shape(node: onnx.ValueInfoProto):
     return shape
 
 
-def _gen_model_info(model: onnx.ModelProto) -> str:
+def _gen_model_info(model: ModelProto) -> str:
     content = f"# Model name: {model.graph.name}\n"
 
     for input_node in model.graph.input:
@@ -51,7 +51,7 @@ def _gen_class_header(model_name: str) -> str:
     return f"class {model_name}(Module):\n"
 
 
-def gen_header_code(model: onnx.ModelProto, model_name: str) -> str:
+def gen_header_code(model: ModelProto, model_name: str) -> str:
     content = _gen_imports()
     content += _gen_model_info(model)
     content += _gen_class_header(model_name)
