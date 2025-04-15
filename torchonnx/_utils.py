@@ -1,9 +1,8 @@
 __docformat__ = "restructuredtext"
-__all__ = ["parse_input_names", "parse_output_names", "get_initializer_shapes"]
-
-from typing import Any
+__all__ = ["parse_input_names", "parse_output_names", "get_initializers"]
 
 import onnx
+from onnx import ModelProto, NodeProto, TensorProto
 
 EXTRACT_ATTR_MAP = {
     0: lambda x: None,  # UNDEFINED
@@ -22,33 +21,26 @@ EXTRACT_ATTR_MAP = {
 
 
 def parse_input_names(
-    node: onnx.NodeProto, initializer_names: list[str] | dict[str, Any]
+    node: NodeProto, initializer: dict[str, TensorProto]
 ) -> list[str]:
     input_names = []
     for name in node.input:
-        if name in initializer_names:
+        if name in initializer:
             name = f"self.data['{name}']"
         input_names.append(name)
     return input_names
 
 
 def parse_output_names(
-    node: onnx.NodeProto, initializer_names: list[str] | dict[str, Any]
+    node: NodeProto, initializer: dict[str, TensorProto]
 ) -> list[str]:
     output_names = []
     for name in node.output:
-        if name in initializer_names:
+        if name in initializer:
             name = f"self.data['{name}']"
         output_names.append(name)
     return output_names
 
 
-def get_initializer_shapes(model: onnx.ModelProto) -> dict[str, tuple]:
-    initializer_shapes = {}
-    for initializer in model.graph.initializer:
-        shape = []
-        for dim in initializer.dims:
-            shape.append(dim)
-        initializer_shapes[initializer.name] = tuple(shape)
-
-    return initializer_shapes
+def get_initializers(model: ModelProto) -> dict[str, TensorProto]:
+    return {initializer.name: initializer for initializer in model.graph.initializer}

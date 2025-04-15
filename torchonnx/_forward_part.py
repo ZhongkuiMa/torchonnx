@@ -1,136 +1,19 @@
 __docformat__ = "restructuredtext"
 __all__ = ["gen_forward_code"]
 
-import onnx
+from onnx import ModelProto, NodeProto, TensorProto
 
+from rover import nodes
 from ._onnx_attrs import *
 from ._torch_args import *
 from ._utils import *
 
 _INDENT = "    "
 
-
-def _gen_code_of_add(
-    node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
-) -> str:
-    return _gen_code_of_binary_op(node, initializer_shapes, "+")
+# TODO: Try to only use torch args.
 
 
-def _gen_code_of_binary_op(
-    node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]], op: str
-) -> str:
-    input_names = parse_input_names(node, initializer_shapes)
-    output_names = parse_output_names(node, initializer_shapes)
-    code = _INDENT * 2 + f"{output_names[0]} = {input_names[0]} {op} {input_names[1]}\n"
-    return code
-
-
-def _gen_code_of_concat(
-    node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
-) -> str:
-    # https://pytorch.org/docs/stable/generated/torch.cat.html
-    input_names = parse_input_names(node, initializer_shapes)
-    output_names = parse_output_names(node, initializer_shapes)
-    axis = get_attrs_of_onnx_node(node)["axis"]
-    code = (
-        _INDENT * 2
-        + f"{output_names[0]} = torch.cat([{', '.join(input_names)}], dim={axis})\n"
-    )
-    return code
-
-
-def _gen_code_of_div(
-    node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
-) -> str:
-    return _gen_code_of_binary_op(node, initializer_shapes, "/")
-
-
-def _gen_code_of_matmul(
-    node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
-) -> str:
-    input_names = parse_input_names(node, initializer_shapes)
-    output_names = parse_output_names(node, initializer_shapes)
-    code = _INDENT * 2 + f"{output_names[0]} = {input_names[0]} @ {input_names[1]}\n"
-    return code
-
-
-def _gen_code_of_mul(
-    node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
-) -> str:
-    return _gen_code_of_binary_op(node, initializer_shapes, "*")
-
-
-def _gen_code_of_reducemean(
-    node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
-) -> str:
-    # https://pytorch.org/docs/stable/generated/torch.mean.html
-    input_names = parse_input_names(node, initializer_shapes)
-    output_names = parse_output_names(node, initializer_shapes)
-    attrs = get_attrs_of_onnx_node(node)
-    torch_args = get_torch_args_of_onnx_attrs(node, attrs, initializer_shapes)
-    keepdims = torch_args["keepdims"]
-    code = _INDENT * 2 + (
-        f"{output_names[0]} = "
-        f"torch.mean({input_names[0]}, dim={input_names[1]}, keepdim={keepdims})\n"
-    )
-    return code
-
-
-def _gen_code_of_reshape(
-    node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
-) -> str:
-    # https://pytorch.org/docs/stable/generated/torch.reshape.html
-    input_names = parse_input_names(node, initializer_shapes)
-    output_names = parse_output_names(node, initializer_shapes)
-    return _INDENT * 2 + (
-        f"{output_names[0]} = {input_names[0]}.reshape({input_names[1]})\n"
-    )
-
-
-def _gen_code_of_sub(
-    node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
-) -> str:
-    return _gen_code_of_binary_op(node, initializer_shapes, "-")
-
-
-def _gen_code_of_transpose(
-    node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
-) -> str:
-    # https://pytorch.org/docs/stable/generated/torch.permute.html
-    input_names = parse_input_names(node, initializer_shapes)
-    output_names = parse_output_names(node, initializer_shapes)
-    perm = get_attrs_of_onnx_node(node)["perm"]
-    return _INDENT * 2 + f"{output_names[0]} = {input_names[0]}.permute({perm})\n"
-
-
-def _gen_code_of_unary_func(
-    node: onnx.NodeProto, initializer_shapes: dict[str, tuple[int, ...]]
-) -> str:
-    input_names = parse_input_names(node, initializer_shapes)
-    output_names = parse_output_names(node, initializer_shapes)
-    code = _INDENT * 2 + f"{output_names[0]} = self.{node.name}({input_names[0]})\n"
-    return code
-
-
-def _parse_onnx_outputs(model: onnx.ModelProto) -> list[str]:
-    output_names = []
-    for output in model.graph.output:
-        output_names.append(output.name)
-
-    return output_names
-
-
-def _gen_forward_return(outputs: list) -> str:
-    s = "        return "
-    for output in outputs:
-        s += f"{output}, "
-    s = s[:-2]  # Remove the last comma and space
-    s += "\n"
-
-    return s
-
-
-def _parse_onnx_inputs(onnx_model: onnx.ModelProto) -> tuple[list[str], list[tuple]]:
+def _parse_onnx_inputs(onnx_model: ModelProto) -> tuple[list[str], list[tuple]]:
     input_names = []
     input_shapes = []
     for input_node in onnx_model.graph.input:
@@ -154,37 +37,364 @@ def _gen_forward_method(inputs_name: list) -> str:
     return s
 
 
+def _parse_onnx_outputs(model: ModelProto) -> list[str]:
+    output_names = []
+    for output in model.graph.output:
+        output_names.append(output.name)
+
+    return output_names
+
+
+def _gen_forward_return(outputs: list) -> str:
+    s = "        return "
+    for output in outputs:
+        s += f"{output}, "
+    s = s[:-2]  # Remove the last comma and space
+    s += "\n"
+
+    return s
+
+
+def _gen_code_of_unary_func(
+    node: NodeProto, initializers: dict[str, TensorProto]
+) -> str:
+    input_names = parse_input_names(node, initializers)
+    output_names = parse_output_names(node, initializers)
+    code = _INDENT * 2 + f"{output_names[0]} = self.{node.name}({input_names[0]})\n"
+    return code
+
+
+def _gen_code_of_binary_op(
+    node: NodeProto, initializers: dict[str, TensorProto], op: str
+) -> str:
+    input_names = parse_input_names(node, initializers)
+    output_names = parse_output_names(node, initializers)
+    code = _INDENT * 2 + f"{output_names[0]} = {input_names[0]} {op} {input_names[1]}\n"
+    return code
+
+
+def _gen_code_of_add(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.add.html
+    return _gen_code_of_binary_op(node, initializers, "+")
+
+
+def _gen_code_of_argmax(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.argmax.html
+    input_names = parse_input_names(node, initializers)
+    output_names = parse_output_names(node, initializers)
+    attrs = get_onnx_attrs(node, initializers)
+    attrs = get_torch_args(node, attrs, nodes, initializers)
+    dim = get_onnx_attrs(node, initializers)["dim"]
+    keepdim = get_onnx_attrs(node, initializers)["keepdim"]
+    code = (
+        _INDENT * 2 + f"{output_names[0]} = torch.argmax("
+        f"{input_names[0]}, "
+        f"dim={dim}, "
+        f"keepdim={keepdim}"
+        ")\n"
+    )
+    return code
+
+
+def _gen_code_of_avgpool(*args, **kwargs) -> str:
+    return _gen_code_of_unary_func(*args, **kwargs)
+
+
+def _gen_code_of_batchnorm(
+    node: NodeProto, initializers: dict[str, TensorProto]
+) -> str:
+    return _gen_code_of_unary_func(node, initializers)
+
+
+def _gen_code_of_cast(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.Tensor.to.html
+    # TODO: Support this operation
+    raise NotImplementedError("This method has not been implemented yet.")
+
+
+def _gen_code_of_concat(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.cat.html
+    input_names = parse_input_names(node, initializers)
+    output_names = parse_output_names(node, initializers)
+    axis = get_onnx_attrs(node, initializers)["axis"]
+    code = (
+        _INDENT * 2
+        + f"{output_names[0]} = torch.cat([{', '.join(input_names)}], dim={axis})\n"
+    )
+    return code
+
+
+def _gen_code_of_conv(*args, **kwargs) -> str:
+    return _gen_code_of_unary_func(*args, **kwargs)
+
+
+def _gen_code_of_convtranspose(*args, **kwargs) -> str:
+    return _gen_code_of_unary_func(*args, **kwargs)
+
+
+def _gen_code_of_constantofshape(*args, **kwargs) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.full.html
+    raise RuntimeError("This method is unnecessary and slim it to an initializer.")
+
+
+def _gen_code_of_div(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
+    return _gen_code_of_binary_op(node, initializers, "/")
+
+
+def _gen_code_of_leakyrelu(*args, **kwargs) -> str:
+    return _gen_code_of_unary_func(*args, **kwargs)
+
+
+def _gen_code_of_matmul(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
+    input_names = parse_input_names(node, initializers)
+    output_names = parse_output_names(node, initializers)
+    code = _INDENT * 2 + f"{output_names[0]} = {input_names[0]} @ {input_names[1]}\n"
+    return code
+
+
+def _gen_code_of_elu(*args, **kwargs) -> str:
+    return _gen_code_of_unary_func(*args, **kwargs)
+
+
+def _gen_code_of_flatten(*args, **kwargs) -> str:
+    return _gen_code_of_unary_func(*args, **kwargs)
+
+
+def _gen_code_of_gather(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.gather.html
+    input_names = parse_input_names(node, initializers)
+    output_names = parse_output_names(node, initializers)
+    attrs = get_onnx_attrs(node, initializers)
+    dim = attrs["axis"]
+    index = attrs["axis"]
+    code = (
+        _INDENT * 2 + f"{output_names[0]} = torch.gather("
+        f"{input_names[0]}, {dim}, {input_names[1]}"
+        f")\n"
+    )
+    return code
+
+
+def _gen_code_of_gelu(*args, **kwargs) -> str:
+    return _gen_code_of_unary_func(*args, **kwargs)
+
+
+def _gen_code_of_gemm(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
+    return _gen_code_of_unary_func(node, initializers)
+
+
+def _gen_code_of_maxpool(*args, **kwargs) -> str:
+    return _gen_code_of_unary_func(*args, **kwargs)
+
+
+def _gen_code_of_mul(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
+    return _gen_code_of_binary_op(node, initializers, "*")
+
+
+def _gen_code_of_pad(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
+    raise NotImplementedError
+
+
+def _gen_code_of_reducemean(
+    node: NodeProto, initializers: dict[str, TensorProto]
+) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.mean.html
+    input_names = parse_input_names(node, initializers)
+    output_names = parse_output_names(node, initializers)
+    attrs = get_onnx_attrs(node, initializers)
+    torch_args = get_torch_args(node, attrs, nodes, initializers)
+    dim = torch_args["dim"]
+    if len(dim) == 1:
+        dim = dim[0]
+    keepdim = torch_args["keepdim"]
+    code = _INDENT * 2 + f"{output_names[0]} = torch.mean({input_names[0]}, {dim}"
+    if keepdim:
+        code += ", keepdim=True"
+    code += ")\n"
+
+    return code
+
+
+def _gen_code_of_reducesum(
+    node: NodeProto, initializers: dict[str, TensorProto]
+) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.sum.html
+    input_names = parse_input_names(node, initializers)
+    output_names = parse_output_names(node, initializers)
+    attrs = get_onnx_attrs(node, initializers)
+    torch_args = get_torch_args(node, attrs, nodes, initializers)
+    dim = torch_args["dim"]
+    if len(dim) == 1:
+        dim = dim[0]
+    keepdim = torch_args["keepdim"]
+    code = _INDENT * 2 + f"{output_names[0]} = torch.sum({input_names[0]}, {dim}"
+    if keepdim:
+        code += ", keepdim=True"
+    code += ")\n"
+
+    return code
+
+
+def _gen_code_of_relu(*args, **kwargs) -> str:
+    return _gen_code_of_unary_func(*args, **kwargs)
+
+
+def _gen_code_of_reshape(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.reshape.html
+    input_names = parse_input_names(node, initializers)
+    output_names = parse_output_names(node, initializers)
+    return _INDENT * 2 + (
+        f"{output_names[0]} = {input_names[0]}.reshape({input_names[1]})\n"
+    )
+
+
+def _gen_code_of_resize(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.nn.functional.interpolate.html
+    # TODO: Support this operation
+    raise NotImplementedError("This method has not been implemented yet.")
+
+
+def _gen_code_of_scatter(*args, **kwargs) -> str:
+    return _gen_code_of_scatterelement(*args, **kwargs)
+
+
+def _gen_code_of_scatterelement(
+    node: NodeProto, initializers: dict[str, TensorProto]
+) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.scatter.html
+    attrs = get_onnx_attrs(node, initializers)
+    torch_args = get_torch_args(node, attrs, nodes, initializers)
+
+    input_names = parse_input_names(node, initializers)
+    output_names = parse_output_names(node, initializers)
+    dim = torch_args["dim"]
+    index = torch_args["index"]
+    src = torch_args["src"]
+
+    code = (
+        _INDENT * 2
+        + f"{output_names[0]} = {input_names[0]}.scatter({dim}, {index}, {src}\n"
+    )
+    return code
+
+
+def _gen_code_of_scatternd(*args, **kwargs) -> str:
+    return _gen_code_of_scatterelement(*args, **kwargs)
+
+
+def _gen_code_of_sigmoid(*args, **kwargs) -> str:
+    return _gen_code_of_unary_func(*args, **kwargs)
+
+
+def _gen_code_of_slice(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
+    input_name = parse_input_names(node, initializers)[0]
+    output_name = parse_output_names(node, initializers)[0]
+    attrs = get_onnx_attrs(node, initializers)
+    attrs = get_torch_args(node, attrs, nodes, initializers)
+    starts = attrs["starts"]
+    ends = attrs["ends"]
+    axes = attrs["axes"]
+    steps = attrs["steps"]
+    raise NotImplementedError("Slice operation is not supported yet.")
+
+
+def _gen_code_of_softmax(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
+    return _gen_code_of_unary_func(node, initializers)
+
+
+def _gen_code_of_split(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.split.html
+    input_names = parse_input_names(node, initializers)
+    output_names = parse_output_names(node, initializers)
+    attrs = get_onnx_attrs(node, initializers)
+    attrs = get_torch_args(node, attrs, nodes, initializers)
+    split = get_onnx_attrs(node, initializers)["split_size_or_sections"]
+    dim = get_onnx_attrs(node, initializers)["dim"]
+    code = (
+        _INDENT * 2
+        + f"{output_names[0]} = {input_names[0]}.split({split}, dim={dim})\n"
+    )
+    return code
+
+
+def _gen_code_of_sub(*args, **kwargs) -> str:
+    return _gen_code_of_binary_op(*args, **kwargs)
+
+
+def _gen_code_of_tanh(*args, **kwargs) -> str:
+    return _gen_code_of_unary_func(*args, **kwargs)
+
+
+def _gen_code_of_transpose(
+    node: NodeProto, initializers: dict[str, TensorProto]
+) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.permute.html
+    input_names = parse_input_names(node, initializers)
+    output_names = parse_output_names(node, initializers)
+    dims = get_onnx_attrs(node, initializers)["perm"]
+    return _INDENT * 2 + (f"{output_names[0]} = {input_names[0]}.permute({dims}" f")\n")
+
+
+def _gen_code_of_unsqueeze(
+    node: NodeProto, initializers: dict[str, TensorProto]
+) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.unsqueeze.html
+    input_names = parse_input_names(node, initializers)
+    output_names = parse_output_names(node, initializers)
+    dim = get_onnx_attrs(node, initializers)["axes"]
+    return _INDENT * 2 + (
+        f"{output_names[0]} = {input_names[0]}.unsqueeze(" f"dim={dim}" f")\n"
+    )
+
+
+def _gen_code_of_upsample(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
+    raise NotImplementedError("Upsample operation is not supported yet.")
+
+
 _PARSE_NODE_MAP = {
     "Add": _gen_code_of_add,
-    "AveragePool": _gen_code_of_unary_func,
-    "BatchNormalization": _gen_code_of_unary_func,
+    "ArgMax": _gen_code_of_argmax,
+    "AveragePool": _gen_code_of_avgpool,
+    "BatchNormalization": _gen_code_of_batchnorm,
+    "Cast": _gen_code_of_cast,
     "Concat": _gen_code_of_concat,
-    "Conv": _gen_code_of_unary_func,
-    "ConvTranspose": _gen_code_of_unary_func,
+    "Conv": _gen_code_of_conv,
+    "ConvTranspose": _gen_code_of_convtranspose,
+    "ConstantOfShape": _gen_code_of_constantofshape,
     "Div": _gen_code_of_div,
-    "Elu": _gen_code_of_unary_func,
-    "Flatten": _gen_code_of_unary_func,
-    "Gelu": _gen_code_of_unary_func,
-    "Gemm": _gen_code_of_unary_func,
-    "LeakyRelu": _gen_code_of_unary_func,
-    "MaxPool": _gen_code_of_unary_func,
+    "Elu": _gen_code_of_elu,
+    "Flatten": _gen_code_of_flatten,
+    "Gather": _gen_code_of_gather,
+    "Gelu": _gen_code_of_gelu,
+    "Gemm": _gen_code_of_gemm,
+    "LeakyRelu": _gen_code_of_leakyrelu,
     "MatMul": _gen_code_of_matmul,
+    "MaxPool": _gen_code_of_maxpool,
     "Mul": _gen_code_of_mul,
-    "Relu": _gen_code_of_unary_func,
+    "Pad": _gen_code_of_pad,
     "ReduceMean": _gen_code_of_reducemean,
+    "ReduceSum": _gen_code_of_reducesum,
+    "Relu": _gen_code_of_relu,
     "Reshape": _gen_code_of_reshape,
-    "Sigmoid": _gen_code_of_unary_func,
-    "Softmax": _gen_code_of_unary_func,
+    "Resize": _gen_code_of_resize,
+    "Sigmoid": _gen_code_of_sigmoid,
+    "Scatter": _gen_code_of_scatter,
+    "ScatterElements": _gen_code_of_scatterelement,
+    "ScatterND": _gen_code_of_scatternd,
+    "Slice": _gen_code_of_slice,
+    "Softmax": _gen_code_of_softmax,
+    "Split": _gen_code_of_split,
     "Sub": _gen_code_of_sub,
     "Tanh": _gen_code_of_unary_func,
     "Transpose": _gen_code_of_transpose,
-    "Upsample": _gen_code_of_unary_func,
+    "Unsqueeze": _gen_code_of_unsqueeze,
+    "Upsample": _gen_code_of_upsample,
 }
 
 
-def gen_forward_code(model: onnx.ModelProto) -> str:
-    input_names, input_shapes = _parse_onnx_inputs(onnx_model=model)
-    initializer_shapes = get_initializer_shapes(model)
+def gen_forward_code(model: ModelProto) -> str:
+    input_names, input_shapes = _parse_onnx_inputs(model)
+    initializers = get_initializers(model)
 
     content = _gen_forward_method(input_names)
     content += "\n"
@@ -194,7 +404,7 @@ def gen_forward_code(model: onnx.ModelProto) -> str:
         _gen_code = _PARSE_NODE_MAP.get(op_type)
         if _gen_code is None:
             raise NotImplementedError(f"Invalid op_type: {op_type}\n{node}")
-        content += _gen_code(node, initializer_shapes)
+        content += _gen_code(node, initializers)
     content += "\n"
 
     output_names = _parse_onnx_outputs(model)
