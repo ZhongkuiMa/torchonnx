@@ -85,6 +85,10 @@ def _torch_batchnorm(
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.nn.BatchNorm2d.html
+    warnings.warn(
+        "You may use slimonnx to slim the BatchNormalization to reduce calculation. "
+        "slimonnx will fuse BatchNormalization with its neighbor Conv or Gemm layers."
+    )
     torch_args = {
         "num_features": None,
         "eps": 1e-5,
@@ -105,6 +109,10 @@ def _torch_batchnorm(
             torch_args["track_running_stats"] = bool(v)
 
     input_node = nodes[node.input[0]]
+    if input_node.op_type != "Conv":
+        raise NotImplementedError(
+            f"BatchNormalization only supports Conv as input, but got {input_node.op_type}"
+        )
     input_node_weight = initializers[input_node.input[1]]
     input_channels = input_node_weight.dims[1]
     torch_args["num_features"] = input_channels
@@ -235,9 +243,19 @@ def _torch_convtranspose(
     return torch_args
 
 
+def _torch_constant(*args, **kwargs) -> dict[str, Any]:
+    raise RuntimeError(
+        "You should use slimonnx to slim the Constant to reduce calculation. "
+        "slimonnx will convert Constant to an initializer."
+    )
+
+
 def _torch_constantofshape(*args, **kwargs) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.full.html
-    raise RuntimeError("This method is unnecessary and slim it to an initializer.")
+    raise RuntimeError(
+        "You should use slimonnx to slim the ConstantOfShape to reduce calculation. "
+        "slimonnx will convert ConstantOfShape to an initializer."
+    )
 
 
 def _torch_div(*args, **kwargs) -> dict[str, Any]:
@@ -404,7 +422,6 @@ def _torch_pad(
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
-    warnings.warn("This method has not been tested yet.")
     # https://pytorch.org/docs/stable/generated/torch.nn.functional.pad.html
     torch_args = {
         "pad": None,
@@ -575,15 +592,21 @@ def _torch_slice(
     ends = [int(x) for x in ends]
     torch_args["ends"] = ends
 
-    axes = initializers[node.input[3]]
-    axes = onnx.numpy_helper.to_array(axes).tolist()
-    axes = [int(x) for x in axes]
-    torch_args["axes"] = axes
+    if len(node.input) < 4:
+        torch_args["axes"] = list(range(len(starts)))
+    else:
+        axes = initializers[node.input[3]]
+        axes = onnx.numpy_helper.to_array(axes).tolist()
+        axes = [int(x) for x in axes]
+        torch_args["axes"] = axes
 
-    steps = initializers[node.input[4]]
-    steps = onnx.numpy_helper.to_array(steps).tolist()
-    steps = [int(x) for x in steps]
-    torch_args["steps"] = steps
+    if len(node.input) < 5:
+        torch_args["steps"] = [1] * len(starts)
+    else:
+        steps = initializers[node.input[4]]
+        steps = onnx.numpy_helper.to_array(steps).tolist()
+        steps = [int(x) for x in steps]
+        torch_args["steps"] = steps
 
     return torch_args
 
@@ -627,7 +650,7 @@ def _torch_split(
         torch.args["split_size_or_sections"] = split
     else:
         # TODO: We need the node shapes to infer the split size.
-        raise ValueError(
+        raise NotImplementedError(
             "We only support split with split_size_or_sections is given in ONNX."
         )
 
@@ -710,6 +733,7 @@ _TORCH_ATTRS_MAP = {
     "Concat": _torch_concat,
     "Conv": _torch_conv,
     "ConvTranspose": _torch_convtranspose,
+    "Constant": _torch_constant,
     "ConstantOfShape": _torch_constantofshape,
     "Div": _torch_div,
     "Elu": _torch_elu,
