@@ -13,7 +13,7 @@ def _gen_imports() -> str:
         "from torch import Tensor\n"
         "import torch.nn as nn\n"
         "from torch.nn import Module\n"
-        # "from torch.nn import functional as F\n"
+        "from torch.nn import functional as F\n"
         "\n\n"
     )
     return content

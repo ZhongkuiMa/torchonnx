@@ -89,15 +89,11 @@ def _gen_code_of_batchnorm(
     return code
 
 
-def _gen_code_of_cast(
-    node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
-) -> str:
+def _gen_code_of_cast(*args, **kwargs) -> str:
     raise NotImplementedError("Cast is not supported yet.")
 
 
-def _gen_code_of_concat(
-    node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
-) -> str:
+def _gen_code_of_concat(*args, **kwargs) -> str:
     return ""
 
 
@@ -181,16 +177,22 @@ def _gen_code_of_convtranspose(
     return code
 
 
-def _gen_code_of_constantofshape(
-    node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
-) -> str:
+def _gen_code_of_constant(*args, **kwargs) -> str:
+    raise RuntimeError(
+        "You should use slimonnx to slim the Constant to reduce calculation. "
+        "slimonnx will convert Constant to an initializer."
+    )
+
+
+def _gen_code_of_constantofshape(*args, **kwargs) -> str:
     # https://pytorch.org/docs/stable/generated/torch.full.html
-    raise RuntimeError("This op is not supported yet. You should slim it by slimonnx.")
+    raise RuntimeError(
+        "You should use slimonnx to slim the ConstantOfShape to reduce calculation. "
+        "slimonnx will convert ConstantOfShape to an initializer."
+    )
 
 
-def _gen_code_of_div(
-    node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
-) -> str:
+def _gen_code_of_div(*args, **kwargs) -> str:
     # https://pytorch.org/docs/stable/generated/torch.div.html
     return ""
 
@@ -222,9 +224,7 @@ def _gen_code_of_flatten(
     return code
 
 
-def _gen_code_of_gather(
-    node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
-) -> str:
+def _gen_code_of_gather(*args, **kwargs) -> str:
     return ""
 
 
@@ -284,9 +284,7 @@ def _gen_code_of_leakyrelu(
     return code
 
 
-def _gen_code_of_matmul(
-    node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
-) -> str:
+def _gen_code_of_matmul(*args, **kwargs) -> str:
     # https://pytorch.org/docs/stable/generated/torch.matmul.html
     return ""
 
@@ -317,16 +315,12 @@ def _gen_code_of_maxpool(
     return code
 
 
-def _gen_code_of_mul(
-    node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
-) -> str:
+def _gen_code_of_mul(*args, **kwargs) -> str:
     # https://pytorch.org/docs/stable/generated/torch.mul.html
     return ""
 
 
-def _gen_code_of_pad(
-    node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
-) -> str:
+def _gen_code_of_pad(*args, **kwargs) -> str:
     # https://pytorch.org/docs/stable/generated/torch.nn.functional.pad.htm
     return ""
 
@@ -440,6 +434,7 @@ _GEN_CODE_MAP = {
     "Concat": _gen_code_of_concat,
     "Conv": _gen_code_of_conv,
     "ConvTranspose": _gen_code_of_convtranspose,
+    "Constant": _gen_code_of_constant,
     "ConstantOfShape": _gen_code_of_constantofshape,
     "Div": _gen_code_of_div,
     "Elu": _gen_code_of_elu,
