@@ -4,8 +4,9 @@ __all__ = ["get_torch_args"]
 import warnings
 from typing import Any
 
-import onnx.numpy_helper
+import onnx
 import torch
+from torch import Tensor
 from onnx import NodeProto, TensorProto
 
 from ._utils import *
@@ -20,6 +21,18 @@ def _simplify_pool_args(arg: int | tuple[int, ...]) -> int | tuple[int, ...]:
         else:
             raise ValueError(f"Unsupported pooling argument: {arg}")
     return arg
+
+
+def _to_tensor(initializer: TensorProto) -> Tensor:
+    return torch.tensor(onnx.numpy_helper.to_array(initializer))
+
+
+def _to_list(initializer: TensorProto) -> list:
+    return onnx.numpy_helper.to_array(initializer).tolist()
+
+
+def _to_tuple(initializer: TensorProto) -> tuple:
+    return tuple(onnx.numpy_helper.to_array(initializer).tolist())
 
 
 def _torch_add(*args, **kwargs) -> dict[str, Any]:
@@ -94,10 +107,6 @@ def _torch_batchnorm(
         "eps": 1e-5,
         "momentum": 0.1,
         "track_running_stats": True,
-        "weight": None,
-        "bias": None,
-        "running_mean": None,
-        "running_var": None,
     }
 
     for k, v in attrs.items():
@@ -108,30 +117,8 @@ def _torch_batchnorm(
         elif k == "training_mode":
             torch_args["track_running_stats"] = bool(v)
 
-    input_node = nodes[node.input[0]]
-    if input_node.op_type != "Conv":
-        raise NotImplementedError(
-            f"BatchNormalization only supports Conv as input, but got {input_node.op_type}"
-        )
-    input_node_weight = initializers[input_node.input[1]]
-    input_channels = input_node_weight.dims[1]
-    torch_args["num_features"] = input_channels
-
-    scale = initializers[node.input[1]]
-    weight = torch.tensor(onnx.numpy_helper.to_array(scale))
-    torch_args["weight"] = weight
-
-    bias = initializers[node.input[2]]
-    bias = torch.tensor(onnx.numpy_helper.to_array(bias))
-    torch_args["bias"] = bias
-
-    input_mean = initializers[node.input[3]]
-    running_mean = torch.tensor(onnx.numpy_helper.to_array(input_mean))
-    torch_args["running_mean"] = running_mean
-
-    input_var = initializers[node.input[4]]
-    running_var = torch.tensor(onnx.numpy_helper.to_array(input_var))
-    torch_args["running_var"] = running_var
+    bias = onnx.numpy_helper.to_array(initializers[node.input[2]])
+    torch_args["num_features"] = bias.shape[0]
 
     return torch_args
 
@@ -143,7 +130,7 @@ def _torch_cast(
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.Tensor.to.html
-    # TODO: Support this operation
+    # TODO: Support cast
     raise NotImplementedError("This method has not been implemented yet.")
 
 
@@ -154,7 +141,7 @@ def _torch_concat(
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.cat.html
-    torch_args = {"dim": None}
+    torch_args = {"dim": 0}
     for k, v in attrs.items():
         if k == "axis":
             torch_args["dim"] = v
@@ -305,7 +292,8 @@ def _torch_gather(
         if k == "axis":
             torch_args["dim"] = v
         elif k == "index":
-            torch_args["index"] = initializers[node.input[1]]
+            index = _to_tensor(initializers[node.input[1]])
+            torch_args["index"] = index
 
     return torch_args
 
@@ -437,7 +425,7 @@ def _torch_pad(
     Convert ONNX pad [start_1, start_2, start_3, ..., end_1, end_2, end_3, ...]
     to PyTorch pad [..., start_3, end_3, start_2, end_2, start_1, end_1]
     """
-    pads = onnx.numpy_helper.to_array(initializers[node.input[1]]).tolist()
+    pads = _to_list(initializers[node.input[1]])
     pads = [int(x) for x in pads]
     reversed_onnx_pad = list(pads[::-1])
     torch_pad = [0] * len(reversed_onnx_pad)
@@ -447,11 +435,11 @@ def _torch_pad(
         torch_pad[i + 1] = reversed_onnx_pad[i // 2 + dims]
     torch_args["pad"] = tuple(torch_pad)
 
-    constant_value = onnx.numpy_helper.to_array(initializers[node.input[2]])
+    constant_value = _to_tensor(initializers[node.input[2]])
     torch_args["value"] = constant_value
 
     if len(node.input) > 3:
-        axes = onnx.numpy_helper.to_array(initializers[node.input[3]]).tolist()
+        axes = _to_list(initializers[node.input[3]])
         raise ValueError(f"We haven't support partial axes yet with axes={axes}")
 
     return torch_args
@@ -464,14 +452,13 @@ def _torch_reducemean(
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.mean.html
-    torch_args = {"keepdims": True}
+    torch_args = {"keepdims": False}
     for k, v in attrs.items():
         if k == "keepdims":
             torch_args["keepdim"] = bool(v)
 
     axes = initializers[node.input[1]]
-    dim = onnx.numpy_helper.to_array(axes).tolist()
-    dim = tuple(int(x) for x in dim)
+    dim = _to_tuple(axes)
     torch_args["dim"] = dim
 
     return torch_args
@@ -484,14 +471,13 @@ def _torch_reducesum(
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.sum.html
-    torch_args = {"keepdims": True}
+    torch_args = {"keepdims": False}
     for k, v in attrs.items():
         if k == "keepdims":
             torch_args["keepdim"] = bool(v)
 
     axes = initializers[node.input[1]]
-    dim = onnx.numpy_helper.to_array(axes).tolist()
-    dim = tuple(int(x) for x in dim)
+    dim = _to_tuple(axes)
     torch_args["dim"] = dim
 
     return torch_args
@@ -516,7 +502,7 @@ def _torch_reshape(
     # https://pytorch.org/docs/stable/generated/torch.reshape.html
     torch_args = {"shape": None}
     shape = initializers[node.input[1]]
-    shape = tuple(onnx.numpy_helper.to_array(shape))
+    shape = _to_tuple(shape)
     torch_args["shape"] = shape
 
     return torch_args
@@ -529,7 +515,7 @@ def _torch_resize(
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.nn.functional.interpolate.html
-    # TODO: Support this operation
+    # TODO: Support resize
     raise NotImplementedError("This method has not been implemented yet.")
 
 
@@ -550,17 +536,22 @@ def _torch_scatterelement(
         if k == "axis":
             torch_args["dim"] = v
 
-    indices = onnx.numpy_helper.to_array(initializers[node.input[1]])
-    torch_args["index"] = torch.tensor(indices, dtype=torch.long)
-
-    updates = onnx.numpy_helper.to_array(initializers[node.input[2]])
-    torch_args["src"] = torch.tensor(updates)
+    torch_args["index"] = _to_tensor(initializers[node.input[1]])
+    torch_args["src"] = _to_tensor(initializers[node.input[2]])
 
     return torch_args
 
 
 def _torch_scatternd(*args, **kwargs) -> dict[str, Any]:
     return _torch_scatterelement(*args, **kwargs)
+
+
+def _torch_shape(*args, **kwargs) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.shape.html
+    raise RuntimeError(
+        "You should use slimonnx to slim the Shape to reduce calculation. "
+        "slimonnx will convert Shape to an initializer."
+    )
 
 
 def _torch_sigmoid(*args, **kwargs) -> dict[str, Any]:
@@ -583,29 +574,25 @@ def _torch_slice(
     }
 
     starts = initializers[node.input[1]]
-    starts = onnx.numpy_helper.to_array(starts).tolist()
-    starts = [int(x) for x in starts]
+    starts = _to_list(starts)
     torch_args["starts"] = starts
 
     ends = initializers[node.input[2]]
-    ends = onnx.numpy_helper.to_array(ends).tolist()
-    ends = [int(x) for x in ends]
+    ends = _to_list(ends)
     torch_args["ends"] = ends
 
     if len(node.input) < 4:
         torch_args["axes"] = list(range(len(starts)))
     else:
         axes = initializers[node.input[3]]
-        axes = onnx.numpy_helper.to_array(axes).tolist()
-        axes = [int(x) for x in axes]
+        axes = _to_list(axes)
         torch_args["axes"] = axes
 
     if len(node.input) < 5:
         torch_args["steps"] = [1] * len(starts)
     else:
         steps = initializers[node.input[4]]
-        steps = onnx.numpy_helper.to_array(steps).tolist()
-        steps = [int(x) for x in steps]
+        steps = _to_list(steps)
         torch_args["steps"] = steps
 
     return torch_args
@@ -704,7 +691,7 @@ def _torch_upsample(
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.nn.Upsample.html
-    # TODO: Support this operation
+    # TODO: Support upsample
     raise NotImplementedError("This method has not been implemented yet.")
     torch_args = {
         # "size":None,
@@ -717,8 +704,7 @@ def _torch_upsample(
         if k == "mode":
             torch_args["mode"] = v
 
-    scales = onnx.numpy_helper.to_array(initializers[node.input[1]])
-    scales = (float(x) for x in scales)
+    scales = _to_tuple(initializers[node.input[1]])
     torch_args["scale_factor"] = scales
 
     return torch_args
@@ -751,6 +737,7 @@ _TORCH_ATTRS_MAP = {
     "Relu": _torch_relu,
     "Reshape": _torch_reshape,
     "Resize": _torch_resize,
+    "Shape": _torch_shape,
     "Sigmoid": _torch_sigmoid,
     "Scatter": _torch_scatter,
     "ScatterElements": _torch_scatterelement,
