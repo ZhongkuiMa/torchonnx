@@ -1,4 +1,4 @@
-# torchonnx: Convert ONNX Model to PyTorch Model
+# TorchONNX: Convert ONNX Model to PyTorch Model
 
 **torchonnx** is an amazing tool that lets you easily convert an **ONNX model** (.onnx file) into a **PyTorch model** (.pth file for model parameters and .py file for neural network structure). ⚡
 
@@ -12,13 +12,14 @@ While PyTorch provides the `torch.onnx` module to convert a PyTorch model to an 
 
 ## What We Do? 🔥
 
-I know there are some tools out there to convert ONNX models to PyTorch models, and I appreciate their efforts 🙌. But let’s be real — most of them fall short in terms of performance and ease of use. The most well-known tool, [onnx2pytorch](https://github.com/Talmaj/onnx2pytorch), is great but... its code isn’t optimized for performance, and it often makes the process unnecessarily complicated.
+> We know there are some tools out there to convert ONNX models to PyTorch models, and we appreciate their efforts 🙌. But let’s be real — most of them fall short in terms of performance and ease of use. The most well-known tool, [onnx2pytorch](https://github.com/Talmaj/onnx2pytorch), is great but... its code isn’t optimized for performance, and it often makes the process unnecessarily complicated.
+> For example, the `forward` method still iterates over **all ONNX nodes** instead of just using the PyTorch model! It’s more of a **decorator** for the ONNX model than a true PyTorch model. And don’t even get me started on the inefficiencies when converting the ONNX model’s initializers to PyTorch tensor parameters.
 
-For example, the `forward` method still iterates over **all ONNX nodes** instead of just using the PyTorch model! It’s more of a **decorator** for the ONNX model than a true PyTorch model. And don’t even get me started on the inefficiencies when converting the ONNX model’s initializers to PyTorch tensor parameters.
+But we don't expect to do that thing! We want to make a "complier" that converts ONNX models to a PyTorch module file. We want to make it **simple**, **clean**, and **efficient**! 🚀
 
 ## Features
 
-So, I decided to take matters into my own hands and build a tool that converts ONNX models to PyTorch models **efficiently** and **effectively**. 💥
+So, we decided to take matters into my own hands and build a tool that converts ONNX models to PyTorch models **efficiently** and **effectively**. 💥
 
 Here’s the simple and powerful idea: we’ll convert the ONNX model into **two files**:
 
@@ -31,7 +32,7 @@ More, this tool is **pure Python**, **structured**, and **easy to read**. It’s
 
 ### Current Supported Features 🌟
 
-I have implemented most of commonly used operations in feedforward neural networks. Transformer-based architectures will be treated as several basic operations.
+We have implemented most of commonly used operations in feedforward neural networks. Transformer-based architectures will be treated as several basic operations.
 
 ## How to Use? 🔧
 
