@@ -25,15 +25,8 @@ def _check_pads(pads: tuple[int]):
     for i in range(dims):
         if pads[i] != pads[i + dims]:
             raise ValueError(
-                f"Only support pads with equal start and end pad, but pads={pads}"
+                f"Only support pads with equal start and end pad, " f"but pads={pads}"
             )
-
-
-def _get_attrs_of_add(
-    node: NodeProto, initializers: dict[str, TensorProto]
-) -> dict[str, Any]:
-    # https://onnx.ai/onnx/operators/onnx__Add.html
-    return {}
 
 
 def _get_attrs_of_argmax(
@@ -115,10 +108,7 @@ def _get_attrs_of_cast(
     node: NodeProto, initializers: dict[str, TensorProto]
 ) -> dict[str, Any]:
     # https://onnx.ai/onnx/operators/onnx__Cast.html
-    attrs = {
-        "saturate": 1,
-        "to": None,
-    }
+    attrs = {"saturate": 1, "to": None}
     attrs = _scan_attrs(attrs, node.attribute)
 
     assert attrs["to"] is not None
@@ -155,8 +145,6 @@ def _get_attrs_of_conv(
     }
     attrs = _scan_attrs(attrs, node.attribute)
 
-    if attrs["group"] != 1:
-        raise ValueError(f"Only support group=1 but {attrs['group']}.")
     if attrs["auto_pad"] != "NOTSET":
         raise ValueError(f"Only support auto_pad=NOTSET but {attrs['auto_pad']}.")
 
@@ -242,13 +230,6 @@ def _get_attrs_of_constantofshape(
     return attrs
 
 
-def _get_attrs_of_div(
-    node: NodeProto, initializers: dict[str, TensorProto]
-) -> dict[str, Any]:
-    # https://onnx.ai/onnx/operators/onnx__Div.html
-    return {}
-
-
 def _get_attrs_of_elu(
     node: NodeProto, initializers: dict[str, TensorProto]
 ) -> dict[str, Any]:
@@ -314,13 +295,6 @@ def _get_attrs_of_leakyrelu(
     return attrs
 
 
-def _get_attrs_of_matmul(
-    node: NodeProto, initializers: dict[str, TensorProto]
-) -> dict[str, Any]:
-    # https://onnx.ai/onnx/operators/onnx__MatMul.html
-    return {}
-
-
 def _get_attrs_of_maxpool(
     node: NodeProto, initializers: dict[str, TensorProto]
 ) -> dict[str, Any]:
@@ -336,7 +310,7 @@ def _get_attrs_of_maxpool(
     }
     attrs = _scan_attrs(attrs, node.attribute)
 
-    assert attrs["kernel_shape"] == 0
+    assert attrs["storage_order"] == 0
 
     if attrs["auto_pad"] != "NOTSET":
         raise ValueError(f"Only support auto_pad=NOTSET but {attrs['auto_pad']}.")
@@ -355,13 +329,6 @@ def _get_attrs_of_maxpool(
         raise ValueError(f"Only support one output but {len(node.output)}.")
 
     return attrs
-
-
-def _get_attrs_of_mul(
-    node: NodeProto, initializers: dict[str, TensorProto]
-) -> dict[str, Any]:
-    # https://onnx.ai/onnx/operators/onnx__Mul.html
-    return {}
 
 
 def _get_attrs_of_pad(
@@ -412,13 +379,6 @@ def _get_attrs_of_reducesum(
     return attrs
 
 
-def _get_attrs_of_relu(
-    node: NodeProto, initializers: dict[str, TensorProto]
-) -> dict[str, Any]:
-    # https://onnx.ai/onnx/operators/onnx__Relu.html
-    return {}
-
-
 def _get_attrs_of_reshape(
     node: NodeProto, initializers: dict[str, TensorProto]
 ) -> dict[str, Any]:
@@ -462,10 +422,7 @@ def _get_attrs_of_scatterelement(
     node: NodeProto, initializers: dict[str, TensorProto]
 ) -> dict[str, Any]:
     # https://onnx.ai/onnx/operators/onnx__ScatterElements.html
-    attrs = {
-        "axis": 0,
-        "reduction": "none",
-    }
+    attrs = {"axis": 0, "reduction": "none"}
     attrs = _scan_attrs(attrs, node.attribute)
 
     if attrs["reduction"] != "none":
@@ -494,20 +451,6 @@ def _get_attrs_of_shape(*args, **kwargs) -> dict[str, Any]:
     )
 
 
-def _get_attrs_of_sigmoid(
-    node: NodeProto, initializers: dict[str, TensorProto]
-) -> dict[str, Any]:
-    # https://onnx.ai/onnx/operators/onnx__Sigmoid.html
-    return {}
-
-
-def _get_attrs_of_slice(
-    node: NodeProto, initializers: dict[str, TensorProto]
-) -> dict[str, Any]:
-    # https://onnx.ai/onnx/operators/onnx__Slice.html
-    return {}
-
-
 def _get_attrs_of_softmax(
     node: NodeProto, initializers: dict[str, TensorProto]
 ) -> dict[str, Any]:
@@ -526,20 +469,6 @@ def _get_attrs_of_split(
     attrs = _scan_attrs(attrs, node.attribute)
 
     return attrs
-
-
-def _get_attrs_of_sub(
-    node: NodeProto, initializers: dict[str, TensorProto]
-) -> dict[str, Any]:
-    # https://onnx.ai/onnx/operators/onnx__Sub.html
-    return {}
-
-
-def _get_attrs_of_tanh(
-    node: NodeProto, initializers: dict[str, TensorProto]
-) -> dict[str, Any]:
-    # https://onnx.ai/onnx/operators/onnx__Tanh.html
-    return {}
 
 
 def _get_attrs_of_transpose(
@@ -577,7 +506,6 @@ def _get_attrs_of_upsample(
 
 
 _EXTRACT_ATTRS_MAP = {
-    "Add": _get_attrs_of_add,
     "ArgMax": _get_attrs_of_argmax,
     "AveragePool": _get_attrs_of_avgpool,
     "BatchNormalization": _get_attrs_of_batchnorm,
@@ -587,32 +515,24 @@ _EXTRACT_ATTRS_MAP = {
     "Constant": _get_attrs_of_constant,
     "ConvTranspose": _get_attrs_of_convtranspose,
     "ConstantOfShape": _get_attrs_of_constantofshape,
-    "Div": _get_attrs_of_div,
     "Elu": _get_attrs_of_elu,
     "Flatten": _get_attrs_of_flatten,
     "Gather": _get_attrs_of_gather,
     "Gelu": _get_attrs_of_gelu,
     "Gemm": _get_attrs_of_gemm,
     "LeakyRelu": _get_attrs_of_leakyrelu,
-    "MatMul": _get_attrs_of_matmul,
     "MaxPool": _get_attrs_of_maxpool,
-    "Mul": _get_attrs_of_mul,
     "Pad": _get_attrs_of_pad,
     "ReduceMean": _get_attrs_of_reducemean,
     "ReduceSum": _get_attrs_of_reducesum,
-    "Relu": _get_attrs_of_relu,
     "Reshape": _get_attrs_of_reshape,
     "Resize": _get_attrs_of_resize,
     "Shape": _get_attrs_of_shape,
-    "Sigmoid": _get_attrs_of_sigmoid,
     "Scatter": _get_attrs_of_scatter,
     "ScatterElements": _get_attrs_of_scatterelement,
     "ScatterND": _get_attrs_of_scatternd,
-    "Slice": _get_attrs_of_slice,
     "Softmax": _get_attrs_of_softmax,
     "Split": _get_attrs_of_split,
-    "Sub": _get_attrs_of_sub,
-    "Tanh": _get_attrs_of_tanh,
     "Transpose": _get_attrs_of_transpose,
     "Unsqueeze": _get_attrs_of_unsqueeze,
     "Upsample": _get_attrs_of_upsample,
