@@ -7,9 +7,9 @@ from typing import Any
 import onnx
 import torch
 from onnx import NodeProto, TensorProto
-from torch import Tensor
 
 from ._utils import *
+from ._onnx_attrs import get_onnx_attrs
 
 
 def _simplify_pool_args(arg: int | tuple[int, ...]) -> int | tuple[int, ...]:
@@ -23,34 +23,19 @@ def _simplify_pool_args(arg: int | tuple[int, ...]) -> int | tuple[int, ...]:
     return arg
 
 
-def _to_tensor(initializer: TensorProto) -> Tensor:
-    return torch.tensor(onnx.numpy_helper.to_array(initializer))
-
-
-def _to_list(initializer: TensorProto) -> list:
-    return onnx.numpy_helper.to_array(initializer).tolist()
-
-
-def _to_tuple(initializer: TensorProto) -> tuple:
-    return tuple(onnx.numpy_helper.to_array(initializer).tolist())
-
-
-def _torch_add(*args, **kwargs) -> dict[str, Any]:
-    # https://pytorch.org/docs/stable/generated/torch.add.html
+def _torch_nothing(*args, **kwargs) -> dict[str, Any]:
+    """This function does nothing and is used as a placeholder."""
     return {}
 
 
 def _torch_argmax(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.argmax.html
-    torch_args = {
-        "dim": None,
-        "keepdim": False,
-    }
+    attrs = get_onnx_attrs(node, initializers)
+    torch_args = {"dim": None, "keepdim": False}
 
     for k, v in attrs.items():
         if k == "axis":
@@ -63,11 +48,11 @@ def _torch_argmax(
 
 def _torch_avgpool(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.nn.AvgPool2d.html
+    attrs = get_onnx_attrs(node, initializers)
     torch_attrs = {
         "kernel_size": None,
         "stride": None,
@@ -93,15 +78,11 @@ def _torch_avgpool(
 
 def _torch_batchnorm(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.nn.BatchNorm2d.html
-    warnings.warn(
-        "You may use slimonnx to slim the BatchNormalization to reduce calculation. "
-        "slimonnx will fuse BatchNormalization with its neighbor Conv or Gemm layers."
-    )
+    attrs = get_onnx_attrs(node, initializers)
     torch_args = {
         "num_features": None,
         "eps": 1e-5,
@@ -125,23 +106,61 @@ def _torch_batchnorm(
 
 def _torch_cast(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.Tensor.to.html
-    # TODO: Support cast
-    raise NotImplementedError("This method has not been implemented yet.")
+    attrs = get_onnx_attrs(node, initializers)
+    torch_args = {"dtype": None}
+
+    to = attrs["to"]
+    if to == 1:
+        dtype = torch.float32
+    elif to == 2:
+        dtype = torch.uint8
+    elif to == 3:
+        dtype = torch.int8
+    elif to == 4:
+        dtype = torch.uint16
+    elif to == 5:
+        dtype = torch.int16
+    elif to == 6:
+        dtype = torch.int32
+    elif to == 7:
+        dtype = torch.int64
+    elif to == 8:
+        dtype = torch.str
+    elif to == 9:
+        dtype = torch.bool
+    elif to == 10:
+        dtype = torch.float16
+    elif to == 11:
+        dtype = torch.double
+    elif to == 12:
+        dtype = torch.uint32
+    elif to == 13:
+        dtype = torch.uint64
+    elif to == 14:
+        dtype = torch.complex64
+    elif to == 15:
+        dtype = torch.complex128
+    else:
+        raise NotImplementedError(f"Cast node with to={to} is not supported.")
+
+    torch_args["dtype"] = dtype
+
+    return torch_args
 
 
 def _torch_concat(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.cat.html
+    attrs = get_onnx_attrs(node, initializers)
     torch_args = {"dim": 0}
+
     for k, v in attrs.items():
         if k == "axis":
             torch_args["dim"] = v
@@ -151,11 +170,11 @@ def _torch_concat(
 
 def _torch_conv(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.nn.Conv2d.html
+    attrs = get_onnx_attrs(node, initializers)
     torch_args = {
         "in_channels": None,
         "out_channels": None,
@@ -190,11 +209,11 @@ def _torch_conv(
 
 def _torch_convtranspose(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.nn.ConvTranspose2d.html
+    attrs = get_onnx_attrs(node, initializers)
     torch_args = {
         "in_channels": None,
         "out_channels": None,
@@ -237,27 +256,32 @@ def _torch_constant(*args, **kwargs) -> dict[str, Any]:
     )
 
 
-def _torch_constantofshape(*args, **kwargs) -> dict[str, Any]:
+def _torch_constantofshape(
+    node: NodeProto,
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
+) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.full.html
-    raise RuntimeError(
-        "You should use slimonnx to slim the ConstantOfShape to reduce calculation. "
-        "slimonnx will convert ConstantOfShape to an initializer."
-    )
+    attrs = get_onnx_attrs(node, initializers)
+    torch_args = {"fill_value": 0.0, "dtype": torch.float32}
 
+    for k, v in attrs.items():
+        if k == "value":
+            torch_args["fill_value"] = v[0]
+            torch_args["dtype"] = v.dtype
 
-def _torch_div(*args, **kwargs) -> dict[str, Any]:
-    # https://pytorch.org/docs/stable/generated/torch.div.html
-    return {}
+    return torch_args
 
 
 def _torch_elu(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.nn.ELU.html
+    attrs = get_onnx_attrs(node, initializers)
     torch_args = {"alpha": 1.0}
+
     for k, v in attrs.items():
         if k == "alpha":
             torch_args["alpha"] = v
@@ -266,12 +290,13 @@ def _torch_elu(
 
 def _torch_flatten(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.nn.Flatten.html
+    attrs = get_onnx_attrs(node, initializers)
     torch_args = {"start_dim": 1}
+
     for k, v in attrs.items():
         if k == "axis":
             torch_args["start_dim"] = v
@@ -281,31 +306,29 @@ def _torch_flatten(
 
 def _torch_gather(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.gather.html
-    torch_args = {"dim": None, "index": None}
+    attrs = get_onnx_attrs(node, initializers)
+    torch_args = {"dim": None}
 
     for k, v in attrs.items():
         if k == "axis":
             torch_args["dim"] = v
-        elif k == "index":
-            index = _to_tensor(initializers[node.input[1]])
-            torch_args["index"] = index
 
     return torch_args
 
 
 def _torch_gelu(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.nn.GELU.html
+    attrs = get_onnx_attrs(node, initializers)
     torch_args = {"approximation": "none"}
+
     for k, v in attrs.items():
         if k == "approximation":
             torch_args["approximation"] = v
@@ -315,11 +338,11 @@ def _torch_gelu(
 
 def _torch_gemm(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.nn.Linear.html
+    attrs = get_onnx_attrs(node, initializers)
     torch_args = {  # We need those to set transpose in code generation
         "transA": 0,
         "transB": 0,
@@ -352,30 +375,26 @@ def _torch_gemm(
 
 def _torch_leakyrelu(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.nn.LeakyReLU.html
+    attrs = get_onnx_attrs(node, initializers)
     torch_args = {"negative_slope": 0.01}
+
     for k, v in attrs.items():
         if k == "alpha":
             torch_args["negative_slope"] = v
     return torch_args
 
 
-def _torch_matmul(*args, **kwargs) -> dict[str, Any]:
-    # https://pytorch.org/docs/stable/generated/torch.matmul.html
-    return {}
-
-
 def _torch_maxpool(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.nn.MaxPool2d.html
+    attrs = get_onnx_attrs(node, initializers)
     torch_args = {
         "kernel_size": None,
         "stride": None,  # Default value is kernel_size in torch.nn.MaxPool
@@ -399,23 +418,19 @@ def _torch_maxpool(
     return torch_args
 
 
-def _torch_mul(*args, **kwargs) -> dict[str, Any]:
-    # https://pytorch.org/docs/stable/generated/torch.mul.html
-    return {}
-
-
 def _torch_pad(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.nn.functional.pad.html
+    attrs = get_onnx_attrs(node, initializers)
     torch_args = {
         "pad": None,
         "mode": "constant",
         "value": 0.0,
     }
+
     for k, v in attrs.items():
         if k == "mode":
             torch_args["mode"] = v
@@ -425,7 +440,10 @@ def _torch_pad(
     Convert ONNX pad [start_1, start_2, start_3, ..., end_1, end_2, end_3, ...]
     to PyTorch pad [..., start_3, end_3, start_2, end_2, start_1, end_1]
     """
-    pads = _to_list(initializers[node.input[1]])
+    pads = initializers.get(node.input[1])
+    if pads is None:
+        raise RuntimeError("Pad node only supports pads as an initializer. ")
+    pads = initializer_to_list(pads)
     pads = [int(x) for x in pads]
     reversed_onnx_pad = list(pads[::-1])
     torch_pad = [0] * len(reversed_onnx_pad)
@@ -433,90 +451,143 @@ def _torch_pad(
     for i in range(0, len(reversed_onnx_pad), 2):
         torch_pad[i] = reversed_onnx_pad[i // 2]
         torch_pad[i + 1] = reversed_onnx_pad[i // 2 + dims]
-    torch_args["pad"] = tuple(torch_pad)
+    torch_args["pad"] = tuple(torch_pad)  # noqa
 
-    constant_value = _to_tensor(initializers[node.input[2]])
-    torch_args["value"] = constant_value
+    if len(node.input) > 2:
+        constant_value = initializers.get(node.input[2])
+        if constant_value is None:
+            raise RuntimeError(
+                "Pad node only supports constant_value as an initializer."
+            )
+        constant_value = initializer_to_tensor(constant_value)
+        torch_args["value"] = constant_value  # noqa
 
     if len(node.input) > 3:
-        axes = _to_list(initializers[node.input[3]])
-        raise ValueError(f"We haven't support partial axes yet with axes={axes}")
+        axes = initializers.get(node.input[3])
+        if axes is None:
+            raise RuntimeError("Pad node only supports axes as an initializer.")
+        axes = initializer_to_list(axes)
+        raise NotImplementedError(f"Pad node with axes={axes} is not supported.")
 
     return torch_args
 
 
 def _torch_reducemean(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.mean.html
-    torch_args = {"keepdims": False}
+    attrs = get_onnx_attrs(node, initializers)
+    torch_args = {"dim": None, "keepdim": False}
     for k, v in attrs.items():
         if k == "keepdims":
             torch_args["keepdim"] = bool(v)
 
-    axes = initializers[node.input[1]]
-    dim = _to_tuple(axes)
-    torch_args["dim"] = dim
+    axes = initializers.get(node.input[1])
+    if axes is None:
+        raise RuntimeError("ReduceMean node only supports axes as an initializer.")
+    dim = initializer_to_tuple(axes)
+    torch_args["dim"] = dim  # noqa
 
     return torch_args
 
 
 def _torch_reducesum(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.sum.html
-    torch_args = {"keepdims": False}
+    attrs = get_onnx_attrs(node, initializers)
+    torch_args = {"dim": None, "keepdim": False}
+
     for k, v in attrs.items():
         if k == "keepdims":
             torch_args["keepdim"] = bool(v)
 
-    axes = initializers[node.input[1]]
-    dim = _to_tuple(axes)
-    torch_args["dim"] = dim
-
-    return torch_args
-
-
-def _torch_relu(
-    node: NodeProto,
-    attrs: dict[str, Any],
-    nodes: dict[str, NodeProto],
-    initializers: dict[str, TensorProto],
-) -> dict[str, Any]:
-    # https://pytorch.org/docs/stable/generated/torch.nn.ReLU.html
-    return {}
-
-
-def _torch_reshape(
-    node: NodeProto,
-    attrs: dict[str, Any],
-    nodes: dict[str, NodeProto],
-    initializers: dict[str, TensorProto],
-) -> dict[str, Any]:
-    # https://pytorch.org/docs/stable/generated/torch.reshape.html
-    torch_args = {"shape": None}
-    shape = initializers[node.input[1]]
-    shape = _to_tuple(shape)
-    torch_args["shape"] = shape
+    if len(node.input) > 1:
+        axes = initializers.get(node.input[1])
+        if axes is None:
+            raise RuntimeError("ReduceSum node only supports axes as an initializer.")
+        dim = initializer_to_tuple(axes)
+        torch_args["dim"] = dim  # noqa
 
     return torch_args
 
 
 def _torch_resize(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.nn.functional.interpolate.html
-    # TODO: Support resize
-    raise NotImplementedError("This method has not been implemented yet.")
+    attrs = get_onnx_attrs(node, initializers)
+    torch_args = {
+        "size": None,
+        "scale_factor": None,
+        "mode": "nearest",
+        "align_corners": False,
+    }
+
+    for k, v in attrs.items():
+        if k == "antialias":
+            if v != 0:
+                raise NotImplementedError(
+                    f"Resize node with antialias={v} is not supported."
+                )
+        elif k == "axes":
+            if v is not None:
+                raise NotImplementedError("Resize node with axes is not supported.")
+        elif k == "coordinate_transformation_mode":
+            if v not in {"asymmetric", "half_pixel"}:
+                raise NotImplementedError(
+                    f"Resize node with coordinate_transformation_mode={v} is not supported."
+                )
+            torch_args["align_corners"] = False
+            # TODO: There is some inconsistency between ONNX and PyTorch. We need check.
+        elif k == "cubic_coeff_a":
+            if v != -0.75:
+                raise NotImplementedError(
+                    f"Resize node with cubic_coeff_a={v} is not supported."
+                )
+        elif k == "exclude_outside":
+            if v != 0:
+                raise NotImplementedError(
+                    f"Resize node with exclude_outside={v} is not supported."
+                )
+        elif k == "extrapolation_value":
+            if v != 0.0:
+                raise NotImplementedError(
+                    f"Resize node with extrapolation_value={v} is not supported."
+                )
+        elif k == "keep_aspect_ratio_policy":
+            if v != "stretch":
+                raise NotImplementedError(
+                    f"Resize node with keep_aspect_ratio_policy={v} is not supported."
+                )
+        elif k == "nearest_mode":
+            if v not in {"floor", "round_prefer_floor"}:
+                warnings.warn(f"Resize node with nearest_mode={v} is not supported.")
+        elif k == "mode":
+            if v != "nearest":
+                raise NotImplementedError("Resize node with mode={v} is not supported.")
+            torch_args["mode"] = v
+
+    scale_factor = initializers.get(node.input[2])
+    if scale_factor is None:
+        raise RuntimeError("Resize node only supports scale_factor as an initializer.")
+    scale_factor = initializer_to_list(scale_factor)
+    torch_args["scale_factor"] = scale_factor  # noqa
+
+    if len(node.input) > 3:
+        size = initializers.get(node.input[3])
+        if size is None:
+            raise RuntimeError("Resize node only supports size as an initializer.")
+        size = initializer_to_list(size)
+        torch_args["size"] = size  # noqa
+
+    return torch_args
 
 
 def _torch_scatter(*args, **kwargs) -> dict[str, Any]:
@@ -525,19 +596,16 @@ def _torch_scatter(*args, **kwargs) -> dict[str, Any]:
 
 def _torch_scatterelement(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.scatter.html
+    attrs = get_onnx_attrs(node, initializers)
     torch_args = {"dim": None, "index": None, "src": None}
 
     for k, v in attrs.items():
         if k == "axis":
             torch_args["dim"] = v
-
-    torch_args["index"] = _to_tensor(initializers[node.input[1]])
-    torch_args["src"] = _to_tensor(initializers[node.input[2]])
 
     return torch_args
 
@@ -546,122 +614,80 @@ def _torch_scatternd(*args, **kwargs) -> dict[str, Any]:
     return _torch_scatterelement(*args, **kwargs)
 
 
-def _torch_shape(*args, **kwargs) -> dict[str, Any]:
-    # https://pytorch.org/docs/stable/generated/torch.shape.html
-    raise RuntimeError(
-        "You should use slimonnx to slim the Shape to reduce calculation. "
-        "slimonnx will convert Shape to an initializer."
-    )
-
-
-def _torch_sigmoid(*args, **kwargs) -> dict[str, Any]:
-    # https://pytorch.org/docs/stable/generated/torch.sigmoid.html
-    return {}
-
-
-def _torch_slice(
-    node: NodeProto,
-    attrs: dict[str, Any],
-    nodes: dict[str, NodeProto],
-    initializers: dict[str, TensorProto],
-) -> dict[str, Any]:
-    # https://onnx.ai/onnx/operators/onnx__Slice.html
-    torch_args = {
-        "starts": None,
-        "ends": None,
-        "axes": None,
-        "steps": None,
-    }
-
-    starts = initializers[node.input[1]]
-    starts = _to_list(starts)
-    torch_args["starts"] = starts
-
-    ends = initializers[node.input[2]]
-    ends = _to_list(ends)
-    torch_args["ends"] = ends
-
-    if len(node.input) < 4:
-        torch_args["axes"] = list(range(len(starts)))
-    else:
-        axes = initializers[node.input[3]]
-        axes = _to_list(axes)
-        torch_args["axes"] = axes
-
-    if len(node.input) < 5:
-        torch_args["steps"] = [1] * len(starts)
-    else:
-        steps = initializers[node.input[4]]
-        steps = _to_list(steps)
-        torch_args["steps"] = steps
-
-    return torch_args
-
-
 def _torch_softmax(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.nn.Softmax.html
+    attrs = get_onnx_attrs(node, initializers)
     torch_args = {"dim": None}
+
     for k, v in attrs.items():
         if k == "axis":
-            assert v >= 0 or v == -1
-            if v == -1:
-                v = None
             torch_args["dim"] = v
+    return torch_args
+
+
+def _torch_slice(
+    node: NodeProto,
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
+) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.narrow.html
+    torch_args = {"axes": None}
+
+    if len(node.input) > 3:
+        axes = initializers.get(node.input[3])
+        if axes is None:
+            raise RuntimeError(
+                "Slice node only supports constant axes as an initializer."
+            )
+        axes = onnx.numpy_helper.to_array(axes).tolist()
+        torch_args["axes"] = axes
+
     return torch_args
 
 
 def _torch_split(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.split.html
-    torch_args = {
-        "split_size_or_sections": None,
-        "dim": 0,
-    }
+    attrs = get_onnx_attrs(node, initializers)
+    torch_args = {"split_size_or_sections": None, "dim": 0}
 
     for k, v in attrs.items():
         if k == "axis":
             torch_args["dim"] = v
 
     if len(node.input) > 1:
-        split = initializers[node.input[1]]
-        split = int(onnx.numpy_helper.to_array(split))
-        torch.args["split_size_or_sections"] = split
+        split = initializers.get(node.input[1])
+        if split is None:
+            raise RuntimeError(
+                "Split node only supports split_size_or_sections as an initializer."
+            )
+        split = initializer_to_list(split)
+        torch_args["split_size_or_sections"] = split  # noqa
     else:
         # TODO: We need the node shapes to infer the split size.
         raise NotImplementedError(
-            "We only support split with split_size_or_sections is given in ONNX."
+            "Split node without split_size_or_sections is not supported."
         )
 
     return torch_args
 
 
-def _torch_sub(*args, **kwargs) -> dict[str, Any]:
-    # https://pytorch.org/docs/stable/generated/torch.sub.html
-    return {}
-
-
-def _torch_tanh(*args, **kwargs) -> dict[str, Any]:
-    # https://pytorch.org/docs/stable/generated/torch.tanh.html
-    return {}
-
-
 def _torch_transpose(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.permute.html
+    attrs = get_onnx_attrs(node, initializers)
     torch_args = {"dims": None}
+
     for k, v in attrs.items():
         if k == "perm":
             torch_args["dims"] = v
@@ -669,49 +695,30 @@ def _torch_transpose(
     return torch_args
 
 
-def _torch_unsqueeze(
-    node: NodeProto,
-    attrs: dict[str, Any],
-    nodes: dict[str, NodeProto],
-    initializers: dict[str, TensorProto],
-) -> dict[str, Any]:
-    # https://pytorch.org/docs/stable/generated/torch.unsqueeze.html
-    torch_args = {"dim": None}
-    for k, v in attrs.items():
-        if k == "axes":
-            torch_args["dim"] = v
-
-    return torch_args
-
-
 def _torch_upsample(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     # https://pytorch.org/docs/stable/generated/torch.nn.Upsample.html
-    # TODO: Support upsample
-    raise NotImplementedError("This method has not been implemented yet.")
-    torch_args = {
-        # "size":None,
-        "scale_factor": None,
-        "mode": "nearest",
-        # "align_corners": None,
-        # "recompute_scale_factor": None,
-    }
+    attrs = get_onnx_attrs(node, initializers)
+    torch_args = {"scale_factor": None, "mode": "nearest"}
+
     for k, v in attrs.items():
         if k == "mode":
             torch_args["mode"] = v
 
-    scales = _to_tuple(initializers[node.input[1]])
-    torch_args["scale_factor"] = scales
+    scales = initializers.get(node.input[2])
+    if scales is None:
+        raise RuntimeError("Upsample node only supports scales as an initializer.")
+    scales = initializer_to_tuple(scales)
+    torch_args["scale_factor"] = scales  # noqa
 
     return torch_args
 
 
 _TORCH_ATTRS_MAP = {
-    "Add": _torch_add,
+    "Add": _torch_nothing,
     "ArgMax": _torch_argmax,
     "AveragePool": _torch_avgpool,
     "BatchNormalization": _torch_batchnorm,
@@ -721,47 +728,46 @@ _TORCH_ATTRS_MAP = {
     "ConvTranspose": _torch_convtranspose,
     "Constant": _torch_constant,
     "ConstantOfShape": _torch_constantofshape,
-    "Div": _torch_div,
+    "Div": _torch_nothing,
     "Elu": _torch_elu,
     "Flatten": _torch_flatten,
     "Gather": _torch_gather,
     "Gelu": _torch_gelu,
     "Gemm": _torch_gemm,
     "LeakyRelu": _torch_leakyrelu,
-    "MatMul": _torch_matmul,
+    "MatMul": _torch_nothing,
     "MaxPool": _torch_maxpool,
-    "Mul": _torch_mul,
+    "Mul": _torch_nothing,
     "Pad": _torch_pad,
     "ReduceMean": _torch_reducemean,
     "ReduceSum": _torch_reducesum,
-    "Relu": _torch_relu,
-    "Reshape": _torch_reshape,
+    "Relu": _torch_nothing,
+    "Reshape": _torch_nothing,
     "Resize": _torch_resize,
-    "Shape": _torch_shape,
-    "Sigmoid": _torch_sigmoid,
+    "Shape": _torch_nothing,
+    "Sigmoid": _torch_nothing,
     "Scatter": _torch_scatter,
     "ScatterElements": _torch_scatterelement,
     "ScatterND": _torch_scatternd,
     "Slice": _torch_slice,
     "Softmax": _torch_softmax,
     "Split": _torch_split,
-    "Sub": _torch_sub,
-    "Tanh": _torch_tanh,
+    "Sub": _torch_nothing,
+    "Tanh": _torch_nothing,
     "Transpose": _torch_transpose,
-    "Unsqueeze": _torch_unsqueeze,
+    "Unsqueeze": _torch_nothing,
     "Upsample": _torch_upsample,
 }
 
 
 def get_torch_args(
     node: NodeProto,
-    attrs: dict[str, Any],
     nodes: dict[str, NodeProto],
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
     _torch = _TORCH_ATTRS_MAP.get(node.op_type)
     if _torch is None:
-        raise ValueError(f"Invalid op_type: {node.op_type}")
-    torch_args = _torch(node, attrs, nodes, initializers)
+        raise ValueError(f"Op type {node.op_type} is not supported.")
+    torch_args = _torch(node, nodes, initializers)
 
     return torch_args

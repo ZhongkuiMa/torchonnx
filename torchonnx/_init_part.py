@@ -3,26 +3,13 @@ __all__ = ["gen_init_code"]
 
 from onnx import ModelProto, NodeProto, TensorProto
 
-from ._onnx_attrs import get_onnx_attrs
 from ._torch_args import get_torch_args
 from ._utils import *
 
 _INDENT = "    "
 
-# TODO: Try to only use torch args.
-
 
 def _gen_nothing(*args, **kwargs) -> str:
-    return ""
-
-
-def _gen_code_of_add(*args, **kwargs) -> str:
-    # https://pytorch.org/docs/stable/generated/torch.add.html
-    return ""
-
-
-def _gen_code_of_argmax(*args, **kwargs) -> str:
-    # https://pytorch.org/docs/stable/generated/torch.argmax.html
     return ""
 
 
@@ -30,8 +17,8 @@ def _gen_code_of_avgpool(
     node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
 ) -> str:
     # https://pytorch.org/docs/stable/generated/torch.nn.AvgPool2d.html
-    attrs = get_onnx_attrs(node, initializers)
-    torch_args = get_torch_args(node, attrs, nodes, initializers)
+    torch_args = get_torch_args(node, nodes, initializers)
+
     dim = len(torch_args["kernel_size"])
     code = (
         _INDENT * 2 + f"self.{node.name} = "
@@ -41,7 +28,7 @@ def _gen_code_of_avgpool(
 
     if (
         torch_args["stride"] is not None
-        or torch_args["stride"] != torch_args["kernel_size"]
+        and torch_args["stride"] != torch_args["kernel_size"]
     ):
         code += f"stride={torch_args['stride']}, "
     if torch_args["padding"] != 0:
@@ -60,49 +47,50 @@ def _gen_code_of_batchnorm(
     node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
 ) -> str:
     # https://pytorch.org/docs/stable/generated/torch.nn.BatchNorm2d.html
-    attrs = get_onnx_attrs(node, initializers)
-    torch_args = get_torch_args(node, attrs, nodes, initializers)
-    dim = len(torch_args["num_features"])
+    torch_args = get_torch_args(node, nodes, initializers)
+
+    # TODO: Use data shape to infer the dimension.
     code = (
-        _INDENT * 2 + f"self.{node.name} = nn.BatchNorm{dim}d("
+        _INDENT * 2 + f"self.{node.name} = nn.BatchNorm2d("
         f'{torch_args["num_features"]}, '
     )
-    if torch_args["eps"] != 1e-5:
-        code += f"eps={torch_args['eps']}, "
-    if torch_args["momentum"] != 0.1:
-        code += f"momentum={torch_args['momentum']}, "
+    eps = torch_args["eps"]
+    if eps != 1e-5:
+        new_eps = round(eps, 6)
+        print(f"Round BatchNorm momentum: {eps} -> {new_eps}")
+        if new_eps != 1e-5:
+            code += f"eps={new_eps}, "
+    momentum = torch_args["momentum"]
+    if momentum != 0.1:
+        new_momentum = round(momentum, 6)
+        print(f"Round BatchNorm momentum: {momentum} -> {new_momentum}")
+        if new_momentum != 0.1:
+            code += f"momentum={new_momentum}, "
     if not torch_args["track_running_stats"]:
         code += f"track_running_stats={torch_args['track_running_stats']}, "
     code = code[:-2] + ")\n"
 
     # Set parameters
     input_names = parse_input_names(node, initializers.keys())  # noqa
-    scale = torch_args["scale"]
-    b = torch_args["bias"]
-    mean = torch_args["running_mean"]
-    variance = torch_args["running_var"]
+    scale = input_names[1]
+    b = input_names[2]
+    mean = input_names[3]
+    variance = input_names[4]
     code += _INDENT * 2 + f"self.{node.name}.weight.data = {scale}\n"
     code += _INDENT * 2 + f"self.{node.name}.bias.data = {b}\n"
     code += _INDENT * 2 + f"self.{node.name}.running_mean.data = {mean}\n"
     code += _INDENT * 2 + f"self.{node.name}.running_var.data = {variance}\n"
+    code += "\n"
 
     return code
-
-
-def _gen_code_of_cast(*args, **kwargs) -> str:
-    raise NotImplementedError("Cast is not supported yet.")
-
-
-def _gen_code_of_concat(*args, **kwargs) -> str:
-    return ""
 
 
 def _gen_code_of_conv(
     node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
 ) -> str:
     # https://pytorch.org/docs/stable/generated/torch.nn.Conv2d.html
-    attrs = get_onnx_attrs(node, initializers)
-    torch_args = get_torch_args(node, attrs, nodes, initializers)
+    torch_args = get_torch_args(node, nodes, initializers)
+
     dim = len(torch_args["kernel_size"])
     code = (
         _INDENT * 2 + f"self.{node.name} = nn.Conv{dim}d("
@@ -139,8 +127,8 @@ def _gen_code_of_convtranspose(
     node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
 ) -> str:
     # https://pytorch.org/docs/stable/generated/torch.nn.ConvTranspose2d.html
-    attrs = get_onnx_attrs(node, initializers)
-    torch_args = get_torch_args(node, attrs, nodes, initializers)
+    torch_args = get_torch_args(node, nodes, initializers)
+
     dim = len(torch_args["kernel_size"])
     code = (
         _INDENT * 2 + f"self.{node.name} = nn.ConvTranspose{dim}d("
@@ -184,29 +172,17 @@ def _gen_code_of_constant(*args, **kwargs) -> str:
     )
 
 
-def _gen_code_of_constantofshape(*args, **kwargs) -> str:
-    # https://pytorch.org/docs/stable/generated/torch.full.html
-    raise RuntimeError(
-        "You should use slimonnx to slim the ConstantOfShape to reduce calculation. "
-        "slimonnx will convert ConstantOfShape to an initializer."
-    )
-
-
-def _gen_code_of_div(*args, **kwargs) -> str:
-    # https://pytorch.org/docs/stable/generated/torch.div.html
-    return ""
-
-
 def _gen_code_of_elu(
     node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
 ) -> str:
     # https://pytorch.org/docs/stable/generated/torch.nn.ELU.html
-    attrs = get_onnx_attrs(node, initializers)
-    torch_args = get_torch_args(node, attrs, nodes, initializers)
+    torch_args = get_torch_args(node, nodes, initializers)
+
     code = _INDENT * 2 + f"self.{node.name} = nn.ELU("
     if torch_args["alpha"] != 1.0:
         code += f"alpha={torch_args['alpha']}"
     code += ")\n"
+
     return code
 
 
@@ -214,8 +190,8 @@ def _gen_code_of_flatten(
     node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
 ) -> str:
     # https://pytorch.org/docs/stable/generated/torch.nn.Flatten.html
-    attrs = get_onnx_attrs(node, initializers)
-    torch_args = get_torch_args(node, attrs, nodes, initializers)
+    torch_args = get_torch_args(node, nodes, initializers)
+
     code = _INDENT * 2 + f"self.{node.name} = nn.Flatten("
     if torch_args["start_dim"] != 1:
         code += f"start_dim={torch_args['start_dim']}"
@@ -224,20 +200,17 @@ def _gen_code_of_flatten(
     return code
 
 
-def _gen_code_of_gather(*args, **kwargs) -> str:
-    return ""
-
-
 def _gen_code_of_gelu(
     node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
 ) -> str:
     # https://pytorch.org/docs/stable/generated/torch.nn.GELU.html
-    attrs = get_onnx_attrs(node, initializers)
-    torch_args = get_torch_args(node, attrs, nodes, initializers)
+    torch_args = get_torch_args(node, nodes, initializers)
+
     code = _INDENT * 2 + f"self.{node.name} = nn.GELU("
     if torch_args["approximation"] != "none":
         code += f"approximation={torch_args['approximation']}"
     code += ")\n"
+
     return code
 
 
@@ -245,8 +218,7 @@ def _gen_code_of_gemm(
     node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
 ) -> str:
     # https://pytorch.org/docs/stable/generated/torch.nn.Linear.html
-    attrs = get_onnx_attrs(node, initializers)
-    torch_args = get_torch_args(node, attrs, nodes, initializers)
+    torch_args = get_torch_args(node, nodes, initializers)
     code = (
         _INDENT * 2 + f"self.{node.name} = nn.Linear("
         f"{torch_args['input_features']}, "
@@ -261,11 +233,8 @@ def _gen_code_of_gemm(
     weight = input_names[1]
     code += _INDENT * 2 + f"self.{node.name}.weight.data = {weight}\n"
     if len(node.input) == 3:
-        assert torch_args["bias"] is not None
         bias = input_names[2]
         code += _INDENT * 2 + f"self.{node.name}.bias.data = {bias}\n"
-    else:
-        assert torch_args["bias"] is None
     code += "\n"
 
     return code
@@ -275,26 +244,22 @@ def _gen_code_of_leakyrelu(
     node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
 ) -> str:
     # https://pytorch.org/docs/stable/generated/torch.nn.LeakyReLU.html
-    attrs = get_onnx_attrs(node, initializers)
-    torch_args = get_torch_args(node, attrs, nodes, initializers)
+    torch_args = get_torch_args(node, nodes, initializers)
+
     code = _INDENT * 2 + f"self.{node.name} = nn.LeakyReLU("
-    if torch_args["alpha"] != 0.01:
-        code += f"{torch_args['alpha']}"
+    if torch_args["negative_slope"] != 0.01:
+        code += f"negative_slope={torch_args['negative_slope']}"
     code += ")\n"
+
     return code
-
-
-def _gen_code_of_matmul(*args, **kwargs) -> str:
-    # https://pytorch.org/docs/stable/generated/torch.matmul.html
-    return ""
 
 
 def _gen_code_of_maxpool(
     node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
 ) -> str:
     # https://pytorch.org/docs/stable/generated/torch.nn.MaxPool2d.html
-    attrs = get_onnx_attrs(node, initializers)
-    torch_args = get_torch_args(node, attrs, nodes, initializers)
+    torch_args = get_torch_args(node, nodes, initializers)
+
     dim = len(torch_args["kernel_size"])
     code = (
         _INDENT * 2 + f"self.{node.name} = nn.MaxPool{dim}d("
@@ -312,25 +277,8 @@ def _gen_code_of_maxpool(
     if torch_args["ceil_mode"]:
         code += f'ceil_mode={torch_args["ceil_mode"]}, '
     code = code[:-2] + ")\n"
+
     return code
-
-
-def _gen_code_of_mul(*args, **kwargs) -> str:
-    # https://pytorch.org/docs/stable/generated/torch.mul.html
-    return ""
-
-
-def _gen_code_of_pad(*args, **kwargs) -> str:
-    # https://pytorch.org/docs/stable/generated/torch.nn.functional.pad.htm
-    return ""
-
-
-def _gen_code_of_reducemean(*args, **kwargs) -> str:
-    return ""
-
-
-def _gen_code_of_reducesum(*args, **kwargs) -> str:
-    return ""
 
 
 def _gen_code_of_relu(
@@ -340,28 +288,6 @@ def _gen_code_of_relu(
     return _INDENT * 2 + f"self.{node.name} = nn.ReLU()\n"
 
 
-def _gen_code_of_reshape(*args, **kwargs) -> str:
-    return ""
-
-
-def _gen_code_of_resize(*args, **kwargs) -> str:
-    # https://pytorch.org/docs/stable/generated/torch.nn.functional.interpolate.html
-    return ""
-
-
-def _gen_code_of_scatter(*args, **kwargs) -> str:
-
-    return ""
-
-
-def _gen_code_of_scatterelements(*args, **kwargs) -> str:
-    return ""
-
-
-def _gen_code_of_scatternd(*args, **kwargs) -> str:
-    return ""
-
-
 def _gen_code_of_sigmoid(
     node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
 ) -> str:
@@ -369,30 +295,16 @@ def _gen_code_of_sigmoid(
     return _INDENT * 2 + f"self.{node.name} = nn.Sigmoid()\n"
 
 
-def _gen_code_of_slice(*args, **kwargs) -> str:
-    return ""
-
-
 def _gen_code_of_softmax(
     node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
 ) -> str:
     # https://pytorch.org/docs/stable/generated/torch.nn.Softmax.html
-    attrs = get_onnx_attrs(node, initializers)
-    torch_args = get_torch_args(node, attrs, nodes, initializers)
+    torch_args = get_torch_args(node, nodes, initializers)
     code = _INDENT * 2 + f"self.{node.name} = nn.Softmax("
-    if torch_args["dim"] is not None and torch_args["dim"] != -1:
+    if torch_args["dim"] is not None:
         code += f'dim={torch_args["dim"]}'
     code += ")\n"
     return code
-
-
-def _gen_code_of_split(*args, **kwargs) -> str:
-    return ""
-
-
-def _gen_code_of_sub(*args, **kwargs) -> str:
-    # https://pytorch.org/docs/stable/generated/torch.sub.html
-    return ""
 
 
 def _gen_code_of_tanh(
@@ -402,20 +314,11 @@ def _gen_code_of_tanh(
     return _INDENT * 2 + f"self.{node.name} = nn.Tanh()\n"
 
 
-def _gen_code_of_transpose(*args, **kwargs) -> str:
-    return ""
-
-
-def _gen_code_of_unsqueeze(*args, **kwargs) -> str:
-    return ""
-
-
 def _gen_code_of_upsample(
     node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
 ) -> str:
     # https://pytorch.org/docs/stable/generated/torch.nn.Upsample.html
-    attrs = get_onnx_attrs(node, initializers)
-    torch_args = get_torch_args(node, attrs, nodes, initializers)
+    torch_args = get_torch_args(node, nodes, initializers)
     code = _INDENT * 2 + f"self.{node.name} = nn.Upsample("
     if torch_args["mode"] != "nearest":
         code += f'mode="{torch_args["mode"]}", '
@@ -426,44 +329,55 @@ def _gen_code_of_upsample(
 
 
 _GEN_CODE_MAP = {
-    "Add": _gen_code_of_add,
-    "ArgMax": _gen_code_of_argmax,
+    "Add": _gen_nothing,
+    "ArgMax": _gen_nothing,
     "AveragePool": _gen_code_of_avgpool,
     "BatchNormalization": _gen_code_of_batchnorm,
-    "Cast": _gen_code_of_cast,
-    "Concat": _gen_code_of_concat,
+    "Cast": _gen_nothing,
+    "Clip": _gen_nothing,
+    "Concat": _gen_nothing,
     "Conv": _gen_code_of_conv,
     "ConvTranspose": _gen_code_of_convtranspose,
     "Constant": _gen_code_of_constant,
-    "ConstantOfShape": _gen_code_of_constantofshape,
-    "Div": _gen_code_of_div,
+    "ConstantOfShape": _gen_nothing,
+    "Cos": _gen_nothing,
+    "Div": _gen_nothing,
     "Elu": _gen_code_of_elu,
+    "Equal": _gen_nothing,
+    "Expand": _gen_nothing,
     "Flatten": _gen_code_of_flatten,
-    "Gather": _gen_code_of_gather,
+    "Gather": _gen_nothing,
     "Gelu": _gen_code_of_gelu,
     "Gemm": _gen_code_of_gemm,
     "LeakyRelu": _gen_code_of_leakyrelu,
-    "MatMul": _gen_code_of_matmul,
+    "Min": _gen_nothing,
+    "MatMul": _gen_nothing,
+    "Max": _gen_nothing,
     "MaxPool": _gen_code_of_maxpool,
-    "Mul": _gen_code_of_mul,
-    "Pad": _gen_code_of_pad,
-    "ReduceMean": _gen_code_of_reducemean,
-    "ReduceSum": _gen_code_of_reducesum,
+    "Mul": _gen_nothing,
+    "Neg": _gen_nothing,
+    "Pad": _gen_nothing,
+    "ReduceMean": _gen_nothing,
+    "ReduceSum": _gen_nothing,
     "Relu": _gen_code_of_relu,
-    "Reshape": _gen_code_of_reshape,
-    "Resize": _gen_code_of_resize,
+    "Reshape": _gen_nothing,
+    "Resize": _gen_nothing,
+    "Shape": _gen_nothing,
     "Sigmoid": _gen_code_of_sigmoid,
-    "Scatter": _gen_code_of_scatter,
-    "ScatterElements": _gen_code_of_scatterelements,
-    "ScatterND": _gen_code_of_scatternd,
-    "Slice": _gen_code_of_slice,
+    "Sin": _gen_nothing,
+    "Scatter": _gen_nothing,
+    "ScatterElements": _gen_nothing,
+    "ScatterND": _gen_nothing,
+    "Slice": _gen_nothing,
     "Softmax": _gen_code_of_softmax,
-    "Split": _gen_code_of_split,
-    "Sub": _gen_code_of_sub,
+    "Split": _gen_nothing,
+    "Squeeze": _gen_nothing,
+    "Sub": _gen_nothing,
     "Tanh": _gen_code_of_tanh,
-    "Transpose": _gen_code_of_transpose,
-    "Unsqueeze": _gen_code_of_unsqueeze,
+    "Transpose": _gen_nothing,
+    "Unsqueeze": _gen_nothing,
     "Upsample": _gen_code_of_upsample,
+    "Where": _gen_nothing,
 }
 
 
@@ -477,8 +391,11 @@ def _gen_init_header_code() -> str:
     )
 
 
-def _gen_load_pth_data_code(model: ModelProto, pth_path: str) -> str:
-    return _INDENT * 2 + f"self.data = torch.load('{pth_path}')\n" + "\n"
+def _gen_load_pth_data_code(pth_path: str, initializers: dict[str, TensorProto]) -> str:
+    code = _INDENT * 2 + f"self.data = torch.load('{pth_path}')\n"
+    code += "\n"
+
+    return code
 
 
 def gen_init_code(model: ModelProto, pth_path: str) -> str:
@@ -486,7 +403,7 @@ def gen_init_code(model: ModelProto, pth_path: str) -> str:
     initializers = get_initializers(model)
 
     content = _gen_init_header_code()
-    content += _gen_load_pth_data_code(model, pth_path)
+    content += _gen_load_pth_data_code(pth_path, initializers)
 
     for node in model.graph.node:
         op_type = node.op_type
