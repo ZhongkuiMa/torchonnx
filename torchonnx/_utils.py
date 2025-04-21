@@ -1,8 +1,19 @@
 __docformat__ = "restructuredtext"
-__all__ = ["parse_input_names", "parse_output_names", "get_initializers"]
+__all__ = [
+    "EXTRACT_ATTR_MAP",
+    "parse_input_names",
+    "parse_output_names",
+    "get_initializers",
+    "initializer_to_tensor",
+    "initializer_to_list",
+    "initializer_to_tuple",
+    "initializer_to_int",
+]
 
 import onnx
 from onnx import ModelProto, NodeProto, TensorProto
+from torch import Tensor
+import torch
 
 EXTRACT_ATTR_MAP = {
     0: lambda x: None,  # UNDEFINED
@@ -44,3 +55,19 @@ def parse_output_names(
 
 def get_initializers(model: ModelProto) -> dict[str, TensorProto]:
     return {initializer.name: initializer for initializer in model.graph.initializer}
+
+
+def initializer_to_tensor(initializer: TensorProto) -> Tensor:
+    return torch.tensor(onnx.numpy_helper.to_array(initializer))
+
+
+def initializer_to_list(initializer: TensorProto) -> list:
+    return onnx.numpy_helper.to_array(initializer).tolist()
+
+
+def initializer_to_tuple(initializer: TensorProto) -> tuple:
+    return tuple(onnx.numpy_helper.to_array(initializer).tolist())
+
+
+def initializer_to_int(initializer: TensorProto) -> int:
+    return int(onnx.numpy_helper.to_array(initializer))

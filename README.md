@@ -89,6 +89,7 @@ import torch
 from torch import Tensor
 import torch.nn as nn
 from torch.nn import Module
+from torch.nn import functional as F
 
 
 # Model name: torch_jit_slimmed
@@ -121,7 +122,7 @@ class Ibp338V22Simplified(Module):
         self.Gemm_12.bias.data = self.data['Initializer_39']
 
         self.Flatten_17 = nn.Flatten(start_dim=3)
-        self.Softmax_18 = nn.Softmax(dim=-1)
+        self.Softmax_18 = nn.Softmax()
         self.Gemm_23 = nn.Linear(48, 48)
         self.Gemm_23.weight.data = self.data['Initializer_9']
         self.Gemm_23.bias.data = self.data['Initializer_3']
@@ -148,7 +149,7 @@ class Ibp338V22Simplified(Module):
         self.Gemm_35.bias.data = self.data['Initializer_47']
 
         self.Flatten_40 = nn.Flatten(start_dim=3)
-        self.Softmax_41 = nn.Softmax(dim=-1)
+        self.Softmax_41 = nn.Softmax()
         self.Gemm_46 = nn.Linear(48, 48)
         self.Gemm_46.weight.data = self.data['Initializer_11']
         self.Gemm_46.bias.data = self.data['Initializer_5']
@@ -175,7 +176,7 @@ class Ibp338V22Simplified(Module):
         self.Gemm_58.bias.data = self.data['Initializer_55']
 
         self.Flatten_63 = nn.Flatten(start_dim=3)
-        self.Softmax_64 = nn.Softmax(dim=-1)
+        self.Softmax_64 = nn.Softmax()
         self.Gemm_69 = nn.Linear(48, 48)
         self.Gemm_69.weight.data = self.data['Initializer_13']
         self.Gemm_69.bias.data = self.data['Initializer_7']
@@ -268,11 +269,10 @@ class Ibp338V22Simplified(Module):
         Relu_72_0 = self.Relu_72(Gemm_71_0)
         Gemm_73_0 = self.Gemm_73(Relu_72_0)
         Add_74_0 = Gemm_73_0 + Add_70_0
-        ReduceMean_75_0 = torch.mean(Add_74_0, dim=self.data['Initializer_18'], keepdim=True)
+        ReduceMean_75_0 = torch.mean(Add_74_0, dim=1)
         output_77 = self.Gemm_76(ReduceMean_75_0)
 
         return output_77
-
 
 ```
 
