@@ -47,6 +47,23 @@ If you haven’t installed them yet, just refer to how to install [PyTorch](http
 
 ### Example Usage 📚
 
+#### Test Examples of VNNCOMP'24
+
+You need to get the repo of [vnncomp2024](https://github.com/ChristopherBrix/vnncomp2024_benchmarks). This repo does not contain the benchmarks folder because it is about 20GB. The testing examples are in the `test_vnncomp` folder. Then you make sure the following folder structure:
+
+```
+torchonnx/
+│   ├── torchonnx/
+│   ├── README.md
+│   └── test_vnncomp/
+└── ...
+vnncomp2024/
+│   ├── benchmarks/
+└── ...
+```
+
+#### An Example of ViT Model
+
 There is an example about ViT model in `test` folder ([ViT benchmark](https://github.com/ChristopherBrix/vnncomp2023_benchmarks/tree/main/benchmarks/vit/onnx) from [VNNCOMP'23](https://sites.google.com/view/vnn2023/home)). Note that you need to use [slimonnx](https://github.com/ZhongkuiMa/slimonnx) to simplify the model first and take its simplified version to generate the pytorch code because there are some unsupported operations in the original model.
 
 [netron.app](netron.app) is a good way to check the computation graph of the onnx file.

@@ -1,11 +1,8 @@
 __docformat__ = "restructuredtext"
 __all__ = ["gen_forward_code"]
 
-import warnings
-
 from onnx import ModelProto, NodeProto, TensorProto
 
-from rover import nodes
 from ._onnx_attrs import *
 from ._torch_args import *
 from ._utils import *

@@ -6,8 +6,8 @@ from typing import Any
 
 import onnx
 import torch
-from torch import Tensor
 from onnx import NodeProto, TensorProto
+from torch import Tensor
 
 from ._utils import *
 
