@@ -122,7 +122,7 @@ class Ibp338V22Simplified(Module):
         self.Gemm_12.bias.data = self.data['Initializer_39']
 
         self.Flatten_17 = nn.Flatten(start_dim=3)
-        self.Softmax_18 = nn.Softmax()
+        self.Softmax_18 = nn.Softmax(dim=-1)
         self.Gemm_23 = nn.Linear(48, 48)
         self.Gemm_23.weight.data = self.data['Initializer_9']
         self.Gemm_23.bias.data = self.data['Initializer_3']
@@ -149,7 +149,7 @@ class Ibp338V22Simplified(Module):
         self.Gemm_35.bias.data = self.data['Initializer_47']
 
         self.Flatten_40 = nn.Flatten(start_dim=3)
-        self.Softmax_41 = nn.Softmax()
+        self.Softmax_41 = nn.Softmax(dim=-1)
         self.Gemm_46 = nn.Linear(48, 48)
         self.Gemm_46.weight.data = self.data['Initializer_11']
         self.Gemm_46.bias.data = self.data['Initializer_5']
@@ -176,7 +176,7 @@ class Ibp338V22Simplified(Module):
         self.Gemm_58.bias.data = self.data['Initializer_55']
 
         self.Flatten_63 = nn.Flatten(start_dim=3)
-        self.Softmax_64 = nn.Softmax()
+        self.Softmax_64 = nn.Softmax(dim=-1)
         self.Gemm_69 = nn.Linear(48, 48)
         self.Gemm_69.weight.data = self.data['Initializer_13']
         self.Gemm_69.bias.data = self.data['Initializer_7']
@@ -196,27 +196,27 @@ class Ibp338V22Simplified(Module):
 
     def forward(self, input_0: Tensor) -> Tensor:
         Conv_1_0 = self.Conv_1(input_0)
-        Reshape_2_0 = Conv_1_0.reshape(self.data['Initializer_19'])
+        Reshape_2_0 = Conv_1_0.reshape((1, 48, 16))
         Transpose_3_0 = Reshape_2_0.permute((0, 2, 1))
         Concat_4_0 = torch.cat([self.data['Initializer_20'], Transpose_3_0], dim=1)
         Add_5_0 = Concat_4_0 + self.data['Initializer_0']
         Gemm_6_0 = self.Gemm_6(Add_5_0)
-        Reshape_7_0 = Gemm_6_0.reshape(self.data['Initializer_23'])
+        Reshape_7_0 = Gemm_6_0.reshape((1, 17, 3, 16))
         Transpose_8_0 = Reshape_7_0.permute((0, 2, 1, 3))
         Gemm_9_0 = self.Gemm_9(Add_5_0)
-        Reshape_10_0 = Gemm_9_0.reshape(self.data['Initializer_22'])
+        Reshape_10_0 = Gemm_9_0.reshape((1, 17, 3, 16))
         Transpose_11_0 = Reshape_10_0.permute((0, 2, 3, 1))
         Gemm_12_0 = self.Gemm_12(Add_5_0)
-        Reshape_13_0 = Gemm_12_0.reshape(self.data['Initializer_21'])
+        Reshape_13_0 = Gemm_12_0.reshape((1, 17, 3, 16))
         Transpose_14_0 = Reshape_13_0.permute((0, 2, 1, 3))
         MatMul_15_0 = Transpose_14_0 @ Transpose_11_0
         Mul_16_0 = MatMul_15_0 * self.data['Initializer_15']
         Flatten_17_0 = self.Flatten_17(Mul_16_0)
         Softmax_18_0 = self.Softmax_18(Flatten_17_0)
-        Reshape_19_0 = Softmax_18_0.reshape(self.data['Initializer_24'])
+        Reshape_19_0 = Softmax_18_0.reshape((1, 3, 17, 17))
         MatMul_20_0 = Reshape_19_0 @ Transpose_8_0
         Transpose_21_0 = MatMul_20_0.permute((0, 2, 1, 3))
-        Reshape_22_0 = Transpose_21_0.reshape(self.data['Initializer_25'])
+        Reshape_22_0 = Transpose_21_0.reshape((1, 17, 48))
         Gemm_23_0 = self.Gemm_23(Reshape_22_0)
         Add_24_0 = Gemm_23_0 + Add_5_0
         Gemm_25_0 = self.Gemm_25(Add_24_0)
@@ -224,22 +224,22 @@ class Ibp338V22Simplified(Module):
         Gemm_27_0 = self.Gemm_27(Relu_26_0)
         Add_28_0 = Gemm_27_0 + Add_24_0
         Gemm_29_0 = self.Gemm_29(Add_28_0)
-        Reshape_30_0 = Gemm_29_0.reshape(self.data['Initializer_28'])
+        Reshape_30_0 = Gemm_29_0.reshape((1, 17, 3, 16))
         Transpose_31_0 = Reshape_30_0.permute((0, 2, 1, 3))
         Gemm_32_0 = self.Gemm_32(Add_28_0)
-        Reshape_33_0 = Gemm_32_0.reshape(self.data['Initializer_27'])
+        Reshape_33_0 = Gemm_32_0.reshape((1, 17, 3, 16))
         Transpose_34_0 = Reshape_33_0.permute((0, 2, 3, 1))
         Gemm_35_0 = self.Gemm_35(Add_28_0)
-        Reshape_36_0 = Gemm_35_0.reshape(self.data['Initializer_26'])
+        Reshape_36_0 = Gemm_35_0.reshape((1, 17, 3, 16))
         Transpose_37_0 = Reshape_36_0.permute((0, 2, 1, 3))
         MatMul_38_0 = Transpose_37_0 @ Transpose_34_0
         Mul_39_0 = MatMul_38_0 * self.data['Initializer_16']
         Flatten_40_0 = self.Flatten_40(Mul_39_0)
         Softmax_41_0 = self.Softmax_41(Flatten_40_0)
-        Reshape_42_0 = Softmax_41_0.reshape(self.data['Initializer_29'])
+        Reshape_42_0 = Softmax_41_0.reshape((1, 3, 17, 17))
         MatMul_43_0 = Reshape_42_0 @ Transpose_31_0
         Transpose_44_0 = MatMul_43_0.permute((0, 2, 1, 3))
-        Reshape_45_0 = Transpose_44_0.reshape(self.data['Initializer_30'])
+        Reshape_45_0 = Transpose_44_0.reshape((1, 17, 48))
         Gemm_46_0 = self.Gemm_46(Reshape_45_0)
         Add_47_0 = Gemm_46_0 + Add_28_0
         Gemm_48_0 = self.Gemm_48(Add_47_0)
@@ -247,22 +247,22 @@ class Ibp338V22Simplified(Module):
         Gemm_50_0 = self.Gemm_50(Relu_49_0)
         Add_51_0 = Gemm_50_0 + Add_47_0
         Gemm_52_0 = self.Gemm_52(Add_51_0)
-        Reshape_53_0 = Gemm_52_0.reshape(self.data['Initializer_33'])
+        Reshape_53_0 = Gemm_52_0.reshape((1, 17, 3, 16))
         Transpose_54_0 = Reshape_53_0.permute((0, 2, 1, 3))
         Gemm_55_0 = self.Gemm_55(Add_51_0)
-        Reshape_56_0 = Gemm_55_0.reshape(self.data['Initializer_32'])
+        Reshape_56_0 = Gemm_55_0.reshape((1, 17, 3, 16))
         Transpose_57_0 = Reshape_56_0.permute((0, 2, 3, 1))
         Gemm_58_0 = self.Gemm_58(Add_51_0)
-        Reshape_59_0 = Gemm_58_0.reshape(self.data['Initializer_31'])
+        Reshape_59_0 = Gemm_58_0.reshape((1, 17, 3, 16))
         Transpose_60_0 = Reshape_59_0.permute((0, 2, 1, 3))
         MatMul_61_0 = Transpose_60_0 @ Transpose_57_0
         Mul_62_0 = MatMul_61_0 * self.data['Initializer_17']
         Flatten_63_0 = self.Flatten_63(Mul_62_0)
         Softmax_64_0 = self.Softmax_64(Flatten_63_0)
-        Reshape_65_0 = Softmax_64_0.reshape(self.data['Initializer_34'])
+        Reshape_65_0 = Softmax_64_0.reshape((1, 3, 17, 17))
         MatMul_66_0 = Reshape_65_0 @ Transpose_54_0
         Transpose_67_0 = MatMul_66_0.permute((0, 2, 1, 3))
-        Reshape_68_0 = Transpose_67_0.reshape(self.data['Initializer_35'])
+        Reshape_68_0 = Transpose_67_0.reshape((1, 17, 48))
         Gemm_69_0 = self.Gemm_69(Reshape_68_0)
         Add_70_0 = Gemm_69_0 + Add_51_0
         Gemm_71_0 = self.Gemm_71(Add_70_0)
