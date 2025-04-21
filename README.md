@@ -95,7 +95,7 @@ from torch.nn import functional as F
 # Model name: torch_jit_slimmed
 # Input name: input_0
 # Input shape: [1, 3, 32, 32]
-# Output name: output_77
+# Output name: output_71
 # Output shape: [1, 10]
 
 class Ibp338V22Simplified(Module):
@@ -110,89 +110,86 @@ class Ibp338V22Simplified(Module):
         self.Conv_1.bias.data = self.data['Initializer_2']
 
         self.Gemm_6 = nn.Linear(48, 48)
-        self.Gemm_6.weight.data = self.data['Initializer_42']
-        self.Gemm_6.bias.data = self.data['Initializer_43']
+        self.Gemm_6.weight.data = self.data['Initializer_39']
+        self.Gemm_6.bias.data = self.data['Initializer_40']
 
         self.Gemm_9 = nn.Linear(48, 48)
-        self.Gemm_9.weight.data = self.data['Initializer_40']
-        self.Gemm_9.bias.data = self.data['Initializer_41']
+        self.Gemm_9.weight.data = self.data['Initializer_37']
+        self.Gemm_9.bias.data = self.data['Initializer_38']
 
         self.Gemm_12 = nn.Linear(48, 48)
-        self.Gemm_12.weight.data = self.data['Initializer_38']
-        self.Gemm_12.bias.data = self.data['Initializer_39']
+        self.Gemm_12.weight.data = self.data['Initializer_35']
+        self.Gemm_12.bias.data = self.data['Initializer_36']
 
-        self.Flatten_17 = nn.Flatten(start_dim=3)
-        self.Softmax_18 = nn.Softmax(dim=-1)
-        self.Gemm_23 = nn.Linear(48, 48)
-        self.Gemm_23.weight.data = self.data['Initializer_9']
-        self.Gemm_23.bias.data = self.data['Initializer_3']
+        self.Softmax_17 = nn.Softmax(dim=-1)
+        self.Gemm_21 = nn.Linear(48, 48)
+        self.Gemm_21.weight.data = self.data['Initializer_9']
+        self.Gemm_21.bias.data = self.data['Initializer_3']
 
-        self.Gemm_25 = nn.Linear(48, 96)
-        self.Gemm_25.weight.data = self.data['Initializer_44']
-        self.Gemm_25.bias.data = self.data['Initializer_45']
+        self.Gemm_23 = nn.Linear(48, 96)
+        self.Gemm_23.weight.data = self.data['Initializer_41']
+        self.Gemm_23.bias.data = self.data['Initializer_42']
 
-        self.Relu_26 = nn.ReLU()
-        self.Gemm_27 = nn.Linear(96, 48)
-        self.Gemm_27.weight.data = self.data['Initializer_10']
-        self.Gemm_27.bias.data = self.data['Initializer_4']
+        self.Relu_24 = nn.ReLU()
+        self.Gemm_25 = nn.Linear(96, 48)
+        self.Gemm_25.weight.data = self.data['Initializer_10']
+        self.Gemm_25.bias.data = self.data['Initializer_4']
 
-        self.Gemm_29 = nn.Linear(48, 48)
-        self.Gemm_29.weight.data = self.data['Initializer_50']
-        self.Gemm_29.bias.data = self.data['Initializer_51']
+        self.Gemm_27 = nn.Linear(48, 48)
+        self.Gemm_27.weight.data = self.data['Initializer_47']
+        self.Gemm_27.bias.data = self.data['Initializer_48']
 
-        self.Gemm_32 = nn.Linear(48, 48)
-        self.Gemm_32.weight.data = self.data['Initializer_48']
-        self.Gemm_32.bias.data = self.data['Initializer_49']
+        self.Gemm_30 = nn.Linear(48, 48)
+        self.Gemm_30.weight.data = self.data['Initializer_45']
+        self.Gemm_30.bias.data = self.data['Initializer_46']
 
-        self.Gemm_35 = nn.Linear(48, 48)
-        self.Gemm_35.weight.data = self.data['Initializer_46']
-        self.Gemm_35.bias.data = self.data['Initializer_47']
+        self.Gemm_33 = nn.Linear(48, 48)
+        self.Gemm_33.weight.data = self.data['Initializer_43']
+        self.Gemm_33.bias.data = self.data['Initializer_44']
 
-        self.Flatten_40 = nn.Flatten(start_dim=3)
-        self.Softmax_41 = nn.Softmax(dim=-1)
-        self.Gemm_46 = nn.Linear(48, 48)
-        self.Gemm_46.weight.data = self.data['Initializer_11']
-        self.Gemm_46.bias.data = self.data['Initializer_5']
+        self.Softmax_38 = nn.Softmax(dim=-1)
+        self.Gemm_42 = nn.Linear(48, 48)
+        self.Gemm_42.weight.data = self.data['Initializer_11']
+        self.Gemm_42.bias.data = self.data['Initializer_5']
 
-        self.Gemm_48 = nn.Linear(48, 96)
-        self.Gemm_48.weight.data = self.data['Initializer_52']
-        self.Gemm_48.bias.data = self.data['Initializer_53']
+        self.Gemm_44 = nn.Linear(48, 96)
+        self.Gemm_44.weight.data = self.data['Initializer_49']
+        self.Gemm_44.bias.data = self.data['Initializer_50']
 
-        self.Relu_49 = nn.ReLU()
-        self.Gemm_50 = nn.Linear(96, 48)
-        self.Gemm_50.weight.data = self.data['Initializer_12']
-        self.Gemm_50.bias.data = self.data['Initializer_6']
+        self.Relu_45 = nn.ReLU()
+        self.Gemm_46 = nn.Linear(96, 48)
+        self.Gemm_46.weight.data = self.data['Initializer_12']
+        self.Gemm_46.bias.data = self.data['Initializer_6']
 
-        self.Gemm_52 = nn.Linear(48, 48)
-        self.Gemm_52.weight.data = self.data['Initializer_58']
-        self.Gemm_52.bias.data = self.data['Initializer_59']
+        self.Gemm_48 = nn.Linear(48, 48)
+        self.Gemm_48.weight.data = self.data['Initializer_55']
+        self.Gemm_48.bias.data = self.data['Initializer_56']
 
-        self.Gemm_55 = nn.Linear(48, 48)
-        self.Gemm_55.weight.data = self.data['Initializer_56']
-        self.Gemm_55.bias.data = self.data['Initializer_57']
+        self.Gemm_51 = nn.Linear(48, 48)
+        self.Gemm_51.weight.data = self.data['Initializer_53']
+        self.Gemm_51.bias.data = self.data['Initializer_54']
 
-        self.Gemm_58 = nn.Linear(48, 48)
-        self.Gemm_58.weight.data = self.data['Initializer_54']
-        self.Gemm_58.bias.data = self.data['Initializer_55']
+        self.Gemm_54 = nn.Linear(48, 48)
+        self.Gemm_54.weight.data = self.data['Initializer_51']
+        self.Gemm_54.bias.data = self.data['Initializer_52']
 
-        self.Flatten_63 = nn.Flatten(start_dim=3)
-        self.Softmax_64 = nn.Softmax(dim=-1)
-        self.Gemm_69 = nn.Linear(48, 48)
-        self.Gemm_69.weight.data = self.data['Initializer_13']
-        self.Gemm_69.bias.data = self.data['Initializer_7']
+        self.Softmax_59 = nn.Softmax(dim=-1)
+        self.Gemm_63 = nn.Linear(48, 48)
+        self.Gemm_63.weight.data = self.data['Initializer_13']
+        self.Gemm_63.bias.data = self.data['Initializer_7']
 
-        self.Gemm_71 = nn.Linear(48, 96)
-        self.Gemm_71.weight.data = self.data['Initializer_60']
-        self.Gemm_71.bias.data = self.data['Initializer_61']
+        self.Gemm_65 = nn.Linear(48, 96)
+        self.Gemm_65.weight.data = self.data['Initializer_57']
+        self.Gemm_65.bias.data = self.data['Initializer_58']
 
-        self.Relu_72 = nn.ReLU()
-        self.Gemm_73 = nn.Linear(96, 48)
-        self.Gemm_73.weight.data = self.data['Initializer_14']
-        self.Gemm_73.bias.data = self.data['Initializer_8']
+        self.Relu_66 = nn.ReLU()
+        self.Gemm_67 = nn.Linear(96, 48)
+        self.Gemm_67.weight.data = self.data['Initializer_14']
+        self.Gemm_67.bias.data = self.data['Initializer_8']
 
-        self.Gemm_76 = nn.Linear(48, 10)
-        self.Gemm_76.weight.data = self.data['Initializer_36']
-        self.Gemm_76.bias.data = self.data['Initializer_37']
+        self.Gemm_70 = nn.Linear(48, 10)
+        self.Gemm_70.weight.data = self.data['Initializer_33']
+        self.Gemm_70.bias.data = self.data['Initializer_34']
 
     def forward(self, input_0: Tensor) -> Tensor:
         Conv_1_0 = self.Conv_1(input_0)
@@ -211,68 +208,62 @@ class Ibp338V22Simplified(Module):
         Transpose_14_0 = Reshape_13_0.permute((0, 2, 1, 3))
         MatMul_15_0 = Transpose_14_0 @ Transpose_11_0
         Mul_16_0 = MatMul_15_0 * self.data['Initializer_15']
-        Flatten_17_0 = self.Flatten_17(Mul_16_0)
-        Softmax_18_0 = self.Softmax_18(Flatten_17_0)
-        Reshape_19_0 = Softmax_18_0.reshape((1, 3, 17, 17))
-        MatMul_20_0 = Reshape_19_0 @ Transpose_8_0
-        Transpose_21_0 = MatMul_20_0.permute((0, 2, 1, 3))
-        Reshape_22_0 = Transpose_21_0.reshape((1, 17, 48))
-        Gemm_23_0 = self.Gemm_23(Reshape_22_0)
-        Add_24_0 = Gemm_23_0 + Add_5_0
-        Gemm_25_0 = self.Gemm_25(Add_24_0)
-        Relu_26_0 = self.Relu_26(Gemm_25_0)
-        Gemm_27_0 = self.Gemm_27(Relu_26_0)
-        Add_28_0 = Gemm_27_0 + Add_24_0
-        Gemm_29_0 = self.Gemm_29(Add_28_0)
-        Reshape_30_0 = Gemm_29_0.reshape((1, 17, 3, 16))
-        Transpose_31_0 = Reshape_30_0.permute((0, 2, 1, 3))
-        Gemm_32_0 = self.Gemm_32(Add_28_0)
-        Reshape_33_0 = Gemm_32_0.reshape((1, 17, 3, 16))
-        Transpose_34_0 = Reshape_33_0.permute((0, 2, 3, 1))
-        Gemm_35_0 = self.Gemm_35(Add_28_0)
-        Reshape_36_0 = Gemm_35_0.reshape((1, 17, 3, 16))
-        Transpose_37_0 = Reshape_36_0.permute((0, 2, 1, 3))
-        MatMul_38_0 = Transpose_37_0 @ Transpose_34_0
-        Mul_39_0 = MatMul_38_0 * self.data['Initializer_16']
-        Flatten_40_0 = self.Flatten_40(Mul_39_0)
-        Softmax_41_0 = self.Softmax_41(Flatten_40_0)
-        Reshape_42_0 = Softmax_41_0.reshape((1, 3, 17, 17))
-        MatMul_43_0 = Reshape_42_0 @ Transpose_31_0
-        Transpose_44_0 = MatMul_43_0.permute((0, 2, 1, 3))
-        Reshape_45_0 = Transpose_44_0.reshape((1, 17, 48))
-        Gemm_46_0 = self.Gemm_46(Reshape_45_0)
-        Add_47_0 = Gemm_46_0 + Add_28_0
+        Softmax_17_0 = self.Softmax_17(Mul_16_0)
+        MatMul_18_0 = Softmax_17_0 @ Transpose_8_0
+        Transpose_19_0 = MatMul_18_0.permute((0, 2, 1, 3))
+        Reshape_20_0 = Transpose_19_0.reshape((1, 17, 48))
+        Gemm_21_0 = self.Gemm_21(Reshape_20_0)
+        Add_22_0 = Gemm_21_0 + Add_5_0
+        Gemm_23_0 = self.Gemm_23(Add_22_0)
+        Relu_24_0 = self.Relu_24(Gemm_23_0)
+        Gemm_25_0 = self.Gemm_25(Relu_24_0)
+        Add_26_0 = Gemm_25_0 + Add_22_0
+        Gemm_27_0 = self.Gemm_27(Add_26_0)
+        Reshape_28_0 = Gemm_27_0.reshape((1, 17, 3, 16))
+        Transpose_29_0 = Reshape_28_0.permute((0, 2, 1, 3))
+        Gemm_30_0 = self.Gemm_30(Add_26_0)
+        Reshape_31_0 = Gemm_30_0.reshape((1, 17, 3, 16))
+        Transpose_32_0 = Reshape_31_0.permute((0, 2, 3, 1))
+        Gemm_33_0 = self.Gemm_33(Add_26_0)
+        Reshape_34_0 = Gemm_33_0.reshape((1, 17, 3, 16))
+        Transpose_35_0 = Reshape_34_0.permute((0, 2, 1, 3))
+        MatMul_36_0 = Transpose_35_0 @ Transpose_32_0
+        Mul_37_0 = MatMul_36_0 * self.data['Initializer_16']
+        Softmax_38_0 = self.Softmax_38(Mul_37_0)
+        MatMul_39_0 = Softmax_38_0 @ Transpose_29_0
+        Transpose_40_0 = MatMul_39_0.permute((0, 2, 1, 3))
+        Reshape_41_0 = Transpose_40_0.reshape((1, 17, 48))
+        Gemm_42_0 = self.Gemm_42(Reshape_41_0)
+        Add_43_0 = Gemm_42_0 + Add_26_0
+        Gemm_44_0 = self.Gemm_44(Add_43_0)
+        Relu_45_0 = self.Relu_45(Gemm_44_0)
+        Gemm_46_0 = self.Gemm_46(Relu_45_0)
+        Add_47_0 = Gemm_46_0 + Add_43_0
         Gemm_48_0 = self.Gemm_48(Add_47_0)
-        Relu_49_0 = self.Relu_49(Gemm_48_0)
-        Gemm_50_0 = self.Gemm_50(Relu_49_0)
-        Add_51_0 = Gemm_50_0 + Add_47_0
-        Gemm_52_0 = self.Gemm_52(Add_51_0)
-        Reshape_53_0 = Gemm_52_0.reshape((1, 17, 3, 16))
-        Transpose_54_0 = Reshape_53_0.permute((0, 2, 1, 3))
-        Gemm_55_0 = self.Gemm_55(Add_51_0)
-        Reshape_56_0 = Gemm_55_0.reshape((1, 17, 3, 16))
-        Transpose_57_0 = Reshape_56_0.permute((0, 2, 3, 1))
-        Gemm_58_0 = self.Gemm_58(Add_51_0)
-        Reshape_59_0 = Gemm_58_0.reshape((1, 17, 3, 16))
-        Transpose_60_0 = Reshape_59_0.permute((0, 2, 1, 3))
-        MatMul_61_0 = Transpose_60_0 @ Transpose_57_0
-        Mul_62_0 = MatMul_61_0 * self.data['Initializer_17']
-        Flatten_63_0 = self.Flatten_63(Mul_62_0)
-        Softmax_64_0 = self.Softmax_64(Flatten_63_0)
-        Reshape_65_0 = Softmax_64_0.reshape((1, 3, 17, 17))
-        MatMul_66_0 = Reshape_65_0 @ Transpose_54_0
-        Transpose_67_0 = MatMul_66_0.permute((0, 2, 1, 3))
-        Reshape_68_0 = Transpose_67_0.reshape((1, 17, 48))
-        Gemm_69_0 = self.Gemm_69(Reshape_68_0)
-        Add_70_0 = Gemm_69_0 + Add_51_0
-        Gemm_71_0 = self.Gemm_71(Add_70_0)
-        Relu_72_0 = self.Relu_72(Gemm_71_0)
-        Gemm_73_0 = self.Gemm_73(Relu_72_0)
-        Add_74_0 = Gemm_73_0 + Add_70_0
-        ReduceMean_75_0 = torch.mean(Add_74_0, dim=1)
-        output_77 = self.Gemm_76(ReduceMean_75_0)
+        Reshape_49_0 = Gemm_48_0.reshape((1, 17, 3, 16))
+        Transpose_50_0 = Reshape_49_0.permute((0, 2, 1, 3))
+        Gemm_51_0 = self.Gemm_51(Add_47_0)
+        Reshape_52_0 = Gemm_51_0.reshape((1, 17, 3, 16))
+        Transpose_53_0 = Reshape_52_0.permute((0, 2, 3, 1))
+        Gemm_54_0 = self.Gemm_54(Add_47_0)
+        Reshape_55_0 = Gemm_54_0.reshape((1, 17, 3, 16))
+        Transpose_56_0 = Reshape_55_0.permute((0, 2, 1, 3))
+        MatMul_57_0 = Transpose_56_0 @ Transpose_53_0
+        Mul_58_0 = MatMul_57_0 * self.data['Initializer_17']
+        Softmax_59_0 = self.Softmax_59(Mul_58_0)
+        MatMul_60_0 = Softmax_59_0 @ Transpose_50_0
+        Transpose_61_0 = MatMul_60_0.permute((0, 2, 1, 3))
+        Reshape_62_0 = Transpose_61_0.reshape((1, 17, 48))
+        Gemm_63_0 = self.Gemm_63(Reshape_62_0)
+        Add_64_0 = Gemm_63_0 + Add_47_0
+        Gemm_65_0 = self.Gemm_65(Add_64_0)
+        Relu_66_0 = self.Relu_66(Gemm_65_0)
+        Gemm_67_0 = self.Gemm_67(Relu_66_0)
+        Add_68_0 = Gemm_67_0 + Add_64_0
+        ReduceMean_69_0 = torch.mean(Add_68_0, dim=1)
+        output_71 = self.Gemm_70(ReduceMean_69_0)
 
-        return output_77
+        return output_71
 
 ```
 
