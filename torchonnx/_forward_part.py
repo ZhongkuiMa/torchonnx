@@ -489,13 +489,13 @@ def _gen_code_of_slice(
 
     code = _INDENT * 2 + f"_start = {starts}\n"
     code += _INDENT * 2 + f"_end = {ends}\n"
-    if steps is not None:
+    if steps is not None and steps != [1]:
         code += _INDENT * 2 + f"_step = {steps}\n"
     code += _INDENT * 2 + f"{output_names[0]} = {input_names[0]}["
     k = 0
     for i in range(dim):
         if i in axes:
-            code += f"_start[{i}]:_end[{i}]"
+            code += f"_start[{k}]:_end[{k}]"
             if steps is not None and steps[k] != 1:
                 code += f":_step[{k}]"
             k += 1
