@@ -2,8 +2,7 @@ __docformat__ = "restructuredtext"
 __all__ = ["gen_forward_code"]
 
 from onnx import ModelProto, NodeProto, TensorProto
-import onnx
-from ._onnx_attrs import *
+
 from ._torch_args import *
 from ._utils import *
 

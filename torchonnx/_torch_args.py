@@ -8,8 +8,8 @@ import onnx
 import torch
 from onnx import NodeProto, TensorProto
 
-from ._utils import *
 from ._onnx_attrs import get_onnx_attrs
+from ._utils import *
 
 
 def _simplify_pool_args(arg: int | tuple[int, ...]) -> int | tuple[int, ...]:
