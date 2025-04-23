@@ -11,9 +11,9 @@ __all__ = [
 ]
 
 import onnx
+import torch
 from onnx import ModelProto, NodeProto, TensorProto
 from torch import Tensor
-import torch
 
 EXTRACT_ATTR_MAP = {
     0: lambda x: None,  # UNDEFINED
