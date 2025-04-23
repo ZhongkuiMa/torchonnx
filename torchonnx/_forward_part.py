@@ -221,42 +221,6 @@ def _gen_code_of_cos(
     return code
 
 
-def _gen_code_of_div(
-    node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
-) -> str:
-    return _gen_code_of_binary_op(node, initializers, "/")
-
-
-def _gen_code_of_min(
-    node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
-) -> str:
-    # https://pytorch.org/docs/stable/generated/torch.min.html
-    input_names = parse_input_names(node, initializers)
-    output_names = parse_output_names(node, initializers)
-
-    code = _INDENT * 2 + f"{output_names[0]} = {input_names[0]}.min()\n"
-
-    return code
-
-
-def _gen_code_of_matmul(
-    node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
-) -> str:
-    return _gen_code_of_binary_op(node, initializers, "@")
-
-
-def _gen_code_of_max(
-    node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
-) -> str:
-    # https://pytorch.org/docs/stable/generated/torch.max.html
-    input_names = parse_input_names(node, initializers)
-    output_names = parse_output_names(node, initializers)
-
-    code = _INDENT * 2 + f"{output_names[0]} = {input_names[0]}.max()\n"
-
-    return code
-
-
 def _gen_code_of_gather(
     node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
 ) -> str:
@@ -278,6 +242,50 @@ def _gen_code_of_gather(
         f"{input_names[0]}, {dim}, {index}"
         f")\n"
     )
+    return code
+
+
+def _gen_code_of_div(
+    node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
+) -> str:
+    return _gen_code_of_binary_op(node, initializers, "/")
+
+
+def _gen_code_of_matmul(
+    node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
+) -> str:
+    input_names = parse_input_names(node, initializers)
+    output_names = parse_output_names(node, initializers)
+
+    code = (
+        _INDENT * 2
+        + f"{output_names[0]} = torch.matmul({input_names[0]}, {input_names[1]})\n"
+    )
+
+    return code
+
+
+def _gen_code_of_max(
+    node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
+) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.max.html
+    input_names = parse_input_names(node, initializers)
+    output_names = parse_output_names(node, initializers)
+
+    code = _INDENT * 2 + f"{output_names[0]} = {input_names[0]}.max()\n"
+
+    return code
+
+
+def _gen_code_of_min(
+    node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
+) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.min.html
+    input_names = parse_input_names(node, initializers)
+    output_names = parse_output_names(node, initializers)
+
+    code = _INDENT * 2 + f"{output_names[0]} = {input_names[0]}.min()\n"
+
     return code
 
 
@@ -465,11 +473,14 @@ def _gen_code_of_slice(
     output_names = parse_output_names(node, initializers)
     torch_args = get_torch_args(node, nodes, initializers)
 
+    starts_is_initer = node.input[1] in initializers
+    ends_is_initer = node.input[2] in initializers
+    steps_is_initer = len(input_names) > 4 and node.input[4] in initializers
     starts = input_names[1]
-    if node.input[1] in initializers:
+    if starts_is_initer:
         starts = initializer_to_list(initializers[node.input[1]])
     ends = input_names[2]
-    if node.input[2] in initializers:
+    if ends_is_initer:
         ends = initializer_to_list(initializers[node.input[2]])
 
     axes = None
@@ -487,17 +498,32 @@ def _gen_code_of_slice(
 
     dim = max(axes) + 1
 
-    code = _INDENT * 2 + f"_start = {starts}\n"
-    code += _INDENT * 2 + f"_end = {ends}\n"
-    if steps is not None and steps != [1]:
+    code = ""
+    if not starts_is_initer:
+        code += _INDENT * 2 + f"_start = {starts}\n"
+    if not ends_is_initer:
+        code += _INDENT * 2 + f"_end = {ends}\n"
+    if steps is not None and steps_is_initer and steps != [1]:
         code += _INDENT * 2 + f"_step = {steps}\n"
     code += _INDENT * 2 + f"{output_names[0]} = {input_names[0]}["
     k = 0
     for i in range(dim):
         if i in axes:
-            code += f"_start[{k}]:_end[{k}]"
-            if steps is not None and steps[k] != 1:
-                code += f":_step[{k}]"
+            if not starts_is_initer:
+                code += f"_start[{k}]"
+            else:
+                code += f"{starts[k]}"
+            code += ":"
+            if not ends_is_initer:
+                code += f"_end[{k}]"
+            else:
+                code += f"{ends[k]}"
+            if steps is not None:
+                if not steps_is_initer:
+                    code += f":_step[{k}]"
+                else:
+                    if steps[k] != 1:
+                        code += f":{steps[k]}"
             k += 1
         else:
             code += ":"
