@@ -401,6 +401,7 @@ def _torch_maxpool(
         "padding": 0,
         "dilation": 1,
         "ceil_mode": False,
+        "return_indices": False,
     }
 
     for k, v in attrs.items():
@@ -414,6 +415,10 @@ def _torch_maxpool(
             torch_args["dilation"] = _simplify_pool_args(v)
         elif k == "ceil_mode":
             torch_args["ceil_mode"] = bool(v)  # 0 or 1 => False or True
+
+    if len(node.output) == 2:
+        # The second output is the indices of the max values
+        torch_args["return_indices"] = True
 
     return torch_args
 
