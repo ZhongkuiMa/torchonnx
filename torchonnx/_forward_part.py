@@ -643,6 +643,7 @@ _PARSE_NODE_MAP = {
     "ConstantOfShape": _gen_code_of_constantofshape,
     "Cos": _gen_code_of_cos,
     "Div": _gen_code_of_div,
+    "Dropout": _gen_code_of_unary_func,
     "Elu": _gen_code_of_unary_func,
     "Equal": _gen_code_of_equal,
     "Expand": _gen_code_of_expand,
