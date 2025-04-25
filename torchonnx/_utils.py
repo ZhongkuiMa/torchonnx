@@ -37,7 +37,7 @@ def parse_input_names(
     input_names = []
     for name in node.input:
         if name in initializer:
-            name = f"self.data['{name}']"
+            name = f'self.data["{name}"]'
         input_names.append(name)
     return input_names
 
@@ -48,7 +48,7 @@ def parse_output_names(
     output_names = []
     for name in node.output:
         if name in initializer:
-            name = f"self.data['{name}']"
+            name = f'self.data["{name}"]'
         output_names.append(name)
     return output_names
 

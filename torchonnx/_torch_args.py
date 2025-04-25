@@ -23,11 +23,6 @@ def _simplify_pool_args(arg: int | tuple[int, ...]) -> int | tuple[int, ...]:
     return arg
 
 
-def _torch_nothing(*args, **kwargs) -> dict[str, Any]:
-    """This function does nothing and is used as a placeholder."""
-    return {}
-
-
 def _torch_argmax(
     node: NodeProto,
     nodes: dict[str, NodeProto],
@@ -269,6 +264,21 @@ def _torch_constantofshape(
         if k == "value":
             torch_args["fill_value"] = v[0]
             torch_args["dtype"] = v.dtype
+
+    return torch_args
+
+
+def _torch_dropout(
+    node: NodeProto,
+    nodes: dict[str, NodeProto],
+    initializers: dict[str, TensorProto],
+) -> dict[str, Any]:
+    # https://pytorch.org/docs/stable/generated/torch.nn.Dropout.html
+    torch_args = {"p": 0.5}
+
+    ratio = float(onnx.numpy_helper.to_array(initializers[node.input[1]]))
+
+    torch_args["p"] = ratio
 
     return torch_args
 
@@ -723,7 +733,6 @@ def _torch_upsample(
 
 
 _TORCH_ATTRS_MAP = {
-    "Add": _torch_nothing,
     "ArgMax": _torch_argmax,
     "AveragePool": _torch_avgpool,
     "BatchNormalization": _torch_batchnorm,
@@ -733,34 +742,25 @@ _TORCH_ATTRS_MAP = {
     "ConvTranspose": _torch_convtranspose,
     "Constant": _torch_constant,
     "ConstantOfShape": _torch_constantofshape,
-    "Div": _torch_nothing,
+    "Dropout": _torch_dropout,
     "Elu": _torch_elu,
     "Flatten": _torch_flatten,
     "Gather": _torch_gather,
     "Gelu": _torch_gelu,
     "Gemm": _torch_gemm,
     "LeakyRelu": _torch_leakyrelu,
-    "MatMul": _torch_nothing,
     "MaxPool": _torch_maxpool,
-    "Mul": _torch_nothing,
     "Pad": _torch_pad,
     "ReduceMean": _torch_reducemean,
     "ReduceSum": _torch_reducesum,
-    "Relu": _torch_nothing,
-    "Reshape": _torch_nothing,
     "Resize": _torch_resize,
-    "Shape": _torch_nothing,
-    "Sigmoid": _torch_nothing,
     "Scatter": _torch_scatter,
     "ScatterElements": _torch_scatterelement,
     "ScatterND": _torch_scatternd,
     "Slice": _torch_slice,
     "Softmax": _torch_softmax,
     "Split": _torch_split,
-    "Sub": _torch_nothing,
-    "Tanh": _torch_nothing,
     "Transpose": _torch_transpose,
-    "Unsqueeze": _torch_nothing,
     "Upsample": _torch_upsample,
 }
 
@@ -772,7 +772,7 @@ def get_torch_args(
 ) -> dict[str, Any]:
     _torch = _TORCH_ATTRS_MAP.get(node.op_type)
     if _torch is None:
-        raise ValueError(f"Op type {node.op_type} is not supported.")
+        raise NotImplementedError(f"Unsupported node type: {node.op_type}")
     torch_args = _torch(node, nodes, initializers)
 
     return torch_args

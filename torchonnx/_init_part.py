@@ -1,6 +1,8 @@
 __docformat__ = "restructuredtext"
 __all__ = ["gen_init_code"]
 
+import warnings
+
 from onnx import ModelProto, NodeProto, TensorProto
 
 from ._torch_args import get_torch_args
@@ -170,6 +172,22 @@ def _gen_code_of_constant(*args, **kwargs) -> str:
         "You should use slimonnx to slim the Constant to reduce calculation. "
         "slimonnx will convert Constant to an initializer."
     )
+
+
+def _gen_code_of_dropout(
+    node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
+) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.nn.Dropout.html
+    torch_args = get_torch_args(node, nodes, initializers)
+
+    code = _INDENT * 2 + f"self.{node.name} = nn.Dropout("
+    if torch_args["p"] != 0.5:
+        code += f"p={torch_args['p']}"
+    code += ")\n"
+
+    warnings.warn("Dropout needs a fixed seed to reproduce the result.")
+
+    return code
 
 
 def _gen_code_of_elu(
@@ -342,6 +360,7 @@ _GEN_CODE_MAP = {
     "ConstantOfShape": _gen_nothing,
     "Cos": _gen_nothing,
     "Div": _gen_nothing,
+    "Dropout": _gen_code_of_dropout,
     "Elu": _gen_code_of_elu,
     "Equal": _gen_nothing,
     "Expand": _gen_nothing,
@@ -392,7 +411,7 @@ def _gen_init_header_code() -> str:
 
 
 def _gen_load_pth_data_code(pth_path: str, initializers: dict[str, TensorProto]) -> str:
-    code = _INDENT * 2 + f"self.data = torch.load('{pth_path}')\n"
+    code = _INDENT * 2 + f'self.data = torch.load("{pth_path}")\n'
     code += "\n"
 
     return code
