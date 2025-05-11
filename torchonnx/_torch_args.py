@@ -52,6 +52,7 @@ def _torch_avgpool(
         "kernel_size": None,
         "stride": None,
         "padding": 0,
+        "dilation": 1,
         "ceil_mode": False,
         "count_include_pad": True,
     }
@@ -63,6 +64,15 @@ def _torch_avgpool(
             torch_attrs["stride"] = _simplify_pool_args(v)
         elif k == "pads":
             torch_attrs["padding"] = _simplify_pool_args(v[:2])
+        elif k == "dilations":
+            v = _simplify_pool_args(v)
+            if v != 1:
+                raise NotImplementedError(
+                    f"PyTorch only support dilation=1 for AvgPool. There is actually "
+                    f"no dilation in AvgPool of PyTorch but we extract it for "
+                    f"consistency with similar operations. "
+                )
+            torch_attrs["dilation"] = v
         elif k == "ceil_mode":
             torch_attrs["ceil_mode"] = bool(v)
         elif k == "count_include_pad":
