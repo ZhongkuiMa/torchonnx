@@ -3,32 +3,34 @@ __all__ = ["gen_forward_code"]
 
 from onnx import ModelProto, NodeProto, TensorProto
 
+from slimonnx import reformat_io_shape
 from ._torch_args import *
 from ._utils import *
 
 _INDENT = "    "
 
 
-def _parse_onnx_inputs(onnx_model: ModelProto) -> tuple[list[str], list[tuple]]:
+def _parse_onnx_inputs(onnx_model: ModelProto) -> tuple[list[str], list[list[int]]]:
     input_names = []
     input_shapes = []
-    for input_node in onnx_model.graph.input:
-        input_names.append(input_node.name)
-        input_shape = []
-        for dim in input_node.type.tensor_type.shape.dim:
-            input_shape.append(dim.dim_value)
-        input_shape.pop(0)  # Remove the batch dimension
-        input_shapes.append(tuple(input_shape))
+    for node in onnx_model.graph.input:
+        input_names.append(node.name)
+        input_shapes.append(reformat_io_shape(node))
 
     return input_names, input_shapes
 
 
-def _gen_forward_method(inputs_name: list) -> str:
+def _gen_forward_method(inputs_name: list[str], input_shapes: list[list[int]]) -> str:
     s = _INDENT + "def forward(self, "
     for name in inputs_name:
         s += f"{name}: Tensor, "
     s = s[:-2]  # Remove the last comma and space
     s += ") -> Tensor:\n"
+    for name, shape in zip(inputs_name, input_shapes):
+        s += _INDENT * 2 + f"{name} = {name}.reshape(-1, "
+        for dim in shape[1:]:
+            s += f"{dim}, "
+        s = s[:-2] + ")\n"
 
     return s
 
@@ -688,7 +690,7 @@ def gen_forward_code(model: ModelProto) -> str:
     initializers = get_initializers(model)
     nodes = {node.name: node for node in model.graph.node}
 
-    content = _gen_forward_method(input_names)
+    content = _gen_forward_method(input_names, input_shapes)
     content += "\n"
 
     for node in model.graph.node:
