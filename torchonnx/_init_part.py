@@ -249,7 +249,7 @@ def _gen_code_of_gemm(
     # Set parameters
     input_names = parse_input_names(node, initializers.keys())  # noqa
     weight = input_names[1]
-    code += _INDENT * 2 + f"self.{node.name}.weight.data = {weight}\n"
+    code += _INDENT * 2 + f"self.{node.name}.weight.data = {weight}.t()\n"
     if len(node.input) == 3:
         bias = input_names[2]
         code += _INDENT * 2 + f"self.{node.name}.bias.data = {bias}\n"
