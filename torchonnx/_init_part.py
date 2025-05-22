@@ -407,7 +407,7 @@ def _gen_init_header_code() -> str:
 
 
 def _gen_load_pth_data_code(pth_path: str, initializers: dict[str, TensorProto]) -> str:
-    code = _INDENT * 2 + f'self.data = torch.load("{pth_path}")\n'
+    code = _INDENT * 2 + f'self.data = torch.load("{pth_path}", weights_only=True)\n'
     code += "\n"
 
     return code
