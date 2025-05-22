@@ -1,5 +1,5 @@
 __docformat__ = "restructuredtext"
-__all__ = ["TorchONNX"]
+__all__ = ["TorchONNX", "gen_module_name"]
 
 import time
 
@@ -12,13 +12,13 @@ from ._header_part import gen_header_code
 from ._init_part import gen_init_code
 
 
-def _gen_module_name(file_path: str) -> str:
-    file_name = file_path.split("/")[-1].split(".")[0]
+def gen_module_name(file_path: str) -> str:
+    module_name = file_path.split("/")[-1].split(".")[0]
     # Remove all dots and dashes
-    file_name = file_name.replace(".", "").replace("-", "")
+    module_name = module_name.replace(".", "").replace("-", "")
     # Change to title case
-    file_name = file_name.title().replace("_", "")
-    return file_name
+    module_name = module_name.title().replace("_", "")
+    return module_name
 
 
 def _convert_initializers(model: onnx.ModelProto) -> dict[str, Tensor]:
@@ -44,7 +44,7 @@ class TorchONNX:
         target_pth_path: str = None,
     ):
         if module_class_name is None:
-            module_class_name = _gen_module_name(onnx_path)
+            module_class_name = gen_module_name(onnx_path)
         if target_py_path is None:
             target_py_path = onnx_path.replace(".onnx", ".py")
         if target_pth_path is None:
