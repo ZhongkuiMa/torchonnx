@@ -402,13 +402,30 @@ _GEN_CODE_MAP = {
 
 def _gen_init_header_code() -> str:
     return (
-        _INDENT + "def __init__(self):\n" + _INDENT * 2 + "super().__init__()\n" + "\n"
+        _INDENT
+        + "def __init__(\n"
+        + _INDENT * 2
+        + "self,\n"
+        + _INDENT * 2
+        + "dtype: torch.dtype = torch.float32,\n"
+        + _INDENT * 2
+        + "device:torch.device = torch.device('cpu'),\n"
+        + _INDENT
+        + "):\n"
+        + _INDENT * 2
+        + "super().__init__()\n\n"
     )
 
 
 def _gen_load_pth_data_code(pth_path: str, initializers: dict[str, TensorProto]) -> str:
-    code = _INDENT * 2 + f'self.data = torch.load("{pth_path}", weights_only=True)\n'
-    code += "\n"
+    code = (
+        _INDENT * 2
+        + f'self.data = torch.load("{pth_path}", weights_only=True)\n'
+        + _INDENT * 2
+        + "for name in self.data:\n"
+        + _INDENT * 3
+        + f"self.data[name] = self.data[name].to(dtype=dtype, device=device)\n\n"
+    )
 
     return code
 
