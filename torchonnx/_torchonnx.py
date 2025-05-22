@@ -18,6 +18,12 @@ def gen_module_name(file_path: str) -> str:
     module_name = module_name.replace(".", "").replace("-", "")
     # Change to title case
     module_name = module_name.title().replace("_", "")
+    # Remove the number at the beginning
+    for i in range(len(module_name)):
+        if module_name[i].isalpha():
+            module_name = module_name[i:]
+            break
+
     return module_name
 
 
