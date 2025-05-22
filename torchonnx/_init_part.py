@@ -402,11 +402,7 @@ _GEN_CODE_MAP = {
 
 def _gen_init_header_code() -> str:
     return (
-        _INDENT
-        + "def __init__(self):\n"
-        + _INDENT * 2
-        + "super(Module, self).__init__()\n"
-        + "\n"
+        _INDENT + "def __init__(self):\n" + _INDENT * 2 + "super().__init__()\n" + "\n"
     )
 
 

@@ -108,7 +108,7 @@ from torch.nn import Module
 class Ibp338V22Simplified(Module):
 
     def __init__(self):
-        super(Module, self).__init__()
+        super().__init__()
 
         self.data = torch.load("../nets/ibp_3_3_8_v22_simplified.pth")
 
