@@ -365,6 +365,7 @@ _GEN_CODE_MAP = {
     "Equal": _gen_nothing,
     "Expand": _gen_nothing,
     "Flatten": _gen_code_of_flatten,
+    "Floor": _gen_nothing,
     "Gather": _gen_nothing,
     "Gelu": _gen_code_of_gelu,
     "Gemm": _gen_code_of_gemm,
@@ -376,6 +377,7 @@ _GEN_CODE_MAP = {
     "Mul": _gen_nothing,
     "Neg": _gen_nothing,
     "Pad": _gen_nothing,
+    "Pow": _gen_nothing,
     "ReduceMean": _gen_nothing,
     "ReduceSum": _gen_nothing,
     "Relu": _gen_code_of_relu,
@@ -418,13 +420,20 @@ def _gen_init_header_code() -> str:
 
 
 def _gen_load_pth_data_code(pth_path: str, initializers: dict[str, TensorProto]) -> str:
+    pth_path = pth_path.replace("\\", "\\\\")
     code = (
         _INDENT * 2
-        + f'self.data = torch.load("{pth_path}", weights_only=True)\n'
+        + f"self.data = torch.load('{pth_path}', weights_only=True)\n"
         + _INDENT * 2
         + "for name in self.data:\n"
         + _INDENT * 3
+        + f"if torch.is_floating_point(self.data[name]):\n"
+        + _INDENT * 4
         + f"self.data[name] = self.data[name].to(dtype=dtype, device=device)\n\n"
+        + _INDENT * 3
+        + "else:\n"
+        + _INDENT * 4
+        + f"self.data[name] = self.data[name].to(device=device)\n"
     )
 
     return code
