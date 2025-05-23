@@ -108,6 +108,8 @@ def _gen_code_of_conv(
         code += f"dilation={torch_args['dilation']}, "
     if torch_args["groups"] != 1:
         code += f"groups={torch_args['groups']}, "
+    if not torch_args["bias"]:
+        code += f"bias={torch_args['bias']}, "
     code = code[:-2] + ")\n"
 
     # Set parameters
@@ -115,11 +117,11 @@ def _gen_code_of_conv(
     weight = input_names[1]
     code += _INDENT * 2 + f"self.{node.name}.weight.data = {weight}\n"
     if len(node.input) == 3:
-        assert torch_args["bias"] is not None
+        assert torch_args["bias"]
         bias = input_names[2]
         code += _INDENT * 2 + f"self.{node.name}.bias.data = {bias}\n"
     else:
-        assert torch_args["bias"] is None
+        assert not torch_args["bias"]
     code += "\n"
 
     return code
