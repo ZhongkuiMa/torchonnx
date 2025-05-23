@@ -19,6 +19,8 @@ def gen_module_name(file_path: str) -> str:
     module_name = module_name.replace(".", "").replace("-", "")
     # Change to title case
     module_name = module_name.title().replace("_", "")
+    # Remove all non-alphabetic and non-numeric characters
+    module_name = "".join([c for c in module_name if c.isalpha() or c.isdigit()])
     # Remove the number at the beginning
     for i in range(len(module_name)):
         if module_name[i].isalpha():
@@ -68,6 +70,8 @@ class TorchONNX:
             t = time.perf_counter()
 
         initializers = _convert_initializers(model)
+        # If the directory of the target_pth_path does not exist, create it
+        os.makedirs(os.path.dirname(target_pth_path), exist_ok=True)
         torch.save(initializers, target_pth_path)
 
         if self.verbose:
