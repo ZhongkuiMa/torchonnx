@@ -193,7 +193,6 @@ def _torch_conv(
 
     inputs = parse_input_names(node, initializers)
     weight_shape = tuple(initializers[node.input[1]].dims)
-    torch_args["in_channels"] = weight_shape[1]
     torch_args["out_channels"] = weight_shape[0]
     torch_args["bias"] = bool(len(inputs) == 3)
 
@@ -208,6 +207,8 @@ def _torch_conv(
             torch_args["dilation"] = _simplify_pool_args(v)
         elif k == "group":
             torch_args["groups"] = _simplify_pool_args(v)
+
+    torch_args["in_channels"] = weight_shape[1] * torch_args["groups"]
 
     return torch_args
 
