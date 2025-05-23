@@ -433,7 +433,7 @@ def _gen_load_pth_data_code(pth_path: str, initializers: dict[str, TensorProto])
         + _INDENT * 3
         + "else:\n"
         + _INDENT * 4
-        + f"self.data[name] = self.data[name].to(device=device)\n"
+        + f"self.data[name] = self.data[name].to(device=device)\n\n"
     )
 
     return code

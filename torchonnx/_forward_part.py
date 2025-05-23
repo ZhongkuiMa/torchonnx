@@ -576,7 +576,11 @@ def _gen_code_of_split(
     split = torch_args["split_size_or_sections"]
     dim = torch_args["dim"]
 
-    code = _INDENT * 2 + f"{output_names[0]} = {input_names[0]}.split({split}"
+    code = _INDENT * 2
+    for output_name in output_names:
+        code += f"{output_name}, "
+    code = code[:-2]
+    code += f" = {input_names[0]}.split({split}"
     if dim != 0:
         code += f", dim={dim}"
     code += ")\n"
