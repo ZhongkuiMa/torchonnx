@@ -1,6 +1,7 @@
 __docformat__ = "restructuredtext"
 __all__ = ["TorchONNX", "gen_module_name"]
 
+import os
 import time
 
 import onnx
@@ -13,7 +14,7 @@ from ._init_part import gen_init_code
 
 
 def gen_module_name(file_path: str) -> str:
-    module_name = file_path.split("/")[-1].split(".")[0]
+    module_name = file_path.split(f"{os.sep}")[-1].split(".")[0]
     # Remove all dots and dashes
     module_name = module_name.replace(".", "").replace("-", "")
     # Change to title case
@@ -23,7 +24,8 @@ def gen_module_name(file_path: str) -> str:
         if module_name[i].isalpha():
             module_name = module_name[i:]
             break
-
+    if module_name == "":
+        raise ValueError(f"Cannot generate module name from {file_path}.")
     return module_name
 
 

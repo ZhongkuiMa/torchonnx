@@ -87,6 +87,18 @@ def _gen_code_of_expand(
     return code
 
 
+def _gen_code_of_floor(
+    node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
+) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.floor.html
+    input_names = parse_input_names(node, initializers)
+    output_names = parse_output_names(node, initializers)
+
+    code = _INDENT * 2 + f"{output_names[0]} = torch.floor({input_names[0]})\n"
+
+    return code
+
+
 def _gen_code_of_binary_op(
     node: NodeProto, initializers: dict[str, TensorProto], op: str
 ) -> str:
@@ -233,16 +245,20 @@ def _gen_code_of_gather(
     dim = torch_args["dim"]
     index = input_names[1]
     if node.input[1] in initializers:
-        index = initializer_to_tensor(initializers[node.input[1]])
-        # if it is a single scalar
-        if index.dim() == 0:
-            index = "torch.tensor(" + str(index.item()) + ")"
+        # If it is a single scalar
+        index_data = initializer_to_tensor(initializers[node.input[1]])
+        if index_data.dim() == 0:
+            index = str(index_data.item())
 
-    code = (
-        _INDENT * 2 + f"{output_names[0]} = torch.gather("
-        f"{input_names[0]}, {dim}, {index}"
-        f")\n"
-    )
+    code = _INDENT * 2 + f"{output_names[0]} = {input_names[0]}["
+    d = 0
+    while True:
+        if d == dim:
+            code += f"{index}]\n"
+            break
+        code += " : , "
+        d += 1
+
     return code
 
 
@@ -326,6 +342,21 @@ def _gen_code_of_pad(
     if value != 0:
         code += f", value={value}"
     code += ")\n"
+
+    return code
+
+
+def _gen_code_of_pow(
+    node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
+) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.pow.html
+    input_names = parse_input_names(node, initializers)
+    output_names = parse_output_names(node, initializers)
+
+    code = (
+        _INDENT * 2
+        + f"{output_names[0]} = torch.pow({input_names[0]}, {input_names[1]})\n"
+    )
 
     return code
 
@@ -650,6 +681,7 @@ _PARSE_NODE_MAP = {
     "Equal": _gen_code_of_equal,
     "Expand": _gen_code_of_expand,
     "Flatten": _gen_code_of_unary_func,
+    "Floor": _gen_code_of_floor,
     "Gather": _gen_code_of_gather,
     "Gelu": _gen_code_of_unary_func,
     "Gemm": _gen_code_of_unary_func,
@@ -661,6 +693,7 @@ _PARSE_NODE_MAP = {
     "Mul": _gen_code_of_mul,
     "Neg": _gen_code_of_neg,
     "Pad": _gen_code_of_pad,
+    "Pow": _gen_code_of_pow,
     "ReduceMean": _gen_code_of_reducemean,
     "ReduceSum": _gen_code_of_reducesum,
     "Relu": _gen_code_of_unary_func,
