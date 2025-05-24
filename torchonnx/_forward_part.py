@@ -186,6 +186,26 @@ def _gen_code_of_concat(
     torch_args = get_torch_args(node, nodes, initializers)
     dim = torch_args["dim"]
 
+    # Check if all inputs are initializers or variables
+    all_initer = True
+    all_var = True
+    for i in range(len(input_names)):
+        if node.input[i] in initializers:
+            all_var = False
+        else:
+            all_initer = False
+    mixed = not all_initer and not all_var
+    if mixed:
+        # Add a batch dimension for all initializers to make them the same shape as
+        # variables.
+        new_input_names = []
+        for i in range(len(input_names)):
+            input_name = input_names[i]
+            if node.input[i] in initializers:
+                input_name += ".unsqueeze(0)"
+            new_input_names.append(input_name)
+        input_names = new_input_names
+
     code = _INDENT * 2 + f"{output_names[0]} = torch.cat([{', '.join(input_names)}], "
     if dim != 0:
         code += f"dim={dim}, "
