@@ -1,6 +1,7 @@
 __docformat__ = "restructuredtext"
 __all__ = ["gen_forward_code"]
 
+import onnx
 from onnx import ModelProto, NodeProto, TensorProto
 
 from slimonnx import reformat_io_shape
@@ -81,8 +82,36 @@ def _gen_code_of_expand(
     shape = input_names[1]
     if node.input[1] in initializers:
         shape = initializer_to_tuple(initializers[node.input[1]])
+        code = _INDENT * 2 + f"{output_names[0]} = {input_names[0]}.expand({shape})\n"
+        return code
 
-    code = _INDENT * 2 + f"{output_names[0]} = {input_names[0]}.expand({shape})\n"
+    # The following refers to the Expand operator in ONNX, which is different from
+    # the expand function in PyTorch.
+    # https://onnx.ai/onnx/operators/onnx__Expand.html
+    code = (
+        _INDENT * 2
+        + f"shape = {shape}.tolist()\n"
+        + _INDENT * 2
+        + f"try:\n"
+        + _INDENT * 3
+        + f"{output_names[0]} = {input_names[0]}.expand(shape)\n"
+        + _INDENT * 2
+        + "except RuntimeError:\n"
+        + _INDENT * 3
+        + f"# Apply right-alignment and generate a valid shape for PyTorch\n"
+        + _INDENT * 3
+        + f"shape1, shape2 = list({input_names[0]}.shape), shape\n"
+        + _INDENT * 3
+        + f"# Pad with 1s to the left side to get the same length\n"
+        + _INDENT * 3
+        + f"shape2 = [1] * (len(shape1) - len(shape2)) + shape2\n"
+        + _INDENT * 3
+        + f"shape1 = [1] * (len(shape2) - len(shape1)) + shape1\n"
+        + _INDENT * 3
+        + f"shape = [max(a, b) for a, b in zip(shape1, shape2)]\n"
+        + _INDENT * 3
+        + f"{output_names[0]} = {input_names[0]}.expand(shape)\n"
+    )
 
     return code
 
@@ -201,7 +230,14 @@ def _gen_code_of_concat(
         new_input_names = []
         for i in range(len(input_names)):
             input_name = input_names[i]
+            # All initializers do not have batch dimension.
             if node.input[i] in initializers:
+                initializer = initializers[node.input[i]]
+                # Check if the initializer is empty.
+                # Sometimes, the initializer is empty. Weired but true.
+                array = onnx.numpy_helper.to_array(initializer)
+                if array.size == 0:
+                    continue
                 input_name += ".unsqueeze(0)"
             new_input_names.append(input_name)
         input_names = new_input_names
@@ -232,12 +268,12 @@ def _gen_code_of_constantofshape(
     fill_value = torch_args["fill_value"]
     dtype = torch_args["dtype"]
 
-    code = _INDENT * 2 + f"{output_names[0]} = torch.full({input_names[0]}, "
+    code = _INDENT * 2 + f"{output_names[0]} = torch.full({input_names[0]}.tolist(), "
     if fill_value is not None:
         code += f"{fill_value}, "
     if dtype is not None:
         code += f"dtype={dtype}, "
-    code = code[:-2] + ")\n"
+    code += f"device=self.device)\n"
 
     return code
 
@@ -433,8 +469,25 @@ def _gen_code_of_reshape(
     shape = input_names[1]
     if node.input[1] in initializers:
         shape = initializer_to_tuple(initializers[node.input[1]])
+        code = _INDENT * 2 + f"{output_names[0]} = {input_names[0]}.reshape({shape})\n"
+        return code
 
-    code = _INDENT * 2 + f"{output_names[0]} = {input_names[0]}.reshape({shape})\n"
+    code = (
+        _INDENT * 2
+        + f"shape = {shape}.tolist()\n"
+        + _INDENT * 2
+        + f"try:\n"
+        + _INDENT * 3
+        + f"{output_names[0]} = {input_names[0]}.reshape(shape)\n"
+        + _INDENT * 2
+        + "except RuntimeError:\n"
+        + _INDENT * 3
+        + f"# Replace 0 with -1 to be a valid shape in PyTorch\n"
+        + _INDENT * 3
+        + f"shape = [-1 if dim == 0 else dim for dim in shape]\n"
+        + _INDENT * 3
+        + f"{output_names[0]} = {input_names[0]}.reshape(shape)\n"
+    )
 
     return code
 
@@ -479,6 +532,7 @@ def _gen_code_of_scatterelement(
 
     torch_args = get_torch_args(node, nodes, initializers)
     dim = torch_args["dim"]
+    assert dim is not None, "Dim must be specified for scatter operation"
     index = input_names[1]
     src = input_names[2]
 
@@ -490,8 +544,24 @@ def _gen_code_of_scatterelement(
     return code
 
 
-def _gen_code_of_scatternd(*args, **kwargs) -> str:
-    return _gen_code_of_scatterelement(*args, **kwargs)
+def _gen_code_of_scatternd(
+    node: NodeProto, nodes: dict[str, NodeProto], initializers: dict[str, TensorProto]
+) -> str:
+    # https://pytorch.org/docs/stable/generated/torch.scatter.html
+    input_names = parse_input_names(node, initializers)
+    output_names = parse_output_names(node, initializers)
+
+    index = input_names[1]
+    src = input_names[2]
+
+    code = (
+        _INDENT * 2
+        + f"{output_names[0]} = {input_names[0]}.clone()\n"
+        + _INDENT * 2
+        + f"{output_names[0]}[{index}] = {src}\n"
+    )
+
+    return code
 
 
 def _gen_code_of_shape(
@@ -501,7 +571,10 @@ def _gen_code_of_shape(
     input_names = parse_input_names(node, initializers)
     output_names = parse_output_names(node, initializers)
 
-    code = _INDENT * 2 + f"{output_names[0]} = {input_names[0]}.shape\n"
+    code = _INDENT * 2 + (
+        f"{output_names[0]} = "
+        f"torch.tensor({input_names[0]}.shape, device=self.device)\n"
+    )
 
     return code
 
