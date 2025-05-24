@@ -80,8 +80,8 @@ def _gen_code_of_batchnorm(
     variance = input_names[4]
     code += _INDENT * 2 + f"self.{node.name}.weight.data = {scale}\n"
     code += _INDENT * 2 + f"self.{node.name}.bias.data = {b}\n"
-    code += _INDENT * 2 + f"self.{node.name}.running_mean.data = {mean}\n"
-    code += _INDENT * 2 + f"self.{node.name}.running_var.data = {variance}\n"
+    code += _INDENT * 2 + f"self.{node.name}.running_mean = {mean}\n"
+    code += _INDENT * 2 + f"self.{node.name}.running_var = {variance}\n"
     code += "\n"
 
     return code

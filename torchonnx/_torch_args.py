@@ -603,7 +603,7 @@ def _torch_resize(
     scale_factor = initializers.get(node.input[2])
     if scale_factor is None:
         raise RuntimeError("Resize node only supports scale_factor as an initializer.")
-    scale_factor = initializer_to_list(scale_factor)
+    scale_factor = initializer_to_list(scale_factor)[2:]  # Only the spatial dimensions
     torch_args["scale_factor"] = scale_factor  # noqa
 
     if len(node.input) > 3:
@@ -737,7 +737,7 @@ def _torch_upsample(
     scales = initializers.get(node.input[2])
     if scales is None:
         raise RuntimeError("Upsample node only supports scales as an initializer.")
-    scales = initializer_to_tuple(scales)
+    scales = initializer_to_tuple(scales)[2:]  # Only the spatial dimensions
     torch_args["scale_factor"] = scales  # noqa
 
     return torch_args
