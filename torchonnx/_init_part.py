@@ -418,6 +418,10 @@ def _gen_init_header_code() -> str:
         + "):\n"
         + _INDENT * 2
         + "super().__init__()\n\n"
+        + _INDENT * 2
+        + "self.dtype = dtype\n"
+        + _INDENT * 2
+        + "self.device = device\n\n"
     )
 
 

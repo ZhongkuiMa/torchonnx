@@ -119,40 +119,12 @@ def _torch_cast(
     torch_args = {"dtype": None}
 
     to = attrs["to"]
-    if to == 1:
-        dtype = torch.float32
-    elif to == 2:
-        dtype = torch.uint8
-    elif to == 3:
-        dtype = torch.int8
-    elif to == 4:
-        dtype = torch.uint16
-    elif to == 5:
-        dtype = torch.int16
-    elif to == 6:
-        dtype = torch.int32
-    elif to == 7:
-        dtype = torch.int64
-    elif to == 8:
-        dtype = torch.str
-    elif to == 9:
-        dtype = torch.bool
-    elif to == 10:
-        dtype = torch.float16
-    elif to == 11:
-        dtype = torch.double
-    elif to == 12:
-        dtype = torch.uint32
-    elif to == 13:
-        dtype = torch.uint64
-    elif to == 14:
-        dtype = torch.complex64
-    elif to == 15:
-        dtype = torch.complex128
-    else:
+
+    dtype = DTYPE_ONNX2TORCH.get(to)
+    if dtype is None:
         raise NotImplementedError(f"Cast node with to={to} is not supported.")
 
-    torch_args["dtype"] = dtype
+    torch_args["dtype"] = dtype  # noqa
 
     return torch_args
 
@@ -274,7 +246,7 @@ def _torch_constantofshape(
     for k, v in attrs.items():
         if k == "value":
             torch_args["fill_value"] = v[0]
-            torch_args["dtype"] = v.dtype
+            torch_args["dtype"] = DTYPE_NUMPY2TORCH.get(v.dtype)
 
     return torch_args
 

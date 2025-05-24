@@ -1,5 +1,7 @@
 __docformat__ = "restructuredtext"
 __all__ = [
+    "DTYPE_NUMPY2TORCH",
+    "DTYPE_ONNX2TORCH",
     "EXTRACT_ATTR_MAP",
     "parse_input_names",
     "parse_output_names",
@@ -10,10 +12,36 @@ __all__ = [
     "initializer_to_int",
 ]
 
+import numpy as np
 import onnx
 import torch
 from onnx import ModelProto, NodeProto, TensorProto
 from torch import Tensor
+
+DTYPE_NUMPY2TORCH = {
+    np.dtypes.Int32DType: torch.int32,
+    np.dtypes.Int64DType: torch.int64,
+    np.dtypes.Float32DType: torch.float32,
+    np.dtypes.Float64DType: torch.float64,
+}
+
+DTYPE_ONNX2TORCH = {
+    1: torch.float32,
+    2: torch.uint8,
+    3: torch.int8,
+    4: torch.uint16,
+    5: torch.int16,
+    6: torch.int32,
+    7: torch.int64,
+    8: None,
+    9: torch.bool,
+    10: torch.float16,
+    11: torch.double,
+    12: torch.uint32,
+    13: torch.uint64,
+    14: torch.complex64,
+    15: torch.complex128,
+}
 
 EXTRACT_ATTR_MAP = {
     0: lambda x: None,  # UNDEFINED
