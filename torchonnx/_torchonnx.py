@@ -14,6 +14,7 @@ from ._init_part import gen_init_code
 
 
 def gen_module_name(file_path: str) -> str:
+    file_path = os.path.normpath(file_path)
     module_name = file_path.split(f"{os.sep}")[-1].split(".")[0]
     # Remove all dots and dashes
     module_name = module_name.replace(".", "").replace("-", "")
