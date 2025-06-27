@@ -330,10 +330,18 @@ def _gen_code_of_matmul(
     input_names = parse_input_names(node, initializers)
     output_names = parse_output_names(node, initializers)
 
-    code = (
-        _INDENT * 2
-        + f"{output_names[0]} = torch.matmul({input_names[0]}, {input_names[1]})\n"
-    )
+    code = _INDENT * 2 + f"{output_names[0]} = torch.matmul("
+    # Handle left and right matmul
+    if node.input[0] in initializers and node.input[1] not in nodes:
+        # There is a special cases, some networks has an input without batch dimension.
+        # We will add this batch dimension to the input.
+        # Because we may use batched inputs to process adv attack.
+        # And the first layer is a left matmul.
+        # In such case, there will be an error.
+        # Because the input is not in the nodes dict, we can check such case.
+        code += f"{input_names[1]}, {input_names[0]}.t())\n"
+    else:
+        code += f"{input_names[0]}, {input_names[1]})\n"
 
     return code
 
