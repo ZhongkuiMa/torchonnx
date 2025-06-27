@@ -431,13 +431,13 @@ def _gen_load_pth_data_code(pth_path: str, initializers: dict[str, TensorProto])
     pth_path = pth_path.replace("\\", "\\\\")
     code = (
         _INDENT * 2
-        + "if param_path is not None:\n"
+        + "if params_path is None:\n"
         + _INDENT * 3
         + f"self.data = torch.load('{pth_path}', weights_only=True)\n"
         + _INDENT * 2
         + "else:\n"
         + _INDENT * 3
-        + "self.data = torch.load(param_path, weights_only=True)\n"
+        + "self.data = torch.load(params_path, weights_only=True)\n"
         + _INDENT * 2
         + "for name in self.data:\n"
         + _INDENT * 3
