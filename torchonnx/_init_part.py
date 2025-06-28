@@ -1,8 +1,6 @@
 __docformat__ = "restructuredtext"
 __all__ = ["gen_init_code"]
 
-import warnings
-
 from onnx import ModelProto, NodeProto, TensorProto
 
 from ._torch_args import get_torch_args
@@ -186,8 +184,6 @@ def _gen_code_of_dropout(
     if torch_args["p"] != 0.5:
         code += f"p={torch_args['p']}"
     code += ")\n"
-
-    warnings.warn("Dropout needs a fixed seed to reproduce the result.")
 
     return code
 
