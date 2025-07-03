@@ -1,5 +1,5 @@
 __docformat__ = "restructuredtext"
-__all__ = ["TorchONNX", "gen_module_name"]
+__all__ = ["TorchONNX", "gen_module_class_name"]
 
 import os
 import time
@@ -13,7 +13,7 @@ from ._header_part import gen_header_code
 from ._init_part import gen_init_code
 
 
-def gen_module_name(file_path: str) -> str:
+def gen_module_class_name(file_path: str) -> str:
     file_path = os.path.normpath(file_path)
     module_name = file_path.split(f"{os.sep}")[-1].split(".")[0]
     # Remove all dots and dashes
@@ -55,7 +55,7 @@ class TorchONNX:
         target_pth_path: str = None,
     ):
         if module_class_name is None:
-            module_class_name = gen_module_name(onnx_path)
+            module_class_name = gen_module_class_name(onnx_path)
         if target_py_path is None:
             target_py_path = onnx_path.replace(".onnx", ".py")
         if target_pth_path is None:
