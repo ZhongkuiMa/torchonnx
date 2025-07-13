@@ -479,8 +479,9 @@ def _gen_code_of_reshape(
         shape = initializer_to_tuple(initializers[node.input[1]])
         # For multiple batch dimension, we need to reshape it to a valid shape.
         if len(shape) > 1:
+            shape = shape[1:]  # Remove the first batch dimension
             code = _INDENT * 2 + f"temp_batch_size = {input_names[0]}.shape[0]\n"
-            code = code + _INDENT * 2 + f"temp_shape = (temp_batch_size, -1)\n"
+            code = code + _INDENT * 2 + f"temp_shape = (temp_batch_size, *{shape})\n"
             code = (
                 code
                 + _INDENT * 2
