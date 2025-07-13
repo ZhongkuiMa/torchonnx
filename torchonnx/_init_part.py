@@ -55,17 +55,9 @@ def _gen_code_of_batchnorm(
         f'{torch_args["num_features"]}, '
     )
     eps = torch_args["eps"]
-    if eps != 1e-5:
-        new_eps = round(eps, 6)
-        print(f"Round BatchNorm momentum: {eps} -> {new_eps}")
-        if new_eps != 1e-5:
-            code += f"eps={new_eps}, "
+    code += f"eps={eps}, "
     momentum = torch_args["momentum"]
-    if momentum != 0.1:
-        new_momentum = round(momentum, 6)
-        print(f"Round BatchNorm momentum: {momentum} -> {new_momentum}")
-        if new_momentum != 0.1:
-            code += f"momentum={new_momentum}, "
+    code += f"momentum={momentum}, "
     if not torch_args["track_running_stats"]:
         code += f"track_running_stats={torch_args['track_running_stats']}, "
     code = code[:-2] + ")\n"
