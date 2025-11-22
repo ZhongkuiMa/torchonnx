@@ -17,8 +17,9 @@ from onnx import NodeProto, TensorProto
 
 
 FUNCTIONAL_OPERATIONS_WITH_ARGS: dict[str, str] = {
+    "Conv": "F.conv",  # Fallback for Conv when constructor args fail
+    "ConvTranspose": "F.conv_transpose",  # Fallback for ConvTranspose when constructor args fail
     "Pad": "F.pad",
-    "Flatten": "torch.flatten",
     "Reshape": "reshape",
     "Transpose": "permute",
     "Squeeze": "squeeze",
@@ -28,8 +29,6 @@ FUNCTIONAL_OPERATIONS_WITH_ARGS: dict[str, str] = {
     "Cast": "cast",
     "Concat": "torch.cat",
     "Gemm": "gemm",
-    "Conv": "F.conv2d",
-    "ConvTranspose": "F.conv_transpose2d",
     "Slice": "slice",
     "Sign": "sign",
     "Split": "split",
@@ -131,23 +130,6 @@ def extract_pad_args(
     }
 
 
-def extract_flatten_args(
-    node: NodeProto, initializers: dict[str, TensorProto]
-) -> dict[str, Any]:
-    """Extract arguments for Flatten operation.
-
-    :param node: ONNX Flatten node
-    :param initializers: All ONNX initializers
-    :return: Arguments for torch.flatten call
-    """
-    attrs = _extract_onnx_attributes(node)
-    axis = attrs.get("axis", 1)
-
-    return {
-        "start_dim": axis,
-    }
-
-
 def extract_functional_args(
     node: NodeProto,
     initializers: dict[str, TensorProto],
@@ -162,8 +144,6 @@ def extract_functional_args(
     """
     if layer_type == "Pad":
         return extract_pad_args(node, initializers)
-    elif layer_type == "Flatten":
-        return extract_flatten_args(node, initializers)
     elif layer_type == "Reshape":
         return {}
     elif layer_type == "Transpose":
@@ -195,23 +175,6 @@ def extract_functional_args(
             "beta": attrs.get("beta", 1.0),
             "transA": attrs.get("transA", 0),
             "transB": attrs.get("transB", 0),
-        }
-    elif layer_type == "Conv":
-        attrs = _extract_onnx_attributes(node)
-        return {
-            "stride": attrs.get("strides", [1, 1]),
-            "padding": attrs.get("pads", [0, 0, 0, 0]),
-            "dilation": attrs.get("dilations", [1, 1]),
-            "groups": attrs.get("group", 1),
-        }
-    elif layer_type == "ConvTranspose":
-        attrs = _extract_onnx_attributes(node)
-        return {
-            "stride": attrs.get("strides", [1, 1]),
-            "padding": attrs.get("pads", [0, 0, 0, 0]),
-            "dilation": attrs.get("dilations", [1, 1]),
-            "groups": attrs.get("group", 1),
-            "output_padding": attrs.get("output_padding", [0, 0]),
         }
     elif layer_type == "Slice":
         attrs = _extract_onnx_attributes(node)

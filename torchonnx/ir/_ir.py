@@ -210,7 +210,7 @@ def build_layer_ir(
     :param layer_name: Generated layer name
     :return: LayerIR for this node
     """
-    layer_type = infer_pytorch_layer_type(node)
+    layer_type = infer_pytorch_layer_type(node, initializers)
 
     constructor_args: dict[str, Any] = {}
     if is_parametric_layer(layer_type) or layer_type in {"ReLU"}:
@@ -221,9 +221,9 @@ def build_layer_ir(
 
     if layer_type == "Linear" and not constructor_args:
         layer_type = "Gemm"
-    if layer_type == "Conv2d" and not constructor_args:
+    if layer_type in ("Conv1d", "Conv2d") and not constructor_args:
         layer_type = "Conv"
-    if layer_type == "ConvTranspose2d" and not constructor_args:
+    if layer_type in ("ConvTranspose1d", "ConvTranspose2d") and not constructor_args:
         layer_type = "ConvTranspose"
 
     parameters: dict[str, str] = {}
@@ -265,7 +265,7 @@ def build_model_ir(model: ModelProto) -> ModelIR:
     counter: dict[str, int] = {}
     layer_names: list[str] = []
     for node in nodes:
-        layer_type = infer_pytorch_layer_type(node)
+        layer_type = infer_pytorch_layer_type(node, initializers)
         layer_name = sanitize_layer_name(node, layer_type, counter)
         layer_names.append(layer_name)
 

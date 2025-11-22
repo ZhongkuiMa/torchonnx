@@ -9,6 +9,7 @@ __all__ = ["generate_init_method"]
 
 from typing import Any
 
+import numpy as np
 from onnx import TensorProto, numpy_helper
 
 from ..ir import LayerIR
@@ -91,7 +92,34 @@ def generate_parameter_registrations(
         shape = tuple(numpy_array.shape)
 
         shape_str = f"({shape})" if len(shape) == 0 else str(shape)
-        param_line = f"self.{simplified_name} = nn.Parameter(torch.empty{shape_str})"
+
+        # Map numpy dtype to PyTorch dtype
+        dtype_map = {
+            np.dtype("float32"): "torch.float32",
+            np.dtype("float64"): "torch.float64",
+            np.dtype("float16"): "torch.float16",
+            np.dtype("int32"): "torch.int32",
+            np.dtype("int64"): "torch.int64",
+            np.dtype("int16"): "torch.int16",
+            np.dtype("int8"): "torch.int8",
+            np.dtype("uint8"): "torch.uint8",
+            np.dtype("bool"): "torch.bool",
+        }
+
+        torch_dtype = dtype_map.get(numpy_array.dtype, "torch.float32")
+        is_integer_type = numpy_array.dtype in [
+            np.dtype("int32"),
+            np.dtype("int64"),
+            np.dtype("int16"),
+            np.dtype("int8"),
+            np.dtype("uint8"),
+            np.dtype("bool"),
+        ]
+
+        if is_integer_type:
+            param_line = f"self.register_buffer('{simplified_name}', torch.empty({shape}, dtype={torch_dtype}))"
+        else:
+            param_line = f"self.{simplified_name} = nn.Parameter(torch.empty({shape}, dtype={torch_dtype}))"
         lines.append(param_line)
 
     return lines

@@ -104,13 +104,6 @@ def generate_operation_code(
             mode = func_args.get("mode", "constant")
             return f'    {output_var} = F.pad({input_vars[0]}, {pad}, mode="{mode}")'
 
-        elif layer.layer_type == "Flatten":
-            func_args = extract_functional_args(
-                layer.onnx_node, initializers or {}, layer.layer_type
-            )
-            start_dim = func_args.get("start_dim", 1)
-            return f"    {output_var} = torch.flatten({input_vars[0]}, start_dim={start_dim})"
-
         elif layer.layer_type == "Reshape":
             shape_const = _get_constant_value(input_vars[1], 1, layer, initializers)
             if shape_const is not None:
@@ -334,6 +327,108 @@ def generate_operation_code(
 
             return f"    {output_var} = torch.cat([{inputs_str}], dim={axis})"
 
+        elif layer.layer_type == "Conv":
+            # Fallback functional Conv implementation
+            # Determine 1D vs 2D from weight shape
+            if len(input_vars) >= 2:
+                weight_var = input_vars[1]
+                # Try to infer dimensionality from weight
+                is_conv1d = False
+                if initializers:
+                    # Find the weight initializer
+                    for inp_name in layer.input_names:
+                        if inp_name in initializers:
+                            from onnx import numpy_helper
+
+                            weight_array = numpy_helper.to_array(initializers[inp_name])
+                            if len(weight_array.shape) == 3:
+                                is_conv1d = True
+                            break
+
+                # Extract attributes
+                stride = 1
+                padding = 0
+                dilation = 1
+                groups = 1
+                for attr in layer.onnx_node.attribute:
+                    if attr.name == "strides":
+                        stride = (
+                            tuple(attr.ints) if len(attr.ints) > 1 else attr.ints[0]
+                        )
+                    elif attr.name == "pads":
+                        pads = list(attr.ints)
+                        # Take first half for symmetric padding
+                        padding = (
+                            tuple(pads[: len(pads) // 2])
+                            if len(pads) > 2
+                            else (pads[0] if pads else 0)
+                        )
+                    elif attr.name == "dilations":
+                        dilation = (
+                            tuple(attr.ints) if len(attr.ints) > 1 else attr.ints[0]
+                        )
+                    elif attr.name == "group":
+                        groups = attr.i
+
+                func_name = "F.conv1d" if is_conv1d else "F.conv2d"
+                bias_arg = f", {input_vars[2]}" if len(input_vars) > 2 else ", None"
+                return f"    {output_var} = {func_name}({input_vars[0]}, {input_vars[1]}{bias_arg}, stride={stride}, padding={padding}, dilation={dilation}, groups={groups})"
+            else:
+                return (
+                    f"    {output_var} = {input_vars[0]}  # Conv: insufficient inputs"
+                )
+
+        elif layer.layer_type == "ConvTranspose":
+            # Fallback functional ConvTranspose implementation
+            # Determine 1D vs 2D from weight shape
+            if len(input_vars) >= 2:
+                weight_var = input_vars[1]
+                is_conv1d = False
+                if initializers:
+                    for inp_name in layer.input_names:
+                        if inp_name in initializers:
+                            from onnx import numpy_helper
+
+                            weight_array = numpy_helper.to_array(initializers[inp_name])
+                            if len(weight_array.shape) == 3:
+                                is_conv1d = True
+                            break
+
+                # Extract attributes
+                stride = 1
+                padding = 0
+                output_padding = 0
+                dilation = 1
+                groups = 1
+                for attr in layer.onnx_node.attribute:
+                    if attr.name == "strides":
+                        stride = (
+                            tuple(attr.ints) if len(attr.ints) > 1 else attr.ints[0]
+                        )
+                    elif attr.name == "pads":
+                        pads = list(attr.ints)
+                        padding = (
+                            tuple(pads[: len(pads) // 2])
+                            if len(pads) > 2
+                            else (pads[0] if pads else 0)
+                        )
+                    elif attr.name == "output_padding":
+                        output_padding = (
+                            tuple(attr.ints) if len(attr.ints) > 1 else attr.ints[0]
+                        )
+                    elif attr.name == "dilations":
+                        dilation = (
+                            tuple(attr.ints) if len(attr.ints) > 1 else attr.ints[0]
+                        )
+                    elif attr.name == "group":
+                        groups = attr.i
+
+                func_name = "F.conv_transpose1d" if is_conv1d else "F.conv_transpose2d"
+                bias_arg = f", {input_vars[2]}" if len(input_vars) > 2 else ", None"
+                return f"    {output_var} = {func_name}({input_vars[0]}, {input_vars[1]}{bias_arg}, stride={stride}, padding={padding}, output_padding={output_padding}, dilation={dilation}, groups={groups})"
+            else:
+                return f"    {output_var} = {input_vars[0]}  # ConvTranspose: insufficient inputs"
+
         elif layer.layer_type == "Gemm":
             func_args = extract_functional_args(
                 layer.onnx_node, initializers or {}, layer.layer_type
@@ -357,28 +452,6 @@ def generate_operation_code(
                 return f"    {output_var} = {matmul_expr} + {bias_expr}"
             else:
                 return f"    {output_var} = {matmul_expr}"
-
-        elif layer.layer_type == "Conv":
-            func_args = extract_functional_args(
-                layer.onnx_node, initializers or {}, layer.layer_type
-            )
-            stride_list = func_args.get("stride", [1, 1])
-            pads = func_args.get("padding", [0, 0, 0, 0])
-            dilation_list = func_args.get("dilation", [1, 1])
-            groups = func_args.get("groups", 1)
-
-            bias_arg = f", {input_vars[2]}" if len(input_vars) >= 3 else ", None"
-
-            if len(stride_list) == 1:
-                stride = stride_list[0]
-                padding = pads[0] if pads else 0
-                dilation = dilation_list[0] if dilation_list else 1
-                return f"    {output_var} = F.conv1d({input_vars[0]}, {input_vars[1]}{bias_arg}, stride={stride}, padding={padding}, dilation={dilation}, groups={groups})"
-            else:
-                stride = tuple(stride_list)
-                padding = tuple(pads[:2])
-                dilation = tuple(dilation_list)
-                return f"    {output_var} = F.conv2d({input_vars[0]}, {input_vars[1]}{bias_arg}, stride={stride}, padding={padding}, dilation={dilation}, groups={groups})"
 
         elif layer.layer_type == "ScatterND":
             # ONNX ScatterND: scatter(data, indices, updates) -> output
@@ -445,31 +518,6 @@ def generate_operation_code(
 
             # Fallback: use default scale_factor of 2
             return f"    {output_var} = F.interpolate({input_var}, scale_factor=2.0, mode='{torch_mode}')"
-
-        elif layer.layer_type == "ConvTranspose":
-            func_args = extract_functional_args(
-                layer.onnx_node, initializers or {}, layer.layer_type
-            )
-            stride_list = func_args.get("stride", [1, 1])
-            pads = func_args.get("padding", [0, 0, 0, 0])
-            output_padding_list = func_args.get("output_padding", [0, 0])
-            dilation_list = func_args.get("dilation", [1, 1])
-            groups = func_args.get("groups", 1)
-
-            bias_arg = f", {input_vars[2]}" if len(input_vars) >= 3 else ", None"
-
-            if len(stride_list) == 1:
-                stride = stride_list[0]
-                padding = pads[0] if pads else 0
-                output_padding = output_padding_list[0] if output_padding_list else 0
-                dilation = dilation_list[0] if dilation_list else 1
-                return f"    {output_var} = F.conv_transpose1d({input_vars[0]}, {input_vars[1]}{bias_arg}, stride={stride}, padding={padding}, output_padding={output_padding}, dilation={dilation}, groups={groups})"
-            else:
-                stride = tuple(stride_list)
-                padding = tuple(pads[:2])
-                output_padding = tuple(output_padding_list)
-                dilation = tuple(dilation_list)
-                return f"    {output_var} = F.conv_transpose2d({input_vars[0]}, {input_vars[1]}{bias_arg}, stride={stride}, padding={padding}, output_padding={output_padding}, dilation={dilation}, groups={groups})"
 
         elif layer.layer_type == "Slice":
             data_var = input_vars[0]

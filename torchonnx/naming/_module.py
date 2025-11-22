@@ -40,9 +40,7 @@ def sanitize_module_name(model_name: str, benchmark_name: str | None = None) -> 
     else:
         name = model_name
 
-    name = name.replace("-", "_")
-    name = name.replace(".", "_")
-    name = name.replace("=", "_")
+    name = name.replace("-", "_").replace(".", "_").replace("=", "_")
 
     parts = name.split("_")
     name = "".join(part.capitalize() for part in parts if part)
