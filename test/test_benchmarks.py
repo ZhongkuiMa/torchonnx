@@ -40,6 +40,12 @@ from benchmark_utils import (
     get_model_data_path,
 )
 
+TOLERANCE_EPSILON = 1e-10
+TOLERANCE_TIER1_ABS = 1e-6
+TOLERANCE_TIER2_REL = 1e-5
+TOLERANCE_TIER3_REL = 1e-3
+TOLERANCE_TIER3_ABS = 1e-4
+
 
 def _run_onnx_model(model_path: str, inputs: np.ndarray) -> dict:
     """Run ONNX model inference using ONNX Runtime.
@@ -103,97 +109,132 @@ def _run_pytorch_module(
         return {"output": output}
 
 
-def _compare_outputs(
-    outputs1: dict, outputs2: dict, rtol: float = 1e-4, atol: float = 1e-4
-) -> tuple[bool, list[str], dict]:
-    """Compare outputs using three-tier tolerance with larger epsilon.
+def _check_tolerance(max_abs: float, max_rel: float) -> bool:
+    """Check if errors pass three-tier tolerance criteria.
 
-    :param outputs1: First model outputs
-    :param outputs2: Second model outputs
-    :param rtol: Relative tolerance (kept for compatibility but not used)
-    :param atol: Absolute tolerance (kept for compatibility but not used)
-    :return: Tuple of (all_match, mismatch_messages, statistics)
+    :param max_abs: Maximum absolute error
+    :param max_rel: Maximum relative error
+    :return: True if passes any tier
+    """
+    passes_tier1 = max_abs < TOLERANCE_TIER1_ABS
+    passes_tier2 = max_rel < TOLERANCE_TIER2_REL
+    passes_tier3 = max_rel < TOLERANCE_TIER3_REL and max_abs < TOLERANCE_TIER3_ABS
+    return passes_tier1 or passes_tier2 or passes_tier3
 
-    Three-tier pass criteria (pass if ANY is met):
-    - Tier 1: max_abs < 1e-6 (negligible error - always pass)
-    - Tier 2: max_abs < 1e-4 (reasonable absolute - ignore relative)
-    - Tier 3: max_rel < 1e-4 AND max_abs < 1e-2 (excellent relative, moderate absolute)
+
+def _compute_errors(
+    out1: np.ndarray, out2: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, float, float]:
+    """Compute absolute and relative errors between two arrays.
+
+    :param out1: First array
+    :param out2: Second array
+    :return: Tuple of (diff_array, rel_diff_array, max_abs, max_rel)
+    """
+    diff = np.abs(out1 - out2)
+    rel_diff = diff / (np.abs(out2) + TOLERANCE_EPSILON)
+    max_abs = float(np.max(diff))
+    max_rel = float(np.max(rel_diff))
+    return diff, rel_diff, max_abs, max_rel
+
+
+def _is_scalar_shape_mismatch(shape1: tuple, shape2: tuple) -> bool:
+    """Check if shapes are scalar vs single-element mismatches.
+
+    :param shape1: First shape
+    :param shape2: Second shape
+    :return: True if mismatch is acceptable scalar difference
+    """
+    return (shape1 == () and shape2 == (1,)) or (shape1 == (1,) and shape2 == ())
+
+
+def _compare_single_output(
+    key1: str,
+    key2: str,
+    out1: np.ndarray,
+    out2: np.ndarray,
+) -> tuple[list, list, list]:
+    """Compare single output pair and collect errors.
+
+    :param key1: First output name
+    :param key2: Second output name
+    :param out1: First output array
+    :param out2: Second output array
+    :return: Tuple of (mismatches, diffs, rel_diffs)
     """
     mismatches = []
     all_diffs = []
     all_rel_diffs = []
 
-    # Epsilon for relative error calculation (larger to avoid division-by-near-zero)
-    EPSILON = 1e-6
+    if out1.shape != out2.shape:
+        if _is_scalar_shape_mismatch(out1.shape, out2.shape):
+            out1_flat = out1.flatten()
+            out2_flat = out2.flatten()
+            diff, rel_diff, max_abs, max_rel = _compute_errors(out1_flat, out2_flat)
+            all_diffs.extend(diff)
+            all_rel_diffs.extend(rel_diff)
 
-    # Three-tier tolerance thresholds
-    TIER1_ABS = 1e-6  # Negligible absolute error (always pass)
-    TIER2_ABS = 1e-4  # Reasonable absolute error (ignore relative)
-    TIER3_REL = 1e-4  # Excellent relative error
-    TIER3_ABS = 1e-2  # Moderate absolute error
+            if not _check_tolerance(max_abs, max_rel):
+                mismatches.append(
+                    f"{key1} {key2}: max diff {max_abs:.2e}, rel {max_rel:.2e} (shape: {out1.shape} vs {out2.shape})"
+                )
+        else:
+            mismatches.append(f"{key1}: shape {out1.shape} vs {key2}: {out2.shape}")
+        return mismatches, all_diffs, all_rel_diffs
+
+    diff, rel_diff, max_abs, max_rel = _compute_errors(out1, out2)
+    all_diffs.extend(diff.flatten())
+    all_rel_diffs.extend(rel_diff.flatten())
+
+    if not _check_tolerance(max_abs, max_rel):
+        mismatches.append(f"{key1} {key2}: max diff {max_abs:.2e}, rel {max_rel:.2e}")
+
+    return mismatches, all_diffs, all_rel_diffs
+
+
+def _compute_statistics(all_diffs: list, all_rel_diffs: list) -> dict:
+    """Compute error statistics from collected differences.
+
+    :param all_diffs: List of absolute differences
+    :param all_rel_diffs: List of relative differences
+    :return: Dictionary of statistics
+    """
+    if not all_diffs:
+        return {}
+
+    return {
+        "max_abs_diff": float(np.max(all_diffs)),
+        "mean_abs_diff": float(np.mean(all_diffs)),
+        "max_rel_diff": float(np.max(all_rel_diffs)),
+        "mean_rel_diff": float(np.mean(all_rel_diffs)),
+    }
+
+
+def _compare_outputs(
+    outputs1: dict, outputs2: dict, rtol: float = 1e-4, atol: float = 1e-4
+) -> tuple[bool, list[str], dict]:
+    """Compare outputs using three-tier tolerance.
+
+    :param outputs1: First model outputs
+    :param outputs2: Second model outputs
+    :param rtol: Relative tolerance (kept for compatibility)
+    :param atol: Absolute tolerance (kept for compatibility)
+    :return: Tuple of (all_match, mismatch_messages, statistics)
+    """
+    all_mismatches = []
+    all_diffs = []
+    all_rel_diffs = []
 
     for key1, key2 in zip(outputs1.keys(), outputs2.keys()):
-        out1 = outputs1[key1]
-        out2 = outputs2[key2]
+        mismatches, diffs, rel_diffs = _compare_single_output(
+            key1, key2, outputs1[key1], outputs2[key2]
+        )
+        all_mismatches.extend(mismatches)
+        all_diffs.extend(diffs)
+        all_rel_diffs.extend(rel_diffs)
 
-        if out1.shape != out2.shape:
-            # Accept scalar () vs [1] shape difference
-            is_scalar_vs_single = (out1.shape == () and out2.shape == (1,)) or (
-                out1.shape == (1,) and out2.shape == ()
-            )
-
-            if is_scalar_vs_single:
-                # Reshape to compare values
-                out1_flat = out1.flatten()
-                out2_flat = out2.flatten()
-                diff = np.abs(out1_flat - out2_flat)
-                rel_diff = diff / (np.abs(out2_flat) + EPSILON)
-                all_diffs.extend(diff)
-                all_rel_diffs.extend(rel_diff)
-
-                max_abs = np.max(diff)
-                max_rel = np.max(rel_diff)
-
-                # Three-tier check
-                passes_tier1 = max_abs < TIER1_ABS
-                passes_tier2 = max_abs < TIER2_ABS
-                passes_tier3 = max_rel < TIER3_REL and max_abs < TIER3_ABS
-
-                if not (passes_tier1 or passes_tier2 or passes_tier3):
-                    mismatches.append(
-                        f"{key1} {key2}: max diff {max_abs:.2e}, rel {max_rel:.2e} (shape: {out1.shape} vs {out2.shape})"
-                    )
-            else:
-                mismatches.append(f"{key1}: shape {out1.shape} vs {key2}: {out2.shape}")
-            continue
-
-        diff = np.abs(out1 - out2)
-        rel_diff = diff / (np.abs(out2) + EPSILON)
-        all_diffs.extend(diff.flatten())
-        all_rel_diffs.extend(rel_diff.flatten())
-
-        max_abs = np.max(diff)
-        max_rel = np.max(rel_diff)
-
-        # Three-tier check
-        passes_tier1 = max_abs < TIER1_ABS
-        passes_tier2 = max_abs < TIER2_ABS
-        passes_tier3 = max_rel < TIER3_REL and max_abs < TIER3_ABS
-
-        if not (passes_tier1 or passes_tier2 or passes_tier3):
-            mismatches.append(
-                f"{key1} {key2}: max diff {max_abs:.2e}, rel {max_rel:.2e}"
-            )
-
-    # Calculate statistics
-    stats = {}
-    if all_diffs:
-        stats["max_abs_diff"] = float(np.max(all_diffs))
-        stats["mean_abs_diff"] = float(np.mean(all_diffs))
-        stats["max_rel_diff"] = float(np.max(all_rel_diffs))
-        stats["mean_rel_diff"] = float(np.mean(all_rel_diffs))
-
-    return len(mismatches) == 0, mismatches, stats
+    stats = _compute_statistics(all_diffs, all_rel_diffs)
+    return len(all_mismatches) == 0, all_mismatches, stats
 
 
 def convert_model(
@@ -477,6 +518,121 @@ def _verify_one_benchmark(
         return "NUMERICAL_MISMATCH", ", ".join(mismatch_info), combined_stats
 
 
+def _print_verification_status(
+    status: str, error_msg: str | None, stats: dict, print_errors: bool
+) -> None:
+    """Print verification status for a single model.
+
+    :param status: Verification status
+    :param error_msg: Error message if any
+    :param stats: Error statistics dictionary
+    :param print_errors: Whether to print detailed errors
+    """
+    status_handlers = {
+        "OK": lambda: _print_ok_status(stats, print_errors),
+        "NUMERICAL_MISMATCH": lambda: _print_mismatch_status(
+            stats, error_msg, print_errors
+        ),
+        "SKIP": lambda: print(f"SKIP - {error_msg}"),
+        "ERROR": lambda: print(f"ERROR - {error_msg}"),
+    }
+
+    handler = status_handlers.get(status)
+    if handler:
+        handler()
+
+
+def _print_ok_status(stats: dict, print_errors: bool) -> None:
+    """Print OK status with optional error details.
+
+    :param stats: Error statistics dictionary
+    :param print_errors: Whether to print detailed errors
+    """
+    if print_errors and stats:
+        max_abs = stats.get("max_abs_diff", 0)
+        max_rel = stats.get("max_rel_diff", 0)
+        print(f"OK (max_abs: {max_abs:.2e}, max_rel: {max_rel:.2e})")
+    else:
+        print("OK")
+
+
+def _print_mismatch_status(
+    stats: dict, error_msg: str | None, print_errors: bool
+) -> None:
+    """Print mismatch status with optional error details.
+
+    :param stats: Error statistics dictionary
+    :param error_msg: Error message
+    :param print_errors: Whether to print detailed errors
+    """
+    if print_errors and stats:
+        max_abs = stats.get("max_abs_diff", 0)
+        max_rel = stats.get("max_rel_diff", 0)
+        print(f"MISMATCH (max_abs: {max_abs:.2e}, max_rel: {max_rel:.2e})")
+    else:
+        print(f"NUMERICAL MISMATCH ({error_msg})")
+
+
+def _update_verification_counts(status: str, counts: dict[str, int]) -> dict[str, int]:
+    """Update verification counts based on status.
+
+    :param status: Verification status
+    :param counts: Dictionary of current counts
+    :return: Updated counts dictionary
+    """
+    if status == "OK":
+        counts["passed"] += 1
+    elif status == "NUMERICAL_MISMATCH":
+        counts["numerical_mismatches"] += 1
+        counts["failed"] += 1
+    elif status == "SKIP":
+        counts["skipped"] += 1
+    elif status == "ERROR":
+        counts["failed"] += 1
+    return counts
+
+
+def _print_verification_summary(
+    benchmark_models: list,
+    counts: dict[str, int],
+    max_abs_errors: list,
+    max_rel_errors: list,
+    precision: str,
+    print_errors: bool,
+) -> None:
+    """Print verification summary statistics.
+
+    :param benchmark_models: List of benchmark models
+    :param counts: Dictionary of verification counts
+    :param max_abs_errors: List of maximum absolute errors
+    :param max_rel_errors: List of maximum relative errors
+    :param precision: Precision mode string
+    :param print_errors: Whether to print detailed error statistics
+    """
+    print("\n" + "=" * 70)
+    print(f"VERIFICATION SUMMARY ({precision})")
+    print("=" * 70)
+    print(f"Total files: {len(benchmark_models)}")
+    print(f"Passed: {counts['passed']}")
+    print(f"Failed: {counts['failed']}")
+    print(f"  Numerical mismatches: {counts['numerical_mismatches']}")
+    print(f"Skipped: {counts['skipped']}")
+
+    total_tested = len(benchmark_models) - counts["skipped"]
+    if total_tested > 0:
+        pass_rate = counts["passed"] / total_tested * 100
+        print(f"Pass rate: {pass_rate:.1f}%")
+    else:
+        print("Pass rate: N/A")
+
+    if print_errors and max_abs_errors:
+        print(f"\nError Statistics:")
+        print(f"  Max absolute error: {np.max(max_abs_errors):.6e}")
+        print(f"  Mean absolute error: {np.mean(max_abs_errors):.6e}")
+        print(f"  Max relative error: {np.max(max_rel_errors):.6e}")
+        print(f"  Mean relative error: {np.mean(max_rel_errors):.6e}")
+
+
 def verify_benchmarks(
     results_dir: str = "results/baselines",
     benchmarks_dir: str = "benchmarks",
@@ -486,48 +642,35 @@ def verify_benchmarks(
 ) -> dict:
     """Verify converted PyTorch modules against original ONNX benchmarks.
 
-    Compares numerical outputs between original ONNX and converted PyTorch.
-
     :param results_dir: Directory containing converted PyTorch modules
-    :param benchmarks_dir: Directory containing original ONNX benchmarks with test data
+    :param benchmarks_dir: Directory containing original ONNX benchmarks
     :param max_per_benchmark: Maximum models per benchmark to test
-    :param use_float64: Use float64 precision if True, float32 otherwise
+    :param use_float64: Use float64 precision if True
     :param print_errors: Print detailed error statistics
-    :return: Dictionary with verification results including error statistics
+    :return: Dictionary with verification results
     """
     results_path = Path(results_dir)
     benchmarks_path = Path(benchmarks_dir)
-
     _validate_verification_directories(results_path, benchmarks_path)
 
     precision = "float64" if use_float64 else "float32"
-    print(
-        f"\nVerifying converted models in {results_dir}/ against original ONNX in {benchmarks_dir}/ ({precision})"
-    )
+    print(f"\nVerifying {results_dir}/ against {benchmarks_dir}/ ({precision})")
     print("=" * 70)
 
     benchmarks = find_benchmarks(benchmarks_dir)
     benchmark_models = find_models(benchmarks, max_per_benchmark)
 
-    passed = 0
-    failed = 0
-    skipped = 0
-    numerical_mismatches = 0
-
-    # Collect error statistics
+    counts = {"passed": 0, "failed": 0, "skipped": 0, "numerical_mismatches": 0}
     all_errors = {}
     max_abs_errors = []
     max_rel_errors = []
 
     for i, benchmark_onnx_file in enumerate(benchmark_models):
         rel_path = get_model_relative_path(benchmark_onnx_file, benchmarks_path)
-        rel_path_py = rel_path.with_suffix(".py")
-        rel_path_pth = rel_path.with_suffix(".pth")
-
         print(f"[{i+1}/{len(benchmark_models)}] {rel_path}...", end=" ")
 
-        result_file = results_path / rel_path_py
-        result_state_dict = results_path / rel_path_pth
+        result_file = results_path / rel_path.with_suffix(".py")
+        result_state_dict = results_path / rel_path.with_suffix(".pth")
         data_file = get_model_data_path(benchmark_onnx_file, benchmarks_path)
 
         status, error_msg, stats = _verify_one_benchmark(
@@ -539,7 +682,6 @@ def verify_benchmarks(
             use_float64,
         )
 
-        # Store error statistics
         all_errors[str(rel_path)] = {
             "status": status,
             "error_msg": error_msg,
@@ -550,57 +692,24 @@ def verify_benchmarks(
             max_abs_errors.append(stats.get("max_abs_diff", 0))
             max_rel_errors.append(stats.get("max_rel_diff", 0))
 
-        if status == "OK":
-            passed += 1
-            if print_errors and stats:
-                print(
-                    f"OK (max_abs: {stats.get('max_abs_diff', 0):.2e}, max_rel: {stats.get('max_rel_diff', 0):.2e})"
-                )
-            else:
-                print("OK")
-        elif status == "NUMERICAL_MISMATCH":
-            numerical_mismatches += 1
-            failed += 1
-            if print_errors and stats:
-                print(
-                    f"MISMATCH (max_abs: {stats.get('max_abs_diff', 0):.2e}, max_rel: {stats.get('max_rel_diff', 0):.2e})"
-                )
-            else:
-                print(f"NUMERICAL MISMATCH ({error_msg})")
-        elif status == "SKIP":
-            skipped += 1
-            print(f"SKIP - {error_msg}")
-        elif status == "ERROR":
-            failed += 1
-            print(f"ERROR - {error_msg}")
+        counts = _update_verification_counts(status, counts)
+        _print_verification_status(status, error_msg, stats, print_errors)
 
-    print("\n" + "=" * 70)
-    print(f"VERIFICATION SUMMARY ({precision})")
-    print("=" * 70)
-    print(f"Total files: {len(benchmark_models)}")
-    print(f"Passed: {passed}")
-    print(f"Failed: {failed}")
-    print(f"  Numerical mismatches: {numerical_mismatches}")
-    print(f"Skipped: {skipped}")
-    total_tested = len(benchmark_models) - skipped
-    if total_tested > 0:
-        print(f"Pass rate: {passed/total_tested*100:.1f}%")
-    else:
-        print("Pass rate: N/A")
-
-    if print_errors and max_abs_errors:
-        print(f"\nError Statistics:")
-        print(f"  Max absolute error: {np.max(max_abs_errors):.6e}")
-        print(f"  Mean absolute error: {np.mean(max_abs_errors):.6e}")
-        print(f"  Max relative error: {np.max(max_rel_errors):.6e}")
-        print(f"  Mean relative error: {np.mean(max_rel_errors):.6e}")
+    _print_verification_summary(
+        benchmark_models,
+        counts,
+        max_abs_errors,
+        max_rel_errors,
+        precision,
+        print_errors,
+    )
 
     return {
         "total": len(benchmark_models),
-        "passed": passed,
-        "failed": failed,
-        "skipped": skipped,
-        "numerical_mismatches": numerical_mismatches,
+        "passed": counts["passed"],
+        "failed": counts["failed"],
+        "skipped": counts["skipped"],
+        "numerical_mismatches": counts["numerical_mismatches"],
         "all_errors": all_errors,
         "precision": precision,
     }

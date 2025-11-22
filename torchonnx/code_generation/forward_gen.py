@@ -7,6 +7,8 @@ implementing the tensor flow graph from the ONNX model.
 __docformat__ = "restructuredtext"
 __all__ = ["generate_forward_method"]
 
+from onnx import numpy_helper
+
 from ..ir import LayerIR
 from ..type_inference import (
     extract_functional_args,
@@ -15,6 +17,45 @@ from ..type_inference import (
     is_functional_operation,
     is_functional_operation_with_args,
 )
+
+
+def _get_constant_value(
+    var_name: str,
+    input_index: int,
+    layer: LayerIR,
+    initializers: dict | None,
+) -> list[int] | None:
+    """Extract constant integer list from initializer.
+
+    :param var_name: Variable name
+    :param input_index: Index in layer's input list
+    :param layer: Layer IR containing input names
+    :param initializers: ONNX initializers dictionary
+    :return: List of integers if constant, None otherwise
+    """
+    if not var_name.startswith("self.") or not initializers:
+        return None
+
+    if input_index >= len(layer.input_names):
+        return None
+
+    onnx_name = layer.input_names[input_index]
+    if onnx_name not in initializers:
+        return None
+
+    array = numpy_helper.to_array(initializers[onnx_name])
+    return array.flatten().astype(int).tolist()
+
+
+def _format_slice_index(value: int | None) -> str:
+    """Format slice index for Python code.
+
+    :param value: Integer value or None
+    :return: Formatted string for slice notation
+    """
+    if value is None:
+        return ""
+    return str(value)
 
 
 def generate_operation_code(
@@ -71,6 +112,12 @@ def generate_operation_code(
             return f"    {output_var} = torch.flatten({input_vars[0]}, start_dim={start_dim})"
 
         elif layer.layer_type == "Reshape":
+            shape_const = _get_constant_value(input_vars[1], 1, layer, initializers)
+            if shape_const is not None:
+                return (
+                    f"    {output_var} = {input_vars[0]}.reshape({tuple(shape_const)})"
+                )
+
             shape_var = input_vars[1]
             if shape_var.startswith("self."):
                 shape_var = f"tuple({shape_var}.data.flatten().int().tolist())"
@@ -91,13 +138,13 @@ def generate_operation_code(
             )
             dim = func_args.get("dim")
 
-            # For ONNX opset >= 13, axes come as an input (not attribute)
             if dim is None and len(input_vars) > 1:
+                axes_const = _get_constant_value(input_vars[1], 1, layer, initializers)
+                if axes_const is not None and len(axes_const) == 1:
+                    return f"    {output_var} = {input_vars[0]}.squeeze(dim={axes_const[0]})"
+
                 axes_var = input_vars[1]
-                # If axes is a parameter, extract the value at runtime
                 if axes_var.startswith("self."):
-                    # For single axis, use .item() to get scalar
-                    # For multiple axes, use tuple comprehension
                     return f"    {output_var} = {input_vars[0]}.squeeze(dim=int({axes_var}.item()) if {axes_var}.numel() == 1 else None)"
                 else:
                     return f"    {output_var} = {input_vars[0]}.squeeze(dim=int({axes_var}.item()) if {axes_var}.numel() == 1 else None)"
@@ -112,24 +159,25 @@ def generate_operation_code(
             )
             dim = func_args.get("dim")
 
-            # For ONNX opset >= 13, axes come as an input (not attribute)
             if dim is None and len(input_vars) > 1:
+                axes_const = _get_constant_value(input_vars[1], 1, layer, initializers)
+                if axes_const is not None and len(axes_const) == 1:
+                    return (
+                        f"    {output_var} = {input_vars[0]}.unsqueeze({axes_const[0]})"
+                    )
+
                 axes_var = input_vars[1]
-                # If axes is a parameter, extract the value at runtime
                 if axes_var.startswith("self."):
-                    # Generate code to extract axes value and use it
                     return f"    {output_var} = {input_vars[0]}.unsqueeze(int({axes_var}.item()))"
                 else:
-                    # Axes is a variable, use it directly
                     return f"    {output_var} = {input_vars[0]}.unsqueeze(int({axes_var}.item()))"
             elif dim is not None:
-                return f"    {output_var} = {input_vars[0]}.unsqueeze(dim={dim})"
+                return f"    {output_var} = {input_vars[0]}.unsqueeze({dim})"
             else:
-                # Fallback to dimension 0 (should rarely happen)
                 return f"    {output_var} = {input_vars[0]}.unsqueeze(0)"
 
         elif layer.layer_type == "Shape":
-            return f"    {output_var} = torch.tensor(list({input_vars[0]}.shape), dtype=torch.int64)"
+            return f"    {output_var} = torch.tensor({input_vars[0]}.shape, dtype=torch.int64)"
 
         elif layer.layer_type == "Gather":
             axis = 0
@@ -138,75 +186,43 @@ def generate_operation_code(
                     axis = attr.i
             indices_var = input_vars[1]
 
-            # Try to determine index shape from initializers (for static constant indices)
-            index_shape = None
-            if indices_var.startswith("self.") and initializers:
-                # Extract the param name without "self."
-                var_param_name = indices_var[5:]  # Remove "self."
-
-                for init_name, init_tensor in initializers.items():
-                    # Try exact match first (normalized)
-                    param_name = (
-                        init_name.split("/")[-1]
-                        .replace(".", "_")
-                        .replace("-", "_")
-                        .lower()
-                    )
-                    if var_param_name == param_name:
-                        index_shape = (
-                            init_tensor.shape
-                            if hasattr(init_tensor, "shape")
-                            else init_tensor.dims
-                        )
-                        break
-
-                # If not found, try fuzzy match (param name appears in init name)
-                if index_shape is None:
-                    for init_name, init_tensor in initializers.items():
-                        # Normalize full init name and check if var_param_name is in it
-                        normalized_full = (
-                            init_name.replace("/", "_")
-                            .replace(".", "_")
-                            .replace("-", "_")
-                            .lower()
-                        )
-                        if var_param_name in normalized_full:
-                            index_shape = (
-                                init_tensor.shape
-                                if hasattr(init_tensor, "shape")
-                                else init_tensor.dims
-                            )
-                            break
-
-            # Generate code based on what we know
-            if index_shape is not None:
-                # STATIC INDEX: Shape determined from initializers
-                if len(index_shape) == 0:
-                    # Scalar (0-D) - use .select() for dimension reduction
-                    return f"    {output_var} = {input_vars[0]}.select({axis}, int({indices_var}.item()))"
-                elif len(index_shape) == 1:
-                    # 1-D index (including (1,)) - use index_select (preserves dimension)
-                    # ONNX Gather with (1,) index returns (1,) output, not scalar
-                    return f"    {output_var} = torch.index_select({input_vars[0]}, {axis}, {indices_var}.long())"
-                else:
-                    # Higher dimensional - use torch.gather
-                    return f"    {output_var} = torch.gather({input_vars[0]}, {axis}, {indices_var}.long())"
-            else:
-                # DYNAMIC INDEX: Shape unknown - use safe fallback with runtime check
-                if indices_var.startswith("self."):
-                    # Unknown static parameter - check dimensionality at runtime
-                    # For scalar (0-D) tensors, use .select() which handles negative indices
-                    # For 1-D tensors, use index_select
-                    # Also check if input is 0-dim to avoid "select() cannot be applied to a 0-dim tensor"
-                    return f"    {output_var} = ({input_vars[0]}.select({axis}, int({indices_var}.item())) if {indices_var}.ndim == 0 else torch.index_select({input_vars[0]}, {axis}, {indices_var}.long())) if {input_vars[0]}.ndim > 0 else {input_vars[0]}"
-                else:
-                    # Dynamic intermediate variable
+            indices_const = _get_constant_value(indices_var, 1, layer, initializers)
+            if indices_const is not None:
+                if len(indices_const) == 1:
                     if axis == 0:
-                        return (
-                            f"    {output_var} = {input_vars[0]}[{indices_var}.long()]"
-                        )
+                        return f"    {output_var} = {input_vars[0]}[{indices_const[0]}]"
                     else:
-                        return f"    {output_var} = torch.gather({input_vars[0]}, {axis}, {indices_var}.long())"
+                        return f"    {output_var} = {input_vars[0]}.select({axis}, {indices_const[0]})"
+                else:
+                    indices_str = str(indices_const)
+                    return f"    {output_var} = torch.index_select({input_vars[0]}, {axis}, torch.tensor({indices_str}, dtype=torch.long))"
+
+            if indices_var.startswith("self.") and initializers:
+                if indices_var[5:] in [
+                    name.split("/")[-1].replace(".", "_").replace("-", "_").lower()
+                    for name in initializers.keys()
+                ]:
+                    onnx_name = layer.input_names[1]
+                    if onnx_name in initializers:
+                        index_shape = (
+                            initializers[onnx_name].dims
+                            if hasattr(initializers[onnx_name], "dims")
+                            else initializers[onnx_name].shape
+                        )
+                        if len(index_shape) == 0:
+                            return f"    {output_var} = {input_vars[0]}.select({axis}, int({indices_var}.item()))"
+                        elif len(index_shape) == 1:
+                            return f"    {output_var} = torch.index_select({input_vars[0]}, {axis}, {indices_var}.long())"
+                        else:
+                            return f"    {output_var} = torch.gather({input_vars[0]}, {axis}, {indices_var}.long())"
+
+            if indices_var.startswith("self."):
+                return f"    {output_var} = ({input_vars[0]}.select({axis}, int({indices_var}.item())) if {indices_var}.ndim == 0 else torch.index_select({input_vars[0]}, {axis}, {indices_var}.long())) if {input_vars[0]}.ndim > 0 else {input_vars[0]}"
+            else:
+                if axis == 0:
+                    return f"    {output_var} = {input_vars[0]}[{indices_var}.long()]"
+                else:
+                    return f"    {output_var} = torch.gather({input_vars[0]}, {axis}, {indices_var}.long())"
 
         elif layer.layer_type == "Cast":
             onnx_to_torch_dtype = {
@@ -407,21 +423,23 @@ def generate_operation_code(
             if layer.onnx_node.op_type == "Resize" and len(input_vars) >= 3:
                 # Resize node with scales in input[2] or sizes in input[3]
                 if len(input_vars) >= 4 and input_vars[3]:
-                    # Use sizes if available
+                    # Use sizes if available (get last 2 elements for spatial dimensions)
                     sizes_var = input_vars[3]
-                    code = f"    _upsample_size = {sizes_var}.int().tolist()[2:] if {sizes_var}.ndim > 0 and len({sizes_var}) > 2 else {sizes_var}.int().tolist()\n"
+                    code = f"    _upsample_size = {sizes_var}.int().tolist()[-2:]\n"
                     code += f"    {output_var} = F.interpolate({input_var}, size=_upsample_size, mode='{torch_mode}')"
                     return code
                 elif input_vars[2]:
-                    # Use scales
+                    # Use scales (get last 2 elements for spatial dimensions)
                     scales_var = input_vars[2]
-                    code = f"    _upsample_scales = {scales_var}.float().tolist()[2:] if {scales_var}.ndim > 0 and len({scales_var}) > 2 else {scales_var}.float().tolist()\n"
+                    code = (
+                        f"    _upsample_scales = {scales_var}.float().tolist()[-2:]\n"
+                    )
                     code += f"    {output_var} = F.interpolate({input_var}, scale_factor=_upsample_scales, mode='{torch_mode}')"
                     return code
             elif len(input_vars) >= 2:
-                # Upsample node with scales in input[1]
+                # Upsample node with scales in input[1] (get last 2 elements for spatial dimensions)
                 scales_var = input_vars[1]
-                code = f"    _upsample_scales = {scales_var}.float().tolist()[2:] if {scales_var}.ndim > 0 and len({scales_var}) > 2 else {scales_var}.float().tolist()\n"
+                code = f"    _upsample_scales = {scales_var}.float().tolist()[-2:]\n"
                 code += f"    {output_var} = F.interpolate({input_var}, scale_factor=_upsample_scales, mode='{torch_mode}')"
                 return code
 
@@ -456,24 +474,160 @@ def generate_operation_code(
         elif layer.layer_type == "Slice":
             data_var = input_vars[0]
 
-            # Check if starts/ends/axes/steps are inputs (new opset) or attributes (old opset)
+            starts_const = None
+            ends_const = None
+            axes_const = None
+            steps_const = None
+
             if len(input_vars) > 1:
-                # New opset: inputs
+                starts_const = _get_constant_value(
+                    input_vars[1], 1, layer, initializers
+                )
+                ends_const = (
+                    _get_constant_value(input_vars[2], 2, layer, initializers)
+                    if len(input_vars) > 2
+                    else None
+                )
+                axes_const = (
+                    _get_constant_value(input_vars[3], 3, layer, initializers)
+                    if len(input_vars) > 3
+                    else None
+                )
+                steps_const = (
+                    _get_constant_value(input_vars[4], 4, layer, initializers)
+                    if len(input_vars) > 4
+                    else None
+                )
+            else:
+                func_args = extract_functional_args(
+                    layer.onnx_node, initializers or {}, layer.layer_type
+                )
+                starts_const = func_args.get("starts")
+                ends_const = func_args.get("ends")
+                axes_const = func_args.get("axes")
+                steps_const = func_args.get("steps")
+
+            if starts_const is not None and ends_const is not None:
+                if axes_const is None and len(input_vars) > 3:
+                    pass
+                else:
+                    if axes_const is None:
+                        axes_const = list(range(len(starts_const)))
+                    if steps_const is None:
+                        steps_const = [1] * len(starts_const)
+
+                    slice_parts = [":" for _ in range(10)]
+                    for axis, start, end, step in zip(
+                        axes_const, starts_const, ends_const, steps_const
+                    ):
+                        end_str = "" if end >= 9223372036854775807 else str(end)
+                        start_str = "" if start == 0 else str(start)
+
+                        if step == 1:
+                            if start_str == "" and end_str == "":
+                                slice_parts[axis] = ":"
+                            elif start_str == "":
+                                slice_parts[axis] = f":{end_str}"
+                            elif end_str == "":
+                                slice_parts[axis] = f"{start_str}:"
+                            else:
+                                slice_parts[axis] = f"{start_str}:{end_str}"
+                        else:
+                            if start_str == "" and end_str == "":
+                                slice_parts[axis] = f"::{step}"
+                            elif start_str == "":
+                                slice_parts[axis] = f":{end_str}:{step}"
+                            elif end_str == "":
+                                slice_parts[axis] = f"{start_str}::{step}"
+                            else:
+                                slice_parts[axis] = f"{start_str}:{end_str}:{step}"
+
+                    max_axis = max(axes_const) if axes_const else 0
+                    slice_notation = ", ".join(slice_parts[: max_axis + 1])
+                    return f"    {output_var} = {data_var}[{slice_notation}]"
+
+            if len(input_vars) > 1:
                 starts_var = input_vars[1]
                 ends_var = input_vars[2] if len(input_vars) > 2 else "None"
                 axes_var = input_vars[3] if len(input_vars) > 3 else "None"
                 steps_var = input_vars[4] if len(input_vars) > 4 else "None"
 
-                if starts_var != "None":
+                axes_is_const = axes_const is not None if len(input_vars) > 3 else True
+                steps_is_const = (
+                    steps_const is not None if len(input_vars) > 4 else True
+                )
+
+                # Try to generate direct bracket notation with dynamic tensors
+                if axes_const is not None and steps_const is None:
+                    steps_const = [1] * len(axes_const)
+                    steps_is_const = True
+
+                if axes_is_const and steps_is_const and axes_const is not None:
+                    # We know which axes to slice, generate direct bracket notation
+                    # using tensor indexing for starts/ends
+                    slice_parts = [":" for _ in range(10)]
+                    for i, (axis, step) in enumerate(
+                        zip(
+                            axes_const,
+                            steps_const if steps_const else [1] * len(axes_const),
+                        )
+                    ):
+                        # Extract individual start/end values from tensors
+                        start_expr = (
+                            f"int({starts_var}[{i}].int().item())"
+                            if starts_var != "None"
+                            else "0"
+                        )
+                        end_expr = (
+                            f"int({ends_var}[{i}].int().item())"
+                            if ends_var != "None"
+                            else "None"
+                        )
+
+                        if step == 1:
+                            if start_expr == "0" and end_expr == "None":
+                                slice_parts[axis] = ":"
+                            elif start_expr == "0":
+                                slice_parts[axis] = f":{end_expr}"
+                            elif end_expr == "None":
+                                slice_parts[axis] = f"{start_expr}:"
+                            else:
+                                slice_parts[axis] = f"{start_expr}:{end_expr}"
+                        else:
+                            if start_expr == "0" and end_expr == "None":
+                                slice_parts[axis] = f"::{step}"
+                            elif start_expr == "0":
+                                slice_parts[axis] = f":{end_expr}:{step}"
+                            elif end_expr == "None":
+                                slice_parts[axis] = f"{start_expr}::{step}"
+                            else:
+                                slice_parts[axis] = f"{start_expr}:{end_expr}:{step}"
+
+                    max_axis = max(axes_const)
+                    slice_notation = ", ".join(slice_parts[: max_axis + 1])
+                    return f"    {output_var} = {data_var}[{slice_notation}]"
+
+                # Fall back to runtime conversion for complex cases
+                if starts_var != "None" and not starts_var.startswith("self."):
                     starts_var = f"{starts_var}.flatten().int().tolist()"
-                if ends_var != "None":
+                elif starts_var != "None":
+                    starts_var = f"{starts_var}.flatten().int().tolist()"
+
+                if ends_var != "None" and not ends_var.startswith("self."):
                     ends_var = f"{ends_var}.flatten().int().tolist()"
-                if axes_var != "None":
+                elif ends_var != "None":
+                    ends_var = f"{ends_var}.flatten().int().tolist()"
+
+                if axes_var != "None" and axes_const is not None:
+                    axes_var = str(axes_const)
+                elif axes_var != "None":
                     axes_var = f"{axes_var}.flatten().int().tolist()"
-                if steps_var != "None":
+
+                if steps_var != "None" and steps_const is not None:
+                    steps_var = str(steps_const)
+                elif steps_var != "None":
                     steps_var = f"{steps_var}.flatten().int().tolist()"
             else:
-                # Old opset: attributes
                 func_args = extract_functional_args(
                     layer.onnx_node, initializers or {}, layer.layer_type
                 )
@@ -482,7 +636,7 @@ def generate_operation_code(
                 axes_var = (
                     str(func_args.get("axes", None)) if "axes" in func_args else "None"
                 )
-                steps_var = "None"  # steps not in old opset
+                steps_var = "None"
 
             return f"    starts, ends, axes, steps = {starts_var}, {ends_var}, {axes_var}, {steps_var}\n    slices = [slice(None)] * {data_var}.ndim\n    if axes is None:\n        axes = list(range(len(starts)))\n    if steps is None:\n        steps = [1] * len(starts)\n    for axis, start, end, step in zip(axes, starts, ends, steps):\n        slices[axis] = slice(start, end, step)\n    {output_var} = {data_var}[tuple(slices)]"
 
@@ -521,15 +675,17 @@ def generate_operation_code(
                 layer.onnx_node, initializers or {}, layer.layer_type
             )
             value = func_args.get("value", 0.0)
+
+            shape_const = _get_constant_value(input_vars[0], 0, layer, initializers)
+            if shape_const is not None:
+                return f"    {output_var} = torch.full({tuple(shape_const)}, {value}, dtype=x.dtype)"
+
+            # Use tensor directly - torch.full accepts tensor for size in PyTorch
             shape_var = input_vars[0]
-
-            if shape_var.startswith("self."):
-                shape_var = f"tuple({shape_var}.flatten().int().tolist())"
-            else:
-                shape_var = f"tuple({shape_var}.flatten().int().tolist())"
-
-            # Use dtype from input tensor to support float64
-            return f"    {output_var} = torch.full({shape_var}, {value}, dtype=x.dtype)"
+            return (
+                f"    {output_var} = torch.full(tuple({shape_var}.int().tolist()), "
+                f"{value}, dtype=x.dtype)"
+            )
 
         elif layer.layer_type == "ReduceMean":
             func_args = extract_functional_args(
@@ -539,6 +695,14 @@ def generate_operation_code(
             keepdims = func_args.get("keepdims", True)
 
             if len(input_vars) > 1:
+                axes_const = _get_constant_value(input_vars[1], 1, layer, initializers)
+                if axes_const is not None:
+                    if isinstance(axes_const, (list, tuple)):
+                        axes_str = str(tuple(axes_const))
+                    else:
+                        axes_str = str(axes_const)
+                    return f"    {output_var} = torch.mean({input_vars[0]}, dim={axes_str}, keepdim={keepdims})"
+
                 axes_var = input_vars[1]
                 if axes_var.startswith("self."):
                     axes_var = f"tuple({axes_var}.int().tolist())"
@@ -562,6 +726,14 @@ def generate_operation_code(
             keepdims = func_args.get("keepdims", True)
 
             if len(input_vars) > 1:
+                axes_const = _get_constant_value(input_vars[1], 1, layer, initializers)
+                if axes_const is not None:
+                    if isinstance(axes_const, (list, tuple)):
+                        axes_str = str(tuple(axes_const))
+                    else:
+                        axes_str = str(axes_const)
+                    return f"    {output_var} = torch.sum({input_vars[0]}, dim={axes_str}, keepdim={keepdims})"
+
                 axes_var = input_vars[1]
                 if axes_var.startswith("self."):
                     axes_var = f"tuple({axes_var}.int().tolist())"
@@ -616,36 +788,69 @@ def generate_operation_code(
             shape_var = input_vars[1] if len(input_vars) > 1 else "None"
 
             if shape_var != "None":
-                # ONNX Expand uses -1 to mean "keep the existing dimension"
-                # Dimensions are aligned from the right (broadcast rules)
-                # Note: Sometimes ONNX Expand is used as a broadcasting hint, and actual
-                # broadcasting happens in subsequent operations (e.g., Add, Sub, Mul).
-                # If expand fails due to incompatible shapes, fall back to returning data as-is
-                # and let PyTorch's automatic broadcasting handle it in the next operation.
-                code = f"    _expand_shape = {shape_var}.int().tolist() if isinstance({shape_var}, torch.Tensor) else {shape_var}\n"
+                shape_const = _get_constant_value(shape_var, 1, layer, initializers)
+                if shape_const is not None:
+                    code = f"    _expand_shape = {tuple(shape_const)}\n"
+                else:
+                    code = f"    _expand_shape = {shape_var}.int().tolist()\n"
                 code += f"    _data_shape = list({data_var}.shape)\n"
-                code += f"    _expand_shape = [s if s != -1 else _data_shape[i - (len(_expand_shape) - len(_data_shape))] if i - (len(_expand_shape) - len(_data_shape)) >= 0 else 1 for i, s in enumerate(_expand_shape)]\n"
-                code += f"    try:\n"
-                code += (
-                    f"        {output_var} = {data_var}.expand(tuple(_expand_shape))\n"
-                )
-                code += f"    except RuntimeError:\n"
-                code += f"        {output_var} = {data_var}  # Fall back to original if expand fails"
+                code += f"    _expand_shape = [s if s != 1 else _data_shape[i - (len(_expand_shape) - len(_data_shape))] if i - (len(_expand_shape) - len(_data_shape)) >= 0 else 1 for i, s in enumerate(_expand_shape)]\n"
+                code += f"    {output_var} = {data_var}.expand(*_expand_shape)"
                 return code
             else:
                 return f"    {output_var} = {data_var}"
 
         elif layer.layer_type == "Range":
+            start_const = _get_constant_value(input_vars[0], 0, layer, initializers)
+            limit_const = (
+                _get_constant_value(input_vars[1], 1, layer, initializers)
+                if len(input_vars) > 1
+                else None
+            )
+            delta_const = (
+                _get_constant_value(input_vars[2], 2, layer, initializers)
+                if len(input_vars) > 2
+                else None
+            )
+
+            if start_const is not None and limit_const is not None:
+                start_val = (
+                    start_const[0] if isinstance(start_const, list) else start_const
+                )
+                limit_val = (
+                    limit_const[0] if isinstance(limit_const, list) else limit_const
+                )
+                delta_val = (
+                    delta_const[0]
+                    if delta_const and isinstance(delta_const, list)
+                    else (delta_const if delta_const else 1)
+                )
+                return f"    {output_var} = torch.arange({start_val}, {limit_val}, {delta_val})"
+
             start_var = input_vars[0]
             limit_var = input_vars[1] if len(input_vars) > 1 else "None"
             delta_var = input_vars[2] if len(input_vars) > 2 else "1"
 
-            if start_var.startswith("self."):
-                start_var = f"{start_var}.item()"
+            if start_const is not None:
+                start_val = (
+                    start_const[0] if isinstance(start_const, list) else start_const
+                )
+                start_var = str(start_val)
+            elif start_var.startswith("self."):
+                start_var = f"{start_var}.int().item()"
+            elif not start_var.startswith("self."):
+                pass
+
             if limit_var != "None" and limit_var.startswith("self."):
-                limit_var = f"{limit_var}.item()"
-            if delta_var != "1" and delta_var.startswith("self."):
-                delta_var = f"{delta_var}.item()"
+                limit_var = f"{limit_var}.int().item()"
+
+            if delta_const is not None:
+                delta_val = (
+                    delta_const[0] if isinstance(delta_const, list) else delta_const
+                )
+                delta_var = str(delta_val)
+            elif delta_var != "1" and delta_var.startswith("self."):
+                delta_var = f"{delta_var}.int().item()"
 
             return f"    {output_var} = torch.arange({start_var}, {limit_var}, {delta_var})"
 
@@ -739,7 +944,7 @@ def generate_forward_method(
     outputs: list[str],
     name_mapping: dict[str, str] | None = None,
     initializers: dict | None = None,
-) -> str:
+) -> tuple[str, set[str]]:
     """Generate forward() method with tensor flow.
 
     Creates forward pass code that:
@@ -763,7 +968,7 @@ def generate_forward_method(
     :param outputs: List of output tensor names
     :param name_mapping: Mapping from ONNX names to simplified parameter names
     :param initializers: ONNX initializers (needed for functional args extraction)
-    :return: Python code string for forward() method
+    :return: Tuple of (Python code string for forward() method, set of used parameter names)
     """
     lines: list[str] = [
         "def forward(self, x: torch.Tensor) -> torch.Tensor:",
@@ -779,6 +984,7 @@ def generate_forward_method(
 
     tensor_names: dict[str, str] = {}
     var_source_layers: dict[str, str] = {}
+    used_params: set[str] = set()
 
     for input_name in inputs:
         tensor_names[input_name] = "x"
@@ -789,6 +995,13 @@ def generate_forward_method(
         input_vars = get_input_variables(
             layer, tensor_names, name_mapping, layer_param_mapping
         )
+
+        # Track which parameters are used
+        for var in input_vars:
+            if var.startswith("self.") and not "." in var[5:]:
+                # Standalone parameter like self.param40
+                param_name = var[5:]
+                used_params.add(param_name)
 
         output_var_name = f"x{var_counter}"
         var_counter += 1
@@ -826,7 +1039,7 @@ def generate_forward_method(
     final_output_var = tensor_names[outputs[0]]
     lines.append(f"    return {final_output_var}")
 
-    return "\n".join(lines)
+    return "\n".join(lines), used_params
 
 
 def get_input_variables(

@@ -92,17 +92,18 @@ def generate_module_code(model_ir: ModelIR, class_name: str) -> str:
     initializer_names = list(model_ir.parameters.keys())
     name_mapping = sanitize_parameter_names(initializer_names)
 
-    init_method = generate_init_method(
-        model_ir.layers,
-        model_ir.parameters,
-        name_mapping,
-    )
-    forward_method = generate_forward_method(
+    forward_method, used_params = generate_forward_method(
         model_ir.layers,
         input_names,
         output_names,
         name_mapping,
         model_ir.parameters,
+    )
+    init_method = generate_init_method(
+        model_ir.layers,
+        model_ir.parameters,
+        name_mapping,
+        used_params,
     )
 
     code = f'''"""Generated PyTorch module from ONNX model."""
@@ -128,13 +129,15 @@ def build_state_dict(
     layers: list[LayerIR],
     initializers: dict[str, TensorProto],
     name_mapping: dict[str, str] | None = None,
+    used_params: set[str] | None = None,
 ) -> dict[str, torch.Tensor]:
     """Build PyTorch state_dict from ONNX initializers.
 
-    Converts ALL ONNX initializers to PyTorch tensors with both hierarchical
+    Converts ONNX initializers to PyTorch tensors with both hierarchical
     and simplified names as needed:
     - Layer parameters use hierarchical names (e.g., conv1.weight, bn1.bias)
     - Standalone parameters use simplified names (e.g., weight1, param1)
+    - Only includes standalone parameters that are actually used in forward()
 
     Example:
         ONNX initializers:
@@ -150,6 +153,7 @@ def build_state_dict(
     :param layers: List of LayerIR with parameter mappings
     :param initializers: ONNX initializers (TensorProto)
     :param name_mapping: Mapping from ONNX names to simplified names
+    :param used_params: Set of parameter names actually used in forward() method
     :return: PyTorch state_dict
     """
     from ..type_inference import is_parametric_layer
@@ -185,6 +189,10 @@ def build_state_dict(
             if onnx_name in covered_initializers:
                 continue
 
+            # Only include if parameter is actually used in forward()
+            if used_params is not None and simplified_name not in used_params:
+                continue
+
             onnx_tensor = initializers[onnx_name]
             numpy_array = numpy_helper.to_array(onnx_tensor)
             pytorch_tensor = torch.from_numpy(numpy_array.copy())
@@ -203,7 +211,7 @@ def generate_pytorch_module_with_state_dict(
 
     This is the main entry point for Stage 3 compilation, which produces:
     1. Python code for the PyTorch module with simplified parameter names
-    2. state_dict with ALL parameters (including functional operation parameters)
+    2. state_dict with only used parameters (excluding unused embedded constants)
 
     The class name is automatically sanitized from model_name and benchmark_name
     to ensure valid Python identifiers (e.g., "vgg16-7" + "vggnet16_2023" → "Vggnet162023Vgg167Model").
@@ -234,8 +242,21 @@ def generate_pytorch_module_with_state_dict(
     initializer_names = list(model_ir.parameters.keys())
     name_mapping = sanitize_parameter_names(initializer_names)
 
+    # Generate forward method first to get used parameters
+    input_names = [inp.name for inp in model_ir.inputs]
+    output_names = [out.name for out in model_ir.outputs]
+    forward_method, used_params = generate_forward_method(
+        model_ir.layers,
+        input_names,
+        output_names,
+        name_mapping,
+        model_ir.parameters,
+    )
+
     code = generate_module_code(model_ir, class_name)
 
-    state_dict = build_state_dict(model_ir.layers, model_ir.parameters, name_mapping)
+    state_dict = build_state_dict(
+        model_ir.layers, model_ir.parameters, name_mapping, used_params
+    )
 
     return code, state_dict
