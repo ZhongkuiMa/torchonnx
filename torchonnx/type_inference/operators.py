@@ -12,10 +12,13 @@ __all__ = [
     "get_functional_operator",
 ]
 
-from onnx import NodeProto
+from onnx import NodeProto, TensorProto, numpy_helper
 
 
 ONNX_TO_PYTORCH_TYPE: dict[str, str] = {
+    # Convolution - Note: Conv/ConvTranspose require weight shape inspection
+    # "Conv": "Conv2d",  # Determined dynamically based on weight shape
+    # "ConvTranspose": "ConvTranspose2d",  # Determined dynamically based on weight shape
     # Pooling
     "MaxPool": "MaxPool2d",
     "AveragePool": "AvgPool2d",
@@ -37,6 +40,8 @@ ONNX_TO_PYTORCH_TYPE: dict[str, str] = {
     # Upsampling
     "Resize": "Upsample",
     "Upsample": "Upsample",
+    # Shape operations
+    "Flatten": "Flatten",
 }
 
 
@@ -69,18 +74,51 @@ PARAMETRIC_LAYERS: set[str] = {
     "Softmax",
     "ELU",
     "GELU",
+    "Flatten",
 }
 
 
-def infer_pytorch_layer_type(node: NodeProto) -> str:
+def infer_pytorch_layer_type(
+    node: NodeProto, initializers: dict[str, TensorProto] | None = None
+) -> str:
     """Infer PyTorch layer type from ONNX node.
 
     :param node: ONNX node
+    :param initializers: Optional ONNX initializers for weight shape inspection
     :return: PyTorch layer type (e.g., "Conv2d", "Linear") or operation type
     """
     from .functional import is_functional_operation_with_args
 
-    if node.op_type in ONNX_TO_PYTORCH_TYPE:
+    # Handle Conv and ConvTranspose specially - need weight shape to determine 1D/2D
+    if node.op_type == "Conv" and initializers is not None:
+        # Get weight tensor from first input (after the data input)
+        if len(node.input) >= 2 and node.input[1] in initializers:
+            weight_tensor = initializers[node.input[1]]
+            weight_array = numpy_helper.to_array(weight_tensor)
+            weight_ndim = len(weight_array.shape)
+            # Conv1d: (out_channels, in_channels, kernel_size) = 3D
+            # Conv2d: (out_channels, in_channels, kernel_h, kernel_w) = 4D
+            if weight_ndim == 3:
+                return "Conv1d"
+            elif weight_ndim == 4:
+                return "Conv2d"
+        return "Conv2d"  # Default to Conv2d if we can't determine
+
+    elif node.op_type == "ConvTranspose" and initializers is not None:
+        # Get weight tensor from first input (after the data input)
+        if len(node.input) >= 2 and node.input[1] in initializers:
+            weight_tensor = initializers[node.input[1]]
+            weight_array = numpy_helper.to_array(weight_tensor)
+            weight_ndim = len(weight_array.shape)
+            # ConvTranspose1d: (in_channels, out_channels, kernel_size) = 3D
+            # ConvTranspose2d: (in_channels, out_channels, kernel_h, kernel_w) = 4D
+            if weight_ndim == 3:
+                return "ConvTranspose1d"
+            elif weight_ndim == 4:
+                return "ConvTranspose2d"
+        return "ConvTranspose2d"  # Default to ConvTranspose2d if we can't determine
+
+    elif node.op_type in ONNX_TO_PYTORCH_TYPE:
         return ONNX_TO_PYTORCH_TYPE[node.op_type]
     elif node.op_type in FUNCTIONAL_OPERATIONS:
         return node.op_type
@@ -90,7 +128,8 @@ def infer_pytorch_layer_type(node: NodeProto) -> str:
         from .functional import FUNCTIONAL_OPERATIONS_WITH_ARGS
 
         all_supported = sorted(
-            list(ONNX_TO_PYTORCH_TYPE.keys())
+            ["Conv", "ConvTranspose"]
+            + list(ONNX_TO_PYTORCH_TYPE.keys())
             + list(FUNCTIONAL_OPERATIONS.keys())
             + list(FUNCTIONAL_OPERATIONS_WITH_ARGS.keys())
         )

@@ -27,8 +27,8 @@ def identify_layer_parameters(
     """
     parameters = {}
 
-    if layer_type == "Conv2d":
-        # Conv2d parameters: weight (required), bias (optional)
+    if layer_type in ("Conv1d", "Conv2d"):
+        # Conv1d/Conv2d parameters: weight (required), bias (optional)
         # inputs[0] = input tensor
         # inputs[1] = weight
         # inputs[2] = bias (optional)
@@ -38,8 +38,8 @@ def identify_layer_parameters(
         if len(node.input) > 2 and node.input[2] in initializers:
             parameters["bias"] = node.input[2]
 
-    elif layer_type == "ConvTranspose2d":
-        # ConvTranspose2d has same parameter structure as Conv2d
+    elif layer_type in ("ConvTranspose1d", "ConvTranspose2d"):
+        # ConvTranspose1d/ConvTranspose2d has same parameter structure as Conv
         if len(node.input) > 1 and node.input[1] in initializers:
             parameters["weight"] = node.input[1]
 

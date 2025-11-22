@@ -106,7 +106,7 @@ def map_conv_args(
     torch_args = {
         "in_channels": weight_shape[1] * groups,
         "out_channels": weight_shape[0],
-        "kernel_size": kernel_shape,
+        "kernel_size": simplify_tuple(kernel_shape),
         "stride": simplify_tuple(strides),
         "padding": simplify_tuple(pads[: len(kernel_shape)]),
         "dilation": simplify_tuple(dilations),
@@ -224,7 +224,7 @@ def map_convtranspose_args(
     torch_args = {
         "in_channels": weight_shape[0],
         "out_channels": weight_shape[1] * groups,
-        "kernel_size": kernel_shape,
+        "kernel_size": simplify_tuple(kernel_shape),
         "stride": simplify_tuple(strides),
         "padding": simplify_tuple(pads[: len(kernel_shape)]),
         "output_padding": simplify_tuple(output_padding),
@@ -479,6 +479,24 @@ def map_globalavgpool_args(
     return {"output_size": (1, 1)}
 
 
+def map_flatten_args(
+    node: NodeProto,
+    initializers: dict[str, TensorProto],
+) -> dict[str, Any]:
+    """Map ONNX Flatten attributes to PyTorch Flatten arguments.
+
+    :param node: ONNX Flatten node
+    :param initializers: All ONNX initializers
+    :return: PyTorch Flatten constructor arguments
+    """
+    attrs = _extract_onnx_attributes(node)
+    axis = attrs.get("axis", 1)
+
+    return {
+        "start_dim": axis,
+    }
+
+
 _ARGUMENT_MAPPING_FUNCTIONS: dict[str, Any] = {
     "Conv": map_conv_args,
     "ConvTranspose": map_convtranspose_args,
@@ -496,6 +514,7 @@ _ARGUMENT_MAPPING_FUNCTIONS: dict[str, Any] = {
     "Sigmoid": map_sigmoid_args,
     "Tanh": map_tanh_args,
     "GlobalAveragePool": map_globalavgpool_args,
+    "Flatten": map_flatten_args,
 }
 
 
