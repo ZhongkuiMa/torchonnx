@@ -45,16 +45,18 @@ def generate_parameter_registrations(
     initializers: dict[str, TensorProto],
     name_mapping: dict[str, str],
     layers: list[LayerIR],
+    used_params: set[str] | None = None,
 ) -> list[str]:
     """Generate parameter registration code for ONNX initializers.
 
-    Only registers parameters that are NOT part of parametric layers.
+    Only registers parameters that are NOT part of parametric layers and are actually used in forward().
     Parametric layers (Conv2d, BatchNorm2d, etc.) have their own internal
     parameters that are automatically created by PyTorch.
 
     :param initializers: ONNX initializers
     :param name_mapping: Mapping from ONNX names to simplified names
     :param layers: List of LayerIR to check which parameters belong to layers
+    :param used_params: Set of parameter names actually used in forward() method
     :return: List of code lines for parameter registrations
     """
     from ..type_inference import is_parametric_layer
@@ -80,6 +82,10 @@ def generate_parameter_registrations(
         if onnx_name in layer_params:
             continue
 
+        # Only register if parameter is actually used in forward()
+        if used_params is not None and simplified_name not in used_params:
+            continue
+
         tensor_proto = initializers[onnx_name]
         numpy_array = numpy_helper.to_array(tensor_proto)
         shape = tuple(numpy_array.shape)
@@ -95,13 +101,14 @@ def generate_init_method(
     layers: list[LayerIR],
     initializers: dict[str, TensorProto] | None = None,
     name_mapping: dict[str, str] | None = None,
+    used_params: set[str] | None = None,
 ) -> str:
     """Generate __init__ method with clean layer names and parameter registrations.
 
     Creates initialization code that instantiates all layers as
     nn.Module attributes using their clean layer names.
     Skips functional operations which are inlined in forward().
-    Registers all ONNX initializers as nn.Parameter.
+    Registers only ONNX initializers that are actually used in forward().
 
     Example output:
         def __init__(self):
@@ -117,6 +124,7 @@ def generate_init_method(
     :param layers: List of LayerIR from Stage 1 compiler
     :param initializers: ONNX initializers dictionary
     :param name_mapping: Mapping from ONNX names to simplified names
+    :param used_params: Set of parameter names actually used in forward() method
     :return: Python code string for __init__ method
     """
     lines: list[str] = [
@@ -127,7 +135,7 @@ def generate_init_method(
 
     if initializers and name_mapping:
         param_lines = generate_parameter_registrations(
-            initializers, name_mapping, layers
+            initializers, name_mapping, layers, used_params
         )
         lines.extend(
             f"    {line}" if line and not line.startswith("#") else f"    {line}"
