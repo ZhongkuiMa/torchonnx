@@ -528,7 +528,8 @@ def generate_operation_code(
             else:
                 shape_var = f"tuple({shape_var}.flatten().int().tolist())"
 
-            return f"    {output_var} = torch.full({shape_var}, {value})"
+            # Use dtype from input tensor to support float64
+            return f"    {output_var} = torch.full({shape_var}, {value}, dtype=x.dtype)"
 
         elif layer.layer_type == "ReduceMean":
             func_args = extract_functional_args(
