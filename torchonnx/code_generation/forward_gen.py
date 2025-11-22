@@ -984,7 +984,6 @@ def generate_forward_method(
 
     tensor_names: dict[str, str] = {}
     var_source_layers: dict[str, str] = {}
-    used_params: set[str] = set()
 
     for input_name in inputs:
         tensor_names[input_name] = "x"
@@ -995,13 +994,6 @@ def generate_forward_method(
         input_vars = get_input_variables(
             layer, tensor_names, name_mapping, layer_param_mapping
         )
-
-        # Track which parameters are used
-        for var in input_vars:
-            if var.startswith("self.") and not "." in var[5:]:
-                # Standalone parameter like self.param40
-                param_name = var[5:]
-                used_params.add(param_name)
 
         output_var_name = f"x{var_counter}"
         var_counter += 1
@@ -1039,7 +1031,18 @@ def generate_forward_method(
     final_output_var = tensor_names[outputs[0]]
     lines.append(f"    return {final_output_var}")
 
-    return "\n".join(lines), used_params
+    # Extract used parameters by scanning generated code
+    import re
+
+    forward_code = "\n".join(lines)
+    used_params_from_code = set()
+    # Match standalone parameters: self.paramN, self.weightN, self.biasN, etc.
+    # But NOT hierarchical ones like self.conv1.weight
+    for match in re.finditer(r"self\.([a-z_]+\d*)\b", forward_code):
+        param_name = match.group(1)
+        used_params_from_code.add(param_name)
+
+    return forward_code, used_params_from_code
 
 
 def get_input_variables(

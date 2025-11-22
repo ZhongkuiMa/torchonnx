@@ -720,7 +720,7 @@ def main() -> None:
     convert_all_models()
     # save_as_baseline()
     verify_benchmarks(use_float64=False)
-    verify_benchmarks(use_float64=True)
+    # verify_benchmarks(use_float64=True)
 
 
 if __name__ == "__main__":

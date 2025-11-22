@@ -42,7 +42,9 @@ def indent(text: str, prefix: str) -> str:
     return "\n".join(prefix + line if line.strip() else line for line in lines)
 
 
-def generate_module_code(model_ir: ModelIR, class_name: str) -> str:
+def generate_module_code(
+    model_ir: ModelIR, class_name: str, used_params: set[str] | None = None
+) -> str:
     """Generate complete PyTorch module code with simplified parameter names.
 
     Combines all components into a complete, executable Python module:
@@ -82,6 +84,7 @@ def generate_module_code(model_ir: ModelIR, class_name: str) -> str:
 
     :param model_ir: Model intermediate representation
     :param class_name: Name for the generated PyTorch module class
+    :param used_params: Set of parameter names actually used in forward() method
     :return: Complete Python module code
     """
     imports = generate_imports(model_ir)
@@ -92,13 +95,23 @@ def generate_module_code(model_ir: ModelIR, class_name: str) -> str:
     initializer_names = list(model_ir.parameters.keys())
     name_mapping = sanitize_parameter_names(initializer_names)
 
-    forward_method, used_params = generate_forward_method(
-        model_ir.layers,
-        input_names,
-        output_names,
-        name_mapping,
-        model_ir.parameters,
-    )
+    if used_params is None:
+        forward_method, used_params = generate_forward_method(
+            model_ir.layers,
+            input_names,
+            output_names,
+            name_mapping,
+            model_ir.parameters,
+        )
+    else:
+        forward_method, _ = generate_forward_method(
+            model_ir.layers,
+            input_names,
+            output_names,
+            name_mapping,
+            model_ir.parameters,
+        )
+
     init_method = generate_init_method(
         model_ir.layers,
         model_ir.parameters,
@@ -253,7 +266,7 @@ def generate_pytorch_module_with_state_dict(
         model_ir.parameters,
     )
 
-    code = generate_module_code(model_ir, class_name)
+    code = generate_module_code(model_ir, class_name, used_params)
 
     state_dict = build_state_dict(
         model_ir.layers, model_ir.parameters, name_mapping, used_params
