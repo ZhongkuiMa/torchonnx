@@ -1,0 +1,25 @@
+"""Stage 1: ONNX Model Normalization.
+
+This module normalizes ONNX models to a canonical form suitable for IR construction.
+"""
+
+__docformat__ = "restructuredtext"
+__all__ = [
+    "load_and_preprocess_onnx_model",
+    "get_onnx_initializers",
+    "get_onnx_nodes",
+    "get_onnx_model_input_names",
+    "get_onnx_model_output_names",
+    "get_onnx_model_shapes",
+    "extract_onnx_opset_version",
+]
+
+from .normalize import load_and_preprocess_onnx_model
+from .utils import (
+    get_onnx_initializers,
+    get_onnx_nodes,
+    get_onnx_model_input_names,
+    get_onnx_model_output_names,
+    get_onnx_model_shapes,
+    extract_onnx_opset_version,
+)

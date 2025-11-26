@@ -6,12 +6,7 @@ matches the original vnncomp2024_benchmarks layout.
 """
 
 __docformat__ = "restructuredtext"
-__all__ = [
-    "copy_benchmarks",
-    "extract_inputs",
-    "calculate_outputs",
-    "build_all",
-]
+__all__ = ["copy_benchmarks", "extract_inputs", "calculate_outputs", "build_all"]
 
 import shutil
 import sys
