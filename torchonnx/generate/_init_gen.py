@@ -1,0 +1,174 @@
+"""Generate __init__ method from semantic IR.
+
+Creates parameter registration, buffer registration, and layer instantiation code.
+"""
+
+__docformat__ = "restructuredtext"
+__all__ = ["generate_init_method", "build_layer_name_mapping"]
+
+import torch
+
+from ._templates import INDENT, INIT_TEMPLATE
+from ._utils import format_argument
+from ..analyze import (
+    SemanticModelIR,
+    SemanticLayerIR,
+    ParameterInfo,
+    ConstantInfo,
+    OperatorClass,
+)
+
+# PyTorch dtype to string representation
+_DTYPE_TO_STR = {
+    torch.float32: "torch.float32",
+    torch.float64: "torch.float64",
+    torch.float16: "torch.float16",
+    torch.int64: "torch.int64",
+    torch.int32: "torch.int32",
+    torch.int16: "torch.int16",
+    torch.int8: "torch.int8",
+    torch.uint8: "torch.uint8",
+    torch.bool: "torch.bool",
+}
+
+
+def _extract_layer_base_type(pytorch_type: str) -> str:
+    """Extract base name from PyTorch type.
+
+    Examples:
+        'nn.Conv2d' -> 'conv2d'
+        'nn.ReLU' -> 'relu'
+        'nn.BatchNorm2d' -> 'batchnorm2d'
+        'nn.Flatten' -> 'flatten'
+
+    :param pytorch_type: Full PyTorch type string
+    :return: Lowercase base name with digits preserved
+    """
+    # Get the class name: "nn.Conv2d" -> "Conv2d"
+    name = pytorch_type.split(".")[-1]
+    # Keep the full name including digits
+    return name.lower()
+
+
+def build_layer_name_mapping(semantic_ir: SemanticModelIR) -> dict[str, str]:
+    """Build mapping from ONNX layer names to clean Python names.
+
+    Generates names like 'conv1', 'relu2', 'flatten1' based on layer type.
+
+    :param semantic_ir: Semantic IR from Stage 3
+    :return: Mapping of ONNX name -> clean Python name
+    """
+    layer_counters: dict[str, int] = {}
+    name_mapping: dict[str, str] = {}
+
+    for layer in semantic_ir.layers:
+        if layer.operator_class == OperatorClass.LAYER:
+            base_type = _extract_layer_base_type(layer.pytorch_type)
+            layer_counters[base_type] = layer_counters.get(base_type, 0) + 1
+            clean_name = f"{base_type}{layer_counters[base_type]}"
+            name_mapping[layer.name] = clean_name
+
+    return name_mapping
+
+
+def generate_init_method(
+    semantic_ir: SemanticModelIR,
+    layer_name_mapping: dict[str, str] | None = None,
+    used_constant_onnx_names: set[str] | None = None,
+) -> str:
+    """Generate __init__ method code.
+
+    Generates:
+    1. Parameter registration for standalone parameters
+    2. Buffer registration for standalone constants (only those used in forward)
+    3. Layer instantiation for LAYER operators
+
+    :param semantic_ir: Semantic IR from Stage 3
+    :param layer_name_mapping: Optional mapping of ONNX name -> clean name
+    :param used_constant_onnx_names: Set of constant ONNX names actually used in forward
+    :return: Complete __init__ method code
+    """
+    lines: list[str] = []
+
+    # Build layer name mapping if not provided
+    if layer_name_mapping is None:
+        layer_name_mapping = build_layer_name_mapping(semantic_ir)
+
+    # If no used_constants specified, assume all are used (backward compatibility)
+    if used_constant_onnx_names is None:
+        used_constant_onnx_names = {const.onnx_name for const in semantic_ir.constants}
+
+    # Build mapping of parameters/constants that belong to layers
+    layer_params: set[str] = set()
+    layer_consts: set[str] = set()
+
+    for layer in semantic_ir.layers:
+        if layer.operator_class == OperatorClass.LAYER:
+            for inp in layer.inputs:
+                if isinstance(inp, ParameterInfo):
+                    layer_params.add(inp.onnx_name)
+                elif isinstance(inp, ConstantInfo):
+                    layer_consts.add(inp.onnx_name)
+
+    # Register standalone parameters
+    for param in semantic_ir.parameters:
+        if param.onnx_name not in layer_params:
+            lines.append(
+                f"{INDENT}{INDENT}self.register_parameter("
+                f'"{param.code_name}", '
+                f"nn.Parameter(torch.empty({list(param.shape)})))"
+            )
+
+    # Register standalone buffers (constants) - only those actually used
+    for const in semantic_ir.constants:
+        if const.onnx_name not in layer_consts:
+            # Only register if used in forward method
+            if const.onnx_name in used_constant_onnx_names:
+                dtype_str = _DTYPE_TO_STR.get(const.dtype, "torch.float32")
+                lines.append(
+                    f"{INDENT}{INDENT}self.register_buffer("
+                    f'"{const.code_name}", '
+                    f"torch.empty({list(const.shape)}, dtype={dtype_str}))"
+                )
+
+    # Instantiate layers with clean names
+    for layer in semantic_ir.layers:
+        if layer.operator_class == OperatorClass.LAYER:
+            # Build argument string from layer.arguments
+            args_str = _format_layer_arguments(layer)
+
+            # Get clean layer name from mapping
+            clean_name = layer_name_mapping.get(layer.name, layer.name)
+
+            # Generate layer instantiation
+            lines.append(
+                f"{INDENT}{INDENT}self.{clean_name} = {layer.pytorch_type}({args_str})"
+            )
+
+    # Assemble init method
+    body = "\n".join(lines) if lines else f"{INDENT}{INDENT}pass"
+
+    return INIT_TEMPLATE.format(
+        indent=INDENT,
+        body=body,
+    )
+
+
+def _format_layer_arguments(layer: SemanticLayerIR) -> str:
+    """Format layer constructor arguments.
+
+    :param layer: Semantic layer IR
+    :return: Formatted argument string
+    """
+    args: list[str] = []
+
+    for arg in layer.arguments:
+        formatted_value = format_argument(arg.value)
+        if arg.pytorch_name:
+            # Named argument
+            args.append(f"{arg.pytorch_name}={formatted_value}")
+        else:
+            # Positional argument
+            args.append(formatted_value)
+
+    return ", ".join(args)
