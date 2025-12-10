@@ -122,6 +122,7 @@ def classify_inputs(
     code_name_counters: dict[str, int],
     variable_mapping: dict[str, str] | None = None,
     constant_mapping: dict[str, ConstantInfo] | None = None,
+    node: "NodeProto | None" = None,
 ) -> list[VariableInfo | ParameterInfo | ConstantInfo]:
     """Classify each input name into Variable, Parameter, or Constant.
 
@@ -135,6 +136,7 @@ def classify_inputs(
     :param code_name_counters: Mutable dict with keys 'var', 'param', 'const'
     :param variable_mapping: Optional mapping from onnx_name to code_name for variables
     :param constant_mapping: Optional mapping from onnx_name to ConstantInfo for constants
+    :param node: Optional ONNX NodeProto for extracting attributes (e.g., transB for Gemm)
     :return: Ordered list of typed input info objects
     """
     results = []
@@ -158,12 +160,23 @@ def classify_inputs(
                 torch_tensor = _tensor_proto_to_torch(tensor)
 
                 # Transpose Linear layer weights from ONNX format to PyTorch format
-                # ONNX Gemm (default transB=0): weight shape = (in_features, out_features)
+                # ONNX Gemm behavior depends on transB attribute:
+                #   - transB=0 (default): weight shape = (in_features, out_features) → needs transpose
+                #   - transB=1: weight shape = (out_features, in_features) → already correct
                 # PyTorch nn.Linear expects: weight shape = (out_features, in_features)
                 if (pytorch_type in ["Linear", "nn.Linear"] and
                     param_role == "weight" and
                     torch_tensor.ndim == 2):
-                    torch_tensor = torch_tensor.T
+                    # Check transB attribute from ONNX node
+                    trans_b = 0  # Default value
+                    if node is not None:
+                        from .attr_extractor import extract_onnx_attrs
+                        attrs = extract_onnx_attrs(node, initializers)
+                        trans_b = attrs.get("transB", 0)
+
+                    # Only transpose if transB=0 (ONNX weight is in_features × out_features)
+                    if trans_b == 0:
+                        torch_tensor = torch_tensor.T
 
                 results.append(
                     ParameterInfo(

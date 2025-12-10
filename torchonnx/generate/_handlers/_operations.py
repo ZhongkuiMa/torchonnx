@@ -887,6 +887,11 @@ def _handle_linear(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
 
     F.linear(input, weight, bias=None) performs a linear transformation.
 
+    ONNX Gemm behavior depends on transB attribute:
+      - transB=0 (default): weight shape = (in_features, out_features) → needs transpose
+      - transB=1: weight shape = (out_features, in_features) → already correct
+    PyTorch F.linear expects: weight shape = (out_features, in_features)
+
     :param layer: Semantic layer IR
     :return: Generated code line
     """
@@ -900,6 +905,17 @@ def _handle_linear(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
     data = inputs[0]
     weight = inputs[1]
     bias = inputs[2] if len(inputs) >= 3 else None
+
+    # Check transB attribute to determine if weight needs transpose
+    trans_b = 0  # Default value
+    for arg in layer.arguments:
+        if arg.pytorch_name == "transB":
+            trans_b = arg.value
+            break
+
+    # Only transpose if transB=0 (ONNX weight is in_features × out_features)
+    if trans_b == 0:
+        weight = f"{weight}.t()"
 
     if bias:
         return f"{output} = F.linear({data}, {weight}, {bias})"
