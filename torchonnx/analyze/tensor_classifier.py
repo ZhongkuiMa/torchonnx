@@ -157,6 +157,14 @@ def classify_inputs(
 
                 torch_tensor = _tensor_proto_to_torch(tensor)
 
+                # Transpose Linear layer weights from ONNX format to PyTorch format
+                # ONNX Gemm (default transB=0): weight shape = (in_features, out_features)
+                # PyTorch nn.Linear expects: weight shape = (out_features, in_features)
+                if (pytorch_type in ["Linear", "nn.Linear"] and
+                    param_role == "weight" and
+                    torch_tensor.ndim == 2):
+                    torch_tensor = torch_tensor.T
+
                 results.append(
                     ParameterInfo(
                         onnx_name=onnx_name,
