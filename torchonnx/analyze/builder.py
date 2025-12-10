@@ -111,6 +111,7 @@ def _build_semantic_layer_ir(
         code_name_counters=code_name_counters,
         variable_mapping=variable_mapping,
         constant_mapping=constant_mapping,
+        node=layer_ir.node,
     )
 
     # Classify outputs (all are variables)
