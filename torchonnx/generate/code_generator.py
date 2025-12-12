@@ -123,7 +123,7 @@ def dynamic_slice(data, starts, ends, axes=None, steps=None):
     else:
         axes = torch.as_tensor(axes, device=data.device)
     if steps is None:
-        steps = torch.ones_like(starts)
+        steps = torch.ones_like(starts, device=starts.device)
     else:
         steps = torch.as_tensor(steps, device=data.device)
 
@@ -137,7 +137,7 @@ def dynamic_slice(data, starts, ends, axes=None, steps=None):
 
     # Clip to bounds (ONNX semantics)
     # Use tensors for both min and max to avoid type mismatch
-    zero = torch.zeros_like(dim_sizes)
+    zero = torch.zeros_like(dim_sizes, device=dim_sizes.device)
     starts = torch.clamp(starts, min=zero, max=dim_sizes)
     ends   = torch.clamp(ends,   min=zero, max=dim_sizes)
 

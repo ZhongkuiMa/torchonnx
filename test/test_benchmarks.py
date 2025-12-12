@@ -65,14 +65,16 @@ def _run_pytorch_module(
     module_path: str,
     state_dict_path: str,
     inputs: np.ndarray,
-    use_float64: bool = False,
+    dtype: str = "float32",
+    device: str = "cpu",
 ) -> dict:
     """Run PyTorch module inference.
 
     :param module_path: Path to PyTorch module file
     :param state_dict_path: Path to state dict file
     :param inputs: input arrays
-    :param use_float64: Use float64 precision if True, float32 otherwise
+    :param dtype: Data type ("float32" or "float64")
+    :param device: Device to run on ("cpu" or "cuda")
     :return: Dictionary of output arrays
     """
     module_file = Path(module_path)
@@ -84,14 +86,21 @@ def _run_pytorch_module(
     model_class = getattr(module, class_name)
     model = model_class()
 
+    # Determine torch device
+    torch_device = torch.device(device if device == "cpu" or torch.cuda.is_available() else "cpu")
+
     state_dict = torch.load(state_dict_path, map_location="cpu", weights_only=True)
 
-    if use_float64:
+    if dtype == "float64":
         model = model.double()
         state_dict = {k: v.double() for k, v in state_dict.items()}
         input_tensor = torch.from_numpy(inputs.astype(np.float64)).double()
     else:
         input_tensor = torch.from_numpy(inputs).float()
+
+    # Move model and input to device
+    model = model.to(torch_device)
+    input_tensor = input_tensor.to(torch_device)
 
     model.load_state_dict(state_dict)
     model.eval()
@@ -99,12 +108,13 @@ def _run_pytorch_module(
     with torch.no_grad():
         output = model(input_tensor)
 
+    # Move output back to CPU for numpy conversion
     if isinstance(output, torch.Tensor):
-        return {"output": output.numpy()}
+        return {"output": output.cpu().numpy()}
     elif isinstance(output, tuple):
-        return {f"output_{i}": out.numpy() for i, out in enumerate(output)}
+        return {f"output_{i}": out.cpu().numpy() for i, out in enumerate(output)}
     elif isinstance(output, dict):
-        return {k: v.numpy() for k, v in output.items()}
+        return {k: v.cpu().numpy() for k, v in output.items()}
     else:
         return {"output": output}
 
@@ -451,7 +461,8 @@ def _verify_one_benchmark(
     benchmark_onnx_file: Path,
     data_file: Path,
     rel_path: Path,
-    use_float64: bool = False,
+    dtype: str = "float32",
+    device: str = "cpu",
 ) -> tuple[str, str | None, dict]:
     """Verify converted PyTorch module against original ONNX model.
 
@@ -460,7 +471,8 @@ def _verify_one_benchmark(
     :param benchmark_onnx_file: Path to original ONNX model file
     :param data_file: Path to test data npz file
     :param rel_path: Relative path for reporting
-    :param use_float64: Use float64 precision if True
+    :param dtype: Data type ("float32" or "float64")
+    :param device: Device to run on ("cpu" or "cuda")
     :return: Tuple of (status, error_message, statistics) where status is "OK", "NUMERICAL_MISMATCH", "SKIP", "ERROR"
     """
     if not result_file.exists():
@@ -489,7 +501,7 @@ def _verify_one_benchmark(
     for i, inputs in enumerate(test_inputs):
         try:
             result_outputs = _run_pytorch_module(
-                str(result_file), str(result_state_dict), inputs, use_float64
+                str(result_file), str(result_state_dict), inputs, dtype, device
             )
             benchmark_outputs = _run_onnx_model(str(benchmark_onnx_file), inputs)
 
@@ -597,7 +609,8 @@ def _print_verification_summary(
     counts: dict[str, int],
     max_abs_errors: list,
     max_rel_errors: list,
-    precision: str,
+    dtype: str,
+    device: str,
     print_errors: bool,
 ) -> None:
     """Print verification summary statistics.
@@ -606,11 +619,12 @@ def _print_verification_summary(
     :param counts: Dictionary of verification counts
     :param max_abs_errors: List of maximum absolute errors
     :param max_rel_errors: List of maximum relative errors
-    :param precision: Precision mode string
+    :param dtype: Data type ("float32" or "float64")
+    :param device: Device ("cpu" or "cuda")
     :param print_errors: Whether to print detailed error statistics
     """
     print("\n" + "=" * 70)
-    print(f"VERIFICATION SUMMARY ({precision})")
+    print(f"VERIFICATION SUMMARY ({dtype}, {device.upper()})")
     print("=" * 70)
     print(f"Total files: {len(benchmark_models)}")
     print(f"Passed: {counts['passed']}")
@@ -637,7 +651,8 @@ def verify_benchmarks(
     results_dir: str = "results/baselines",
     benchmarks_dir: str = "benchmarks",
     max_per_benchmark: int = 20,
-    use_float64: bool = False,
+    dtype: str = "float32",
+    device: str = "cpu",
     print_errors: bool = True,
 ) -> dict:
     """Verify converted PyTorch modules against original ONNX benchmarks.
@@ -645,7 +660,8 @@ def verify_benchmarks(
     :param results_dir: Directory containing converted PyTorch modules
     :param benchmarks_dir: Directory containing original ONNX benchmarks
     :param max_per_benchmark: Maximum models per benchmark to test
-    :param use_float64: Use float64 precision if True
+    :param dtype: Data type ("float32" or "float64")
+    :param device: Device to run on ("cpu" or "cuda")
     :param print_errors: Print detailed error statistics
     :return: Dictionary with verification results
     """
@@ -653,8 +669,12 @@ def verify_benchmarks(
     benchmarks_path = Path(benchmarks_dir)
     _validate_verification_directories(results_path, benchmarks_path)
 
-    precision = "float64" if use_float64 else "float32"
-    print(f"\nVerifying {results_dir}/ against {benchmarks_dir}/ ({precision})")
+    # Check CUDA availability
+    if device == "cuda" and not torch.cuda.is_available():
+        print(f"\nWarning: CUDA requested but not available. Falling back to CPU.")
+        device = "cpu"
+
+    print(f"\nVerifying {results_dir}/ against {benchmarks_dir}/ ({dtype}, {device.upper()})")
     print("=" * 70)
 
     benchmarks = find_benchmarks(benchmarks_dir)
@@ -679,7 +699,8 @@ def verify_benchmarks(
             benchmark_onnx_file,
             data_file,
             rel_path,
-            use_float64,
+            dtype,
+            device,
         )
 
         all_errors[str(rel_path)] = {
@@ -700,7 +721,8 @@ def verify_benchmarks(
         counts,
         max_abs_errors,
         max_rel_errors,
-        precision,
+        dtype,
+        device,
         print_errors,
     )
 
@@ -711,7 +733,8 @@ def verify_benchmarks(
         "skipped": counts["skipped"],
         "numerical_mismatches": counts["numerical_mismatches"],
         "all_errors": all_errors,
-        "precision": precision,
+        "dtype": dtype,
+        "device": device,
     }
 
 
@@ -719,8 +742,21 @@ def main() -> None:
     """Main entry point for script execution."""
     convert_all_models()
     save_as_baseline()
-    verify_benchmarks(use_float64=False)
-    verify_benchmarks(use_float64=True)
+
+    # Test all dtype and device combinations
+    dtypes = ["float32", "float64"]
+    devices = ["cpu"]
+
+    # Add CUDA if available
+    if torch.cuda.is_available():
+        devices.append("cuda")
+        print(f"\nCUDA is available. Testing on: {devices}")
+    else:
+        print(f"\nCUDA is not available. Testing on: {devices}")
+
+    for dtype in dtypes:
+        for device in devices:
+            verify_benchmarks(dtype=dtype, device=device)
 
 
 if __name__ == "__main__":

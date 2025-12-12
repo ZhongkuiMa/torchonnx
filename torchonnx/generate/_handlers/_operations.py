@@ -513,6 +513,7 @@ def _handle_constant_of_shape(
 
     # Process shape input
     shape_input = layer.inputs[0]
+
     if isinstance(shape_input, ConstantInfo):
         # Use literal shape (don't mark as used)
         shape_data = shape_input.data.tolist()
@@ -520,17 +521,20 @@ def _handle_constant_of_shape(
             shape_literal = tuple(shape_data)
         else:
             shape_literal = (shape_data,)
-        return f"{output} = torch.full({shape_literal}, {value}{dtype_str})"
+        # Add device parameter: use first parameter or buffer's device if available, else CPU
+        return f"{output} = torch.full({shape_literal}, {value}{dtype_str}, device=(next(iter(self.parameters())).device if len(list(self.parameters())) > 0 else next(iter(self.buffers()), torch.tensor(0)).device))"
     else:
         # Dynamic shape (mark as used)
         shape_code = _get_input_code_name_selective(shape_input, use_literal=False)
-        return f"{output} = torch.full({shape_code}.tolist(), {value}{dtype_str})"
+        # For dynamic shape, add device parameter
+        return f"{output} = torch.full({shape_code}.tolist(), {value}{dtype_str}, device=(next(iter(self.parameters())).device if len(list(self.parameters())) > 0 else next(iter(self.buffers()), torch.tensor(0)).device))"
 
 
 def _handle_arange(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Handle Range/arange operation.
 
     Uses literals for constant arguments to avoid buffer initialization.
+    Creates arange on the same device as the model.
 
     :param layer: Semantic layer IR
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
@@ -540,6 +544,9 @@ def _handle_arange(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
 
     # Extract literal values for constants (don't mark as used)
     args = []
+    has_runtime_value = False
+    runtime_arg = None
+
     for inp in layer.inputs:
         if isinstance(inp, ConstantInfo):
             # Use literal value directly (don't mark as used)
@@ -553,14 +560,22 @@ def _handle_arange(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
                 args.append(str(value))
         else:
             # Runtime value (mark as used if parameter)
-            args.append(_get_input_code_name_selective(inp, use_literal=False))
+            runtime_arg = _get_input_code_name_selective(inp, use_literal=False)
+            args.append(runtime_arg)
+            has_runtime_value = True
+
+    # Add device parameter: use runtime value's device if available, else model device
+    if has_runtime_value and runtime_arg:
+        device_expr = f", device={runtime_arg}.device"
+    else:
+        device_expr = f", device=(next(iter(self.parameters())).device if len(list(self.parameters())) > 0 else next(iter(self.buffers()), torch.tensor(0)).device)"
 
     if len(args) >= 3:
-        return f"{output} = torch.arange({args[0]}, {args[1]}, {args[2]})"
+        return f"{output} = torch.arange({args[0]}, {args[1]}, {args[2]}{device_expr})"
     elif len(args) == 2:
-        return f"{output} = torch.arange({args[0]}, {args[1]})"
+        return f"{output} = torch.arange({args[0]}, {args[1]}{device_expr})"
     else:
-        return f"{output} = torch.arange({args[0]})"
+        return f"{output} = torch.arange({args[0]}{device_expr})"
 
 
 def _handle_slice(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
@@ -725,7 +740,7 @@ def _handle_cast(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> 
 def _handle_shape(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Handle Shape operation.
 
-    ONNX Shape returns int64 tensor, so we must specify dtype.
+    ONNX Shape returns int64 tensor on the same device as the input.
 
     :param layer: Semantic layer IR
     :return: Generated code line
@@ -733,7 +748,7 @@ def _handle_shape(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) ->
     inputs = _get_input_code_names(layer)
     output = layer.outputs[0].code_name
 
-    return f"{output} = torch.tensor({inputs[0]}.shape, dtype=torch.int64)"
+    return f"{output} = torch.tensor({inputs[0]}.shape, dtype=torch.int64, device={inputs[0]}.device)"
 
 
 def _handle_expand(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:

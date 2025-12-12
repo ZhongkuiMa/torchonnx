@@ -80,7 +80,8 @@ def _get_input_code_name(
 def _handle_add(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Handle Add operator (torch.add or +).
 
-    Uses literals for scalar constants and small 1D vectors (≤10 elements).
+    Uses literals for scalar constants only. Vectors are registered as buffers
+    for proper device handling in CUDA.
 
     :param layer: Semantic layer IR
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
@@ -90,10 +91,10 @@ def _handle_add(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> s
         raise ValueError(f"Add requires 2 inputs, got {len(layer.inputs)}")
 
     input1 = _get_input_code_name(
-        layer.inputs[0], use_literal_for_scalar=True, use_literal_for_small_vector=True
+        layer.inputs[0], use_literal_for_scalar=True, use_literal_for_small_vector=False
     )
     input2 = _get_input_code_name(
-        layer.inputs[1], use_literal_for_scalar=True, use_literal_for_small_vector=True
+        layer.inputs[1], use_literal_for_scalar=True, use_literal_for_small_vector=False
     )
     output = layer.outputs[0].code_name
 
@@ -112,17 +113,18 @@ def _handle_add(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> s
 def _handle_sub(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Handle Sub operator.
 
-    Uses literals for scalar constants and small 1D vectors (≤10 elements).
+    Uses literals for scalar constants only. Vectors are registered as buffers
+    for proper device handling in CUDA.
 
     :param layer: Semantic layer IR
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
     :return: Generated code line
     """
     input1 = _get_input_code_name(
-        layer.inputs[0], use_literal_for_scalar=True, use_literal_for_small_vector=True
+        layer.inputs[0], use_literal_for_scalar=True, use_literal_for_small_vector=False
     )
     input2 = _get_input_code_name(
-        layer.inputs[1], use_literal_for_scalar=True, use_literal_for_small_vector=True
+        layer.inputs[1], use_literal_for_scalar=True, use_literal_for_small_vector=False
     )
     output = layer.outputs[0].code_name
     return f"{output} = {input1} - {input2}"
@@ -131,17 +133,18 @@ def _handle_sub(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> s
 def _handle_mul(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Handle Mul operator.
 
-    Uses literals for scalar constants and small 1D vectors (≤10 elements).
+    Uses literals for scalar constants only. Vectors are registered as buffers
+    for proper device handling in CUDA.
 
     :param layer: Semantic layer IR
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
     :return: Generated code line
     """
     input1 = _get_input_code_name(
-        layer.inputs[0], use_literal_for_scalar=True, use_literal_for_small_vector=True
+        layer.inputs[0], use_literal_for_scalar=True, use_literal_for_small_vector=False
     )
     input2 = _get_input_code_name(
-        layer.inputs[1], use_literal_for_scalar=True, use_literal_for_small_vector=True
+        layer.inputs[1], use_literal_for_scalar=True, use_literal_for_small_vector=False
     )
     output = layer.outputs[0].code_name
     return f"{output} = {input1} * {input2}"
@@ -150,17 +153,18 @@ def _handle_mul(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> s
 def _handle_div(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Handle Div operator.
 
-    Uses literals for scalar constants and small 1D vectors (≤10 elements).
+    Uses literals for scalar constants only. Vectors are registered as buffers
+    for proper device handling in CUDA.
 
     :param layer: Semantic layer IR
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
     :return: Generated code line
     """
     input1 = _get_input_code_name(
-        layer.inputs[0], use_literal_for_scalar=True, use_literal_for_small_vector=True
+        layer.inputs[0], use_literal_for_scalar=True, use_literal_for_small_vector=False
     )
     input2 = _get_input_code_name(
-        layer.inputs[1], use_literal_for_scalar=True, use_literal_for_small_vector=True
+        layer.inputs[1], use_literal_for_scalar=True, use_literal_for_small_vector=False
     )
     output = layer.outputs[0].code_name
     return f"{output} = {input1} / {input2}"
@@ -184,17 +188,18 @@ def _handle_matmul(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
 def _handle_pow(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Handle Pow operator.
 
-    Uses literals for scalar constants and small 1D vectors (≤10 elements).
+    Uses literals for scalar constants only. Vectors are registered as buffers
+    for proper device handling in CUDA.
 
     :param layer: Semantic layer IR
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
     :return: Generated code line
     """
     input1 = _get_input_code_name(
-        layer.inputs[0], use_literal_for_scalar=True, use_literal_for_small_vector=True
+        layer.inputs[0], use_literal_for_scalar=True, use_literal_for_small_vector=False
     )
     input2 = _get_input_code_name(
-        layer.inputs[1], use_literal_for_scalar=True, use_literal_for_small_vector=True
+        layer.inputs[1], use_literal_for_scalar=True, use_literal_for_small_vector=False
     )
     output = layer.outputs[0].code_name
     return f"{output} = {input1} ** {input2}"
