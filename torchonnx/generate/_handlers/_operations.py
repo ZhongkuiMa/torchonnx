@@ -102,7 +102,9 @@ def _format_args_with_inputs(
 def _handle_reshape(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Handle reshape operation.
 
-    Generates: output = input.reshape(shape) with literal if shape is constant.
+    Detects common patterns:
+    - Flatten pattern (batch, -1): generates x.flatten(1) for batch-aware flattening
+    - Other reshapes: generates x.reshape(shape) with batch dimension preserved
 
     :param layer: Semantic layer IR
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
@@ -121,11 +123,22 @@ def _handle_reshape(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) 
     if isinstance(shape_input, ConstantInfo):
         shape_data = shape_input.data
         shape_list = shape_data.tolist()
+        # Convert to list for modification
+        if not isinstance(shape_list, list):
+            shape_list = [shape_list]
+
+        # Detect flatten pattern: reshape(batch_size, -1) or reshape(1, -1)
+        # This is common before fully connected layers in CNNs
+        # Use flatten(1) which is batch-aware: flattens from dim 1 onwards
+        if len(shape_list) == 2 and shape_list[1] == -1:
+            return f"{output} = {data}.flatten(1)"
+
+        # For other reshapes, make batch-aware by replacing first dim with -1
+        # ONNX models are often traced with batch_size=1, but we want dynamic batch
+        if len(shape_list) >= 1:
+            shape_list[0] = -1
         # Convert to tuple for cleaner code
-        if isinstance(shape_list, list):
-            shape_literal = tuple(shape_list)
-        else:
-            shape_literal = (shape_list,)
+        shape_literal = tuple(shape_list)
         return f"{output} = {data}.reshape{shape_literal}"
 
     # Dynamic shape - use tolist() at runtime (mark as used)
