@@ -73,9 +73,13 @@ def sanitize_identifier(name: str) -> str:
     # Replace invalid characters with underscores
     sanitized = "".join(c if c.isalnum() or c == "_" else "_" for c in name)
 
-    # Ensure it doesn't start with a digit
-    if sanitized[0].isdigit():
-        sanitized = "_" + sanitized
+    # Remove leading digits (Python identifiers can't start with digits)
+    while sanitized and sanitized[0].isdigit():
+        sanitized = sanitized[1:]
+
+    # If all characters were digits, use fallback
+    if not sanitized:
+        sanitized = "Model"
 
     # Ensure it's not a Python keyword
     if keyword.iskeyword(sanitized):
@@ -135,7 +139,14 @@ def to_camel_case(name: str) -> str:
     words = cleaned.split()
     camel = "".join(word.capitalize() for word in words if word)
 
-    # Ensure it starts with uppercase
+    # Ensure it starts with uppercase letter (not digit)
+    if not camel:
+        return "Model"
+
+    # Remove leading digits
+    while camel and camel[0].isdigit():
+        camel = camel[1:]
+
     if not camel:
         return "Model"
 
