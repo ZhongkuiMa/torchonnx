@@ -344,7 +344,8 @@ def dynamic_expand(data, target_shape):
 
     # Convert ONNX semantics to PyTorch
     # For each dimension in target_shape:
-    # - If target[i] == 1 and data has a non-1 dimension at that position, keep data's dim (-1)
+    # - If target[i] == 1 and data has a non-1 dim at that position,
+    #   keep data's dim (-1)
     # - Otherwise, use target[i]
     converted_shape = []
     for i in range(len(target_shape)):

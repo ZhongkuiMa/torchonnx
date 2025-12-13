@@ -67,11 +67,17 @@ class TorchONNX:
         code, state_dict = generate_pytorch_module(optimized_ir, camel_class_name)
 
         # Stage 6: Optimize generated code and filter state_dict
-        from .simplify import optimize_generated_code
+        from .simplify import optimize_generated_code, add_file_header, format_code
 
         optimized_code, state_dict = optimize_generated_code(
             code, state_dict, enable=True
         )
+
+        # Stage 6b: Apply Black-compatible formatting
+        formatted_code = format_code(optimized_code)
+
+        # Stage 6c: Add file header with metadata
+        final_code = add_file_header(formatted_code, camel_class_name, onnx_path)
 
         # Save outputs
         if target_py_path is None:
@@ -79,10 +85,7 @@ class TorchONNX:
         if target_pth_path is None:
             target_pth_path = onnx_path.replace(".onnx", ".pth")
 
-        # Add __all__ to generated code
-        code_with_all = f"__all__ = ['{camel_class_name}']\n\n{optimized_code}"
-
-        Path(target_py_path).write_text(code_with_all)
+        Path(target_py_path).write_text(final_code)
         torch.save(state_dict, target_pth_path)
 
         if self.verbose:

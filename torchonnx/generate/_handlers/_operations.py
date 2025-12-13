@@ -514,6 +514,12 @@ def _handle_constant_of_shape(
     # Process shape input
     shape_input = layer.inputs[0]
 
+    # Get device from first forward input
+    from .._forward_gen import get_forward_gen_context
+
+    ctx = get_forward_gen_context()
+    device_expr = f"{ctx.first_input_name}.device" if ctx and ctx.first_input_name else "'cpu'"
+
     if isinstance(shape_input, ConstantInfo):
         # Use literal shape (don't mark as used)
         shape_data = shape_input.data.tolist()
@@ -521,13 +527,11 @@ def _handle_constant_of_shape(
             shape_literal = tuple(shape_data)
         else:
             shape_literal = (shape_data,)
-        # Add device parameter: use first parameter or buffer's device if available, else CPU
-        return f"{output} = torch.full({shape_literal}, {value}{dtype_str}, device=(next(iter(self.parameters())).device if len(list(self.parameters())) > 0 else next(iter(self.buffers()), torch.tensor(0)).device))"
+        return f"{output} = torch.full({shape_literal}, {value}{dtype_str}, device={device_expr})"
     else:
         # Dynamic shape (mark as used)
         shape_code = _get_input_code_name_selective(shape_input, use_literal=False)
-        # For dynamic shape, add device parameter
-        return f"{output} = torch.full({shape_code}.tolist(), {value}{dtype_str}, device=(next(iter(self.parameters())).device if len(list(self.parameters())) > 0 else next(iter(self.buffers()), torch.tensor(0)).device))"
+        return f"{output} = torch.full({shape_code}.tolist(), {value}{dtype_str}, device={device_expr})"
 
 
 def _handle_arange(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
@@ -564,11 +568,15 @@ def _handle_arange(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
             args.append(runtime_arg)
             has_runtime_value = True
 
-    # Add device parameter: use runtime value's device if available, else model device
+    # Add device parameter: use runtime value's device if available, else first input's device
+    from .._forward_gen import get_forward_gen_context
+
     if has_runtime_value and runtime_arg:
         device_expr = f", device={runtime_arg}.device"
     else:
-        device_expr = f", device=(next(iter(self.parameters())).device if len(list(self.parameters())) > 0 else next(iter(self.buffers()), torch.tensor(0)).device)"
+        ctx = get_forward_gen_context()
+        device_name = f"{ctx.first_input_name}.device" if ctx and ctx.first_input_name else "'cpu'"
+        device_expr = f", device={device_name}"
 
     if len(args) >= 3:
         return f"{output} = torch.arange({args[0]}, {args[1]}, {args[2]}{device_expr})"

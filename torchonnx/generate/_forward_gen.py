@@ -31,6 +31,8 @@ class ForwardGenContext:
         self.needs_dynamic_slice: bool = False
         self.needs_scatter_nd: bool = False
         self.needs_dynamic_expand: bool = False
+        # First input name for device inference (e.g., "x0")
+        self.first_input_name: str | None = None
 
     def mark_constant_used(self, constant_name: str) -> None:
         """Mark a constant as used in forward method."""
@@ -88,6 +90,7 @@ def generate_forward_method(
     _forward_gen_context = ForwardGenContext()
 
     # Build mapping from onnx_name to code_name for inputs
+    # Also track the first input for device inference
     input_code_names: list[str] = []
     for input_name in semantic_ir.input_names:
         # Find the variable with this onnx_name
@@ -100,6 +103,10 @@ def generate_forward_method(
         else:
             # Fallback (shouldn't happen with valid IR)
             input_code_names.append(input_name)
+
+    # Store first input name for device inference in handlers
+    if input_code_names:
+        _forward_gen_context.first_input_name = input_code_names[0]
 
     # Build mapping from onnx_name to code_name for outputs
     output_code_names: list[str] = []
