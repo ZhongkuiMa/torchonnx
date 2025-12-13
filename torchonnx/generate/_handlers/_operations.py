@@ -583,12 +583,15 @@ def _handle_slice(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) ->
 
     ONNX Slice: data[starts:ends:steps] along axes
     When all slice parameters are constants, generates Python literal slicing.
+    When axes/steps are constant but starts/ends are dynamic, uses torch.narrow.
     Otherwise uses dynamic_slice helper for runtime slicing.
 
     :param layer: Semantic layer IR
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
     :return: Generated code line
     """
+    from .._forward_gen import get_forward_gen_context
+
     output = layer.outputs[0].code_name
 
     # ONNX Slice inputs: data, starts, ends, [axes], [steps]
@@ -660,7 +663,49 @@ def _handle_slice(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) ->
             slice_expr = ", ".join(slice_strs)
             return f"{output} = {data}[{slice_expr}]"
 
+        # Check if we can use torch.narrow for single-axis slicing with step=1
+        # This avoids the dynamic_slice helper when axes and steps are constant
+        # NOTE: We only use narrow when BOTH starts and ends are constants, because
+        # ONNX Slice semantics include bounds clipping that torch.narrow doesn't handle.
+        # Dynamic indices could be out of bounds which torch.narrow can't handle.
+        axes_constant = axes_input is None or isinstance(axes_input, ConstantInfo)
+        steps_constant = steps_input is None or isinstance(steps_input, ConstantInfo)
+        starts_constant = isinstance(starts_input, ConstantInfo)
+        ends_constant = isinstance(ends_input, ConstantInfo)
+
+        if axes_constant and steps_constant and starts_constant and ends_constant:
+            # Get axes and steps values
+            if axes_input is None:
+                axes_list = [0]  # Default to axis 0
+            else:
+                axes_list = axes_input.data.tolist()
+                if not isinstance(axes_list, list):
+                    axes_list = [axes_list]
+
+            if steps_input is None:
+                steps_list = [1] * len(axes_list)
+            else:
+                steps_list = steps_input.data.tolist()
+                if not isinstance(steps_list, list):
+                    steps_list = [steps_list]
+
+            # Use torch.narrow for single-axis slicing with step=1 and constant bounds
+            if len(axes_list) == 1 and steps_list[0] == 1:
+                axis = axes_list[0]
+                start_val = int(starts_input.data.item())
+                end_val = int(ends_input.data.item())
+                length = end_val - start_val
+
+                # Only use narrow if we have valid positive length
+                if length > 0:
+                    return f"{output} = {data}.narrow({axis}, {start_val}, {length})"
+
         # Fall back to dynamic slice - use literals for constants
+        # Mark that we need the dynamic_slice helper
+        ctx = get_forward_gen_context()
+        if ctx:
+            ctx.needs_dynamic_slice = True
+
         # For constant inputs, extract literal values (don't mark as used)
         # Note: INT64_MAX (9223372036854775807) means "until the end", convert to -1
         INT64_MAX = 9223372036854775807
@@ -755,12 +800,15 @@ def _handle_expand(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
     """Handle expand operation.
 
     If we know the output shape from ONNX shape inference, simply use reshape.
-    Otherwise, use dynamic conversion with ONNX->PyTorch semantics (1 -> -1).
+    For constant shapes, use inline .expand() with ONNX->PyTorch semantics conversion.
+    Otherwise, use dynamic_expand helper for runtime shapes.
 
     :param layer: Semantic layer IR
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
     :return: Generated code line
     """
+    from .._forward_gen import get_forward_gen_context
+
     output = layer.outputs[0].code_name
 
     if len(layer.inputs) < 2:
@@ -779,15 +827,49 @@ def _handle_expand(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
     if output_shape and all(isinstance(dim, int) for dim in output_shape):
         return f"{output} = {data}.reshape({tuple(output_shape)})"
 
-    # Otherwise, use dynamic_expand helper to handle dimension mismatches and ONNX semantics
+    # For constant shapes, try to use inline .expand() with ONNX semantics conversion
     if isinstance(shape_input, ConstantInfo):
-        # Constant shape - use literal (don't mark as used)
         target_shape = shape_input.data.tolist()
+        if not isinstance(target_shape, list):
+            target_shape = [target_shape]
+
+        # Get data shape info if available
+        data_input = layer.inputs[0]
+        data_shape = None
+        if hasattr(data_input, 'shape') and data_input.shape:
+            data_shape = data_input.shape
+
+        # If we know both shapes, we can do the ONNX->PyTorch conversion at codegen time
+        if data_shape and all(isinstance(d, int) for d in data_shape):
+            # Convert ONNX semantics: if target[i]==1 and data[i]!=1, use -1 (keep dim)
+            converted = []
+            data_ndim = len(data_shape)
+            target_ndim = len(target_shape)
+            for i, t in enumerate(target_shape):
+                if i < target_ndim - data_ndim:
+                    # New dimension from target
+                    converted.append(int(t))
+                else:
+                    # Existing dimension
+                    data_idx = i - (target_ndim - data_ndim)
+                    if t == 1 and data_shape[data_idx] != 1:
+                        converted.append(-1)  # Keep original dimension
+                    else:
+                        converted.append(int(t))
+            return f"{output} = {data}.expand({converted})"
+
+        # Data shape unknown - use helper
+        ctx = get_forward_gen_context()
+        if ctx:
+            ctx.needs_dynamic_expand = True
         return f"{output} = dynamic_expand({data}, {target_shape})"
-    else:
-        # Runtime shape - mark as used
-        shape_code = _get_input_code_name_selective(shape_input, use_literal=False)
-        return f"{output} = dynamic_expand({data}, {shape_code})"
+
+    # Runtime shape - use helper
+    ctx = get_forward_gen_context()
+    if ctx:
+        ctx.needs_dynamic_expand = True
+    shape_code = _get_input_code_name_selective(shape_input, use_literal=False)
+    return f"{output} = dynamic_expand({data}, {shape_code})"
 
 
 def _handle_split(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
@@ -843,12 +925,20 @@ def _handle_scatter_nd(
     """Handle ScatterND operation.
 
     ScatterND requires a helper function as there's no direct PyTorch equivalent.
+    The helper wraps torch.index_put_ with proper index format conversion.
 
     :param layer: Semantic layer IR
     :return: Generated code line
     """
+    from .._forward_gen import get_forward_gen_context
+
     inputs = _get_input_code_names(layer)
     output = layer.outputs[0].code_name
+
+    # Mark that we need the scatter_nd helper
+    ctx = get_forward_gen_context()
+    if ctx:
+        ctx.needs_scatter_nd = True
 
     # ScatterND(data, indices, updates) - no direct PyTorch equivalent
     if len(inputs) >= 3:

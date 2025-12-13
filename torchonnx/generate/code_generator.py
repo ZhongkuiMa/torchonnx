@@ -8,7 +8,7 @@ __all__ = ["generate_pytorch_module"]
 
 import torch
 
-from ._forward_gen import generate_forward_method
+from ._forward_gen import generate_forward_method, get_forward_gen_context, ForwardGenContext
 from ._init_gen import generate_init_method, build_layer_name_mapping
 from ._state_dict_gen import build_state_dict
 from ._templates import MODULE_TEMPLATE
@@ -42,11 +42,13 @@ def generate_pytorch_module(
     # Generate imports
     imports = _generate_imports(semantic_ir)
 
-    # Generate helper functions (for Slice, ScatterND, etc.)
-    helpers = _generate_helpers(semantic_ir)
+    # Generate forward() method FIRST - this populates the context with helper usage info
+    forward_method, forward_context = _generate_forward_with_context(
+        semantic_ir, layer_name_mapping
+    )
 
-    # Generate forward() method
-    forward_method = generate_forward_method(semantic_ir, layer_name_mapping)
+    # Generate helper functions based on actual usage (not just op type existence)
+    helpers = _generate_helpers_from_context(forward_context)
 
     # Generate __init__ method with all constants (Stage 6 will remove unused ones)
     init_method = generate_init_method(semantic_ir, layer_name_mapping)
@@ -64,6 +66,123 @@ def generate_pytorch_module(
     state_dict = build_state_dict(semantic_ir, layer_name_mapping)
 
     return module_code, state_dict
+
+
+def _generate_forward_with_context(
+    semantic_ir: SemanticModelIR,
+    layer_name_mapping: dict[str, str],
+) -> tuple[str, ForwardGenContext]:
+    """Generate forward method and return the context with helper usage info.
+
+    :param semantic_ir: Semantic IR
+    :param layer_name_mapping: Layer name mapping
+    :return: Tuple of (forward_method_code, context)
+    """
+    # Generate forward method
+    forward_method = generate_forward_method(semantic_ir, layer_name_mapping)
+
+    # Analyze the IR to determine which helpers are actually needed
+    # (this mirrors the logic in the handlers but is more reliable since
+    # the context is cleaned up after forward generation)
+    helper_context = _get_helper_needs_from_ir(semantic_ir)
+
+    return forward_method, helper_context
+
+
+def _get_helper_needs_from_ir(semantic_ir: SemanticModelIR) -> ForwardGenContext:
+    """Determine helper needs by analyzing the IR.
+
+    This is a fallback that analyzes the IR directly to determine which
+    helpers are actually needed after code generation optimizations.
+
+    :param semantic_ir: Semantic IR
+    :return: Context with helper needs flags
+    """
+    from ._forward_gen import ForwardGenContext
+    from ..analyze import ConstantInfo
+
+    ctx = ForwardGenContext()
+
+    for layer in semantic_ir.layers:
+        if layer.onnx_op_type == "Slice":
+            # Check if this slice can be handled without helper
+            if len(layer.inputs) >= 3:
+                starts_input = layer.inputs[1]
+                ends_input = layer.inputs[2]
+                axes_input = layer.inputs[3] if len(layer.inputs) > 3 else None
+                steps_input = layer.inputs[4] if len(layer.inputs) > 4 else None
+
+                # All constants -> native slicing, no helper needed
+                all_constants = (
+                    isinstance(starts_input, ConstantInfo)
+                    and isinstance(ends_input, ConstantInfo)
+                    and (axes_input is None or isinstance(axes_input, ConstantInfo))
+                    and (steps_input is None or isinstance(steps_input, ConstantInfo))
+                )
+                if all_constants:
+                    continue
+
+                # Check if single-axis with step=1 and constant bounds -> torch.narrow, no helper needed
+                # We only use narrow when ALL parameters are constant because ONNX Slice
+                # has bounds clipping that torch.narrow doesn't handle.
+                axes_constant = axes_input is None or isinstance(axes_input, ConstantInfo)
+                steps_constant = steps_input is None or isinstance(steps_input, ConstantInfo)
+                starts_constant = isinstance(starts_input, ConstantInfo)
+                ends_constant = isinstance(ends_input, ConstantInfo)
+
+                if axes_constant and steps_constant and starts_constant and ends_constant:
+                    if axes_input is None:
+                        axes_list = [0]
+                    else:
+                        axes_list = axes_input.data.tolist()
+                        if not isinstance(axes_list, list):
+                            axes_list = [axes_list]
+
+                    if steps_input is None:
+                        steps_list = [1] * len(axes_list)
+                    else:
+                        steps_list = steps_input.data.tolist()
+                        if not isinstance(steps_list, list):
+                            steps_list = [steps_list]
+
+                    # Single axis with step=1 and constant bounds uses torch.narrow
+                    if len(axes_list) == 1 and steps_list[0] == 1:
+                        start_val = int(starts_input.data.item())
+                        end_val = int(ends_input.data.item())
+                        if end_val - start_val > 0:
+                            continue
+
+                # Otherwise needs helper
+                ctx.needs_dynamic_slice = True
+
+        elif layer.onnx_op_type == "ScatterND":
+            ctx.needs_scatter_nd = True
+
+        elif layer.onnx_op_type == "Expand":
+            # Check if this expand can be handled without helper
+            if len(layer.inputs) >= 2:
+                shape_input = layer.inputs[1]
+
+                # Check output shape from inference
+                output_info = layer.outputs[0]
+                output_shape = output_info.shape if output_info else None
+
+                # Known output shape with all integers -> reshape, no helper
+                if output_shape and all(isinstance(dim, int) for dim in output_shape):
+                    continue
+
+                # Constant shape with known data shape -> inline expand
+                if isinstance(shape_input, ConstantInfo):
+                    data_input = layer.inputs[0]
+                    if hasattr(data_input, 'shape') and data_input.shape:
+                        data_shape = data_input.shape
+                        if all(isinstance(d, int) for d in data_shape):
+                            continue
+
+                # Otherwise needs helper
+                ctx.needs_dynamic_expand = True
+
+    return ctx
 
 
 def _generate_imports(semantic_ir: SemanticModelIR) -> str:
@@ -88,8 +207,33 @@ def _generate_imports(semantic_ir: SemanticModelIR) -> str:
     return "\n".join(imports)
 
 
+def _generate_helpers_from_context(ctx: ForwardGenContext) -> str:
+    """Generate helper functions based on actual usage tracked in context.
+
+    Only emits helpers that are actually called in the generated code,
+    not just based on ONNX op type existence.
+
+    :param ctx: Forward generation context with helper usage flags
+    :return: Helper function definitions string
+    """
+    helpers = []
+
+    if ctx.needs_dynamic_slice:
+        helpers.append(DYNAMIC_SLICE_HELPER)
+
+    if ctx.needs_scatter_nd:
+        helpers.append(SCATTER_ND_HELPER)
+
+    if ctx.needs_dynamic_expand:
+        helpers.append(EXPAND_HELPER)
+
+    return "\n\n".join(helpers)
+
+
 def _generate_helpers(semantic_ir: SemanticModelIR) -> str:
     """Generate helper functions for operations without direct PyTorch equivalents.
+
+    DEPRECATED: Use _generate_helpers_from_context instead for more precise helper emission.
 
     :param semantic_ir: Semantic IR
     :return: Helper function definitions string

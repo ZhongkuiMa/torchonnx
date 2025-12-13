@@ -22,11 +22,15 @@ from ..analyze import (
 
 # Global context for tracking used constants during forward generation
 class ForwardGenContext:
-    """Context for tracking constants used during forward generation."""
+    """Context for tracking constants and helpers used during forward generation."""
 
     def __init__(self):
         self.used_constants: set[str] = set()
         self.used_parameters: set[str] = set()
+        # Track which helper functions are actually needed in the generated code
+        self.needs_dynamic_slice: bool = False
+        self.needs_scatter_nd: bool = False
+        self.needs_dynamic_expand: bool = False
 
     def mark_constant_used(self, constant_name: str) -> None:
         """Mark a constant as used in forward method."""
