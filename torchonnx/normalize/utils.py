@@ -87,31 +87,38 @@ def get_onnx_model_shapes(
     """Get shapes of all input and output tensors in the ONNX model."""
     shapes: dict[str, tuple[int | str, ...]] = {}
 
-    for input_info in model.graph.input:
-        shape = [dim.dim_value for dim in input_info.type.tensor_type.shape.dim]
-        shapes[input_info.name] = tuple(shape)
-
-    for output_info in model.graph.output:
-        shape = [dim.dim_value for dim in output_info.type.tensor_type.shape.dim]
-        shapes[output_info.name] = tuple(shape)
-
-    def _get_shape(vi) -> tuple[int | str] | None:
+    def _get_shape_from_type(tensor_type, set_batch: bool) -> tuple[int | str, ...] | None:
+        """Extract shape from tensor type, handling symbolic dimensions consistently."""
         dims = []
-        for d in vi.type.tensor_type.shape.dim:
+        for d in tensor_type.shape.dim:
             if d.dim_value > 0:  # static dimension
                 dims.append(d.dim_value)
-            elif d.dim_param:  # dynamic dimension
-                if set_batch_to_one:
+            elif d.dim_param:  # dynamic/symbolic dimension (e.g., 'batch_size')
+                if set_batch:
                     dims.append(1)
                 else:
                     dims.append(d.dim_param)  # e.g. "batch"
-            else:  # unknown dimension
-                return None
+            else:  # unknown dimension (dim_value=0, no dim_param)
+                if set_batch:
+                    dims.append(1)
+                else:
+                    return None
         return tuple(dims)
 
+    for input_info in model.graph.input:
+        shapes[input_info.name] = _get_shape_from_type(
+            input_info.type.tensor_type, set_batch_to_one
+        )
+
+    for output_info in model.graph.output:
+        shapes[output_info.name] = _get_shape_from_type(
+            output_info.type.tensor_type, set_batch_to_one
+        )
+
     for value_info in model.graph.value_info:
-        shape = _get_shape(value_info)
-        shapes[value_info.name] = shape
+        shapes[value_info.name] = _get_shape_from_type(
+            value_info.type.tensor_type, set_batch_to_one
+        )
 
     return shapes
 
