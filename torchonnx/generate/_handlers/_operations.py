@@ -1074,8 +1074,9 @@ def _handle_conv(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> 
     conv_func = None
 
     # Try to determine from weight shape (most reliable)
+    # Weight can be ParameterInfo, ConstantInfo, or VariableInfo (if computed at runtime)
     weight_input = layer.inputs[1]
-    if isinstance(weight_input, (ParameterInfo, ConstantInfo)) and weight_input.shape:
+    if weight_input.shape:
         weight_ndim = len(weight_input.shape)
         # Conv1d weight: (out_channels, in_channels, kernel_size) = 3D
         # Conv2d weight: (out_channels, in_channels, kernel_h, kernel_w) = 4D
@@ -1090,7 +1091,7 @@ def _handle_conv(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> 
     # If weight doesn't have shape, try input data shape
     if conv_func is None:
         data_input = layer.inputs[0]
-        if isinstance(data_input, VariableInfo) and data_input.shape:
+        if data_input.shape:
             data_ndim = len(data_input.shape)
             # Conv1d input: (batch, channels, length) = 3D
             # Conv2d input: (batch, channels, height, width) = 4D
