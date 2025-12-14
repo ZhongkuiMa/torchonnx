@@ -33,6 +33,11 @@ class ForwardGenContext:
         self.needs_dynamic_expand: bool = False
         # First input name for device inference (e.g., "x0")
         self.first_input_name: str | None = None
+        # Vmap mode settings
+        self.vmap_mode: bool = True
+        # Pre-computed slice lengths for vmap mode: {layer_name: [lengths]}
+        # When provided, dynamic_slice uses these instead of computing with .item()
+        self.slice_length_hints: dict[str, list[int]] = {}
 
     def mark_constant_used(self, constant_name: str) -> None:
         """Mark a constant as used in forward method."""
@@ -41,6 +46,10 @@ class ForwardGenContext:
     def mark_parameter_used(self, parameter_name: str) -> None:
         """Mark a parameter as used in forward method."""
         self.used_parameters.add(parameter_name)
+
+    def get_slice_lengths(self, layer_name: str) -> list[int] | None:
+        """Get pre-computed slice lengths for a Slice layer (vmap mode)."""
+        return self.slice_length_hints.get(layer_name)
 
 
 # Global instance - will be set during forward generation
@@ -86,8 +95,10 @@ def generate_forward_method(
     if layer_name_mapping is None:
         layer_name_mapping = {}
 
-    # Create context to track used constants
-    _forward_gen_context = ForwardGenContext()
+    # Use existing context if already set (e.g., by _generate_forward_with_context),
+    # otherwise create a new one. This preserves vmap_mode and other settings.
+    if _forward_gen_context is None:
+        _forward_gen_context = ForwardGenContext()
 
     # Build mapping from onnx_name to code_name for inputs
     # Also track the first input for device inference
@@ -124,6 +135,14 @@ def generate_forward_method(
 
     # Generate code for each layer
     body_lines: list[str] = []
+
+    # In vmap mode with dynamic slices, initialize validity tracking variable
+    # This tracks whether any slice was empty (out-of-bounds)
+    if _forward_gen_context.vmap_mode and _forward_gen_context.needs_dynamic_slice:
+        first_input = _forward_gen_context.first_input_name or "x0"
+        body_lines.append(
+            f"{INDENT}{INDENT}_slice_valid = torch.ones((), dtype={first_input}.dtype, device={first_input}.device)"
+        )
 
     for layer in semantic_ir.layers:
         try:

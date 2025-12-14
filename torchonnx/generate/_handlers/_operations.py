@@ -826,7 +826,22 @@ def _handle_slice(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) ->
             steps_code = _get_input_code_name_selective(steps_input, use_literal=False)
 
         # Use dynamic_slice helper for complex slicing
-        return f"{output} = dynamic_slice({data}, {starts_code}, {ends_code}, {axes_code}, {steps_code})"
+        ctx = get_forward_gen_context()
+
+        # In vmap mode, dynamic_slice returns (result, valid_flag) tuple
+        # We need to unpack it and accumulate validity
+        if ctx and ctx.vmap_mode:
+            # Get slice length hints if available
+            slice_lengths = ctx.get_slice_lengths(layer.name)
+            slice_lengths_code = str(slice_lengths) if slice_lengths else "None"
+
+            # Generate tuple unpacking and validity accumulation
+            valid_var = f"{output}_valid"
+            call = f"dynamic_slice({data}, {starts_code}, {ends_code}, {axes_code}, {steps_code}, {slice_lengths_code})"
+            # Unpack tuple and accumulate validity
+            return f"{output}, {valid_var} = {call}; _slice_valid = _slice_valid * {valid_var}"
+        else:
+            return f"{output} = dynamic_slice({data}, {starts_code}, {ends_code}, {axes_code}, {steps_code})"
 
     # Fallback for invalid inputs
     data = _get_input_code_name_selective(layer.inputs[0], use_literal=False)
@@ -1008,6 +1023,10 @@ def _handle_scatter_nd(
     ScatterND requires a helper function as there's no direct PyTorch equivalent.
     The helper wraps torch.index_put_ with proper index format conversion.
 
+    In vmap mode, passes the accumulated validity flag from dynamic_slice operations.
+    When validity is 0 (any slice was empty/out-of-bounds), scatter_nd returns
+    the original data unchanged, matching standard mode's empty-tensor behavior.
+
     :param layer: Semantic layer IR
     :return: Generated code line
     """
@@ -1023,7 +1042,11 @@ def _handle_scatter_nd(
 
     # ScatterND(data, indices, updates) - no direct PyTorch equivalent
     if len(inputs) >= 3:
-        return f"{output} = scatter_nd({inputs[0]}, {inputs[1]}, {inputs[2]})"
+        # In vmap mode, pass the accumulated validity flag
+        if ctx and ctx.vmap_mode:
+            return f"{output} = scatter_nd({inputs[0]}, {inputs[1]}, {inputs[2]}, valid=_slice_valid)"
+        else:
+            return f"{output} = scatter_nd({inputs[0]}, {inputs[1]}, {inputs[2]})"
     return f"{output} = {inputs[0]}"
 
 

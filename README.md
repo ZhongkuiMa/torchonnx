@@ -23,6 +23,10 @@ While PyTorch provides the `torch.onnx` module to convert PyTorch models to ONNX
 
 - **Code Quality and Maintainability**: ONNX's computational graph representation does not always align with logical groupings that make sense in PyTorch. We need a tool that generates clean, maintainable PyTorch code.
 
+- **Dynamic Batch Dimension**: Many ONNX models are exported with hardcoded batch size (typically `batch_size=1`), using operations like `reshape(1, ...)`. TorchONNX generates code that supports dynamic batch dimensions, making models compatible with arbitrary batch sizes.
+
+- **Vectorization Support**: For neural network verification and adversarial robustness testing, efficient batch processing via `torch.vmap` is essential. TorchONNX provides a `vmap_mode` that generates vectorization-compatible code, enabling efficient parallel evaluation across multiple inputs.
+
 ## Why TorchONNX?
 
 While other tools exist for ONNX-to-PyTorch conversion, most fall short in performance and code quality. The most well-known tool, [onnx2pytorch](https://github.com/Talmaj/onnx2pytorch), serves as a runtime wrapper rather than a true compiler. Its forward method iterates over ONNX nodes at runtime instead of generating static PyTorch code, and parameter conversion is inefficient.
@@ -64,6 +68,73 @@ This design eliminates runtime overhead and produces code that is readable, main
 - **VNNCOMP 2024 Benchmarks**: Extensively tested on official neural network verification competition benchmarks
 - **Diverse Model Coverage**: Successfully converts Vision Transformers, CNNs, MLPs, and complex architectures
 - **Validated Output**: Generated models produce numerically identical results to original ONNX models
+
+## Vectorization (vmap) Mode
+
+TorchONNX supports generating `torch.vmap`-compatible code for efficient batched evaluation. This is particularly important for neural network verification and adversarial robustness testing where many inputs need to be evaluated in parallel.
+
+### The Challenge
+
+Standard ONNX models often contain operations that are incompatible with `torch.vmap`:
+
+1. **In-place operations**: Operations like `index_put_` break vmap's functional requirements
+2. **Dynamic `.item()` calls**: Converting tensor values to Python scalars is not vmap-compatible
+3. **Input-dependent control flow**: Conditional behavior based on input values
+
+### vmap Mode Features
+
+When `vmap_mode=True` is specified during conversion:
+
+- **Functional helpers**: Uses `torch.scatter` instead of in-place `index_put_`
+- **Tensor-based indexing**: Uses `torch.gather` with pre-computed slice lengths instead of `.item()` calls
+- **Validity flag propagation**: Tracks empty/out-of-bounds slices and propagates validity to downstream operations
+
+### cctsdb_yolo_2023 Benchmark
+
+The `cctsdb_yolo_2023` benchmark from VNNCOMP presents a particularly challenging case for vectorization:
+
+- **Input-dependent dynamic slicing**: Slice indices are computed from input values
+- **Out-of-bounds handling**: When slice indices exceed array bounds, standard mode returns empty tensors while vmap mode must return fixed-shape tensors
+
+TorchONNX solves this with **validity flag propagation**:
+
+1. `dynamic_slice` returns `(result, valid_flag)` where `valid_flag=0` indicates out-of-bounds
+2. Validity flags are accumulated across multiple slice operations
+3. `scatter_nd` receives the validity flag and returns original data unchanged when `valid=0`
+
+This ensures **identical outputs** between standard and vmap modes for all inputs, including edge cases.
+
+### Usage
+
+```python
+from torchonnx import TorchONNX
+
+converter = TorchONNX(verbose=True)
+
+# Default conversion (vmap_mode=True by default)
+converter.convert("model.onnx", target_py_path="model.py")
+
+# Explicitly disable vmap mode if needed (for legacy compatibility)
+converter.convert("model.onnx", target_py_path="model_legacy.py", vmap_mode=False)
+```
+
+### Applying vmap
+
+```python
+import torch
+
+# Load vmap-compatible model
+from model_vmap import Model
+model = Model()
+model.load_state_dict(torch.load("model.pth"))
+
+# Batch of inputs
+batch_inputs = torch.randn(100, 3, 64, 64)
+
+# Vectorized evaluation
+vmapped_model = torch.vmap(model)
+batch_outputs = vmapped_model(batch_inputs)
+```
 
 ## Compiler Architecture
 

@@ -18,6 +18,7 @@ class TorchONNX:
         benchmark_name: str | None = None,
         target_py_path: str | None = None,
         target_pth_path: str | None = None,
+        vmap_mode: bool = True,
     ):
         """Convert ONNX model to PyTorch module.
 
@@ -25,6 +26,9 @@ class TorchONNX:
         :param benchmark_name: Name of benchmark (for module naming)
         :param target_py_path: Path to save generated Python module
         :param target_pth_path: Path to save state dict
+        :param vmap_mode: If True, generate vmap-compatible helper functions
+            that avoid .item() calls and in-place operations, enabling
+            compatibility with torch.vmap and functorch transforms.
         """
         # Stage 1: Normalize ONNX model
         from .normalize import load_and_preprocess_onnx_model
@@ -64,7 +68,9 @@ class TorchONNX:
         # Convert to CamelCase
         camel_class_name = to_camel_case(module_class_name)
 
-        code, state_dict = generate_pytorch_module(optimized_ir, camel_class_name)
+        code, state_dict = generate_pytorch_module(
+            optimized_ir, camel_class_name, vmap_mode=vmap_mode
+        )
 
         # Stage 6: Optimize generated code and filter state_dict
         from .simplify import optimize_generated_code, add_file_header, format_code
