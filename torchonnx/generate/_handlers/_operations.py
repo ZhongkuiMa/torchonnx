@@ -106,6 +106,10 @@ def _handle_reshape(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) 
     - Flatten pattern (batch, -1): generates x.flatten(1) for batch-aware flattening
     - Other reshapes: generates x.reshape(shape) with batch dimension preserved
 
+    When the target shape contains -1 and the first dimension is 1 (hardcoded batch),
+    we need to compute what -1 resolves to, replace it with the computed value,
+    then set the batch dimension to -1 for dynamic batching.
+
     :param layer: Semantic layer IR
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
     :return: Generated code line
@@ -135,11 +139,42 @@ def _handle_reshape(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) 
 
         # For other reshapes, make batch-aware by replacing first dim with -1
         # ONNX models are often traced with batch_size=1, but we want dynamic batch
-        # Only replace if:
-        # 1. First dim is exactly 1 (hardcoded batch)
-        # 2. No existing -1 in shape (to avoid invalid multiple -1)
-        if len(shape_list) >= 1 and shape_list[0] == 1 and -1 not in shape_list:
-            shape_list[0] = -1
+        #
+        # If shape contains -1 and first dim is 1, we need to:
+        # 1. Compute what -1 resolves to using input shape
+        # 2. Replace -1 with computed value
+        # 3. Set first dim to -1 for dynamic batch
+        if len(shape_list) >= 1 and shape_list[0] == 1:
+            if -1 in shape_list:
+                # Get input shape to compute the -1 dimension
+                input_info = layer.inputs[0]
+                input_shape = input_info.shape if hasattr(input_info, 'shape') else None
+
+                if input_shape and all(isinstance(d, int) for d in input_shape):
+                    # Calculate total elements (excluding batch dimension)
+                    # Input shape includes batch=1, so total = product of all dims
+                    import math
+                    total_elements = math.prod(input_shape)
+
+                    # Calculate product of known dimensions in target shape
+                    known_product = 1
+                    minus_one_idx = -1
+                    for i, dim in enumerate(shape_list):
+                        if dim == -1:
+                            minus_one_idx = i
+                        else:
+                            known_product *= dim
+
+                    # Compute what -1 should be
+                    if known_product > 0 and minus_one_idx >= 0:
+                        inferred_dim = total_elements // known_product
+                        shape_list[minus_one_idx] = inferred_dim
+                        # Now set batch dim to -1
+                        shape_list[0] = -1
+            else:
+                # No -1 in shape, safe to replace first dim with -1
+                shape_list[0] = -1
+
         # Convert to tuple for cleaner code
         shape_literal = tuple(shape_list)
         return f"{output} = {data}.reshape{shape_literal}"
@@ -241,22 +276,51 @@ def _handle_concat(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
     and proper device management.
     Generates: output = torch.cat([x0, x1, ...], dim=...)
 
+    When concatenating on a non-batch dimension (axis != 0), constants with
+    batch dimension = 1 need to be expanded to match the dynamic batch size
+    of variable inputs.
+
     :param layer: Semantic layer IR
     :return: Generated code line
     """
     from .._forward_gen import get_forward_gen_context
 
     ctx = get_forward_gen_context()
-    inputs = []
 
+    # Get axis argument
+    axis_arg = next(
+        (arg for arg in layer.arguments if arg.pytorch_name == "axis"), None
+    )
+    axis_value = int(axis_arg.value) if axis_arg else 0
+    axis = format_argument(axis_value)
+
+    # Find a variable input to get batch size from (for expanding constants)
+    # Only needed when concatenating on non-batch dimension
+    batch_size_source = None
+    if axis_value != 0:
+        for inp in layer.inputs:
+            if isinstance(inp, VariableInfo):
+                batch_size_source = inp.code_name
+                break
+
+    inputs = []
     for inp in layer.inputs:
         if isinstance(inp, ConstantInfo):
-            # Always use buffer reference for constants to:
-            # 1. Avoid creating tensors on every forward pass (performance)
-            # 2. Ensure proper device management (tensors initialized in __init__)
+            # Always use buffer reference for constants
             if ctx:
                 ctx.mark_constant_used(inp.code_name)
-            inputs.append(f"self.{inp.code_name}")
+            const_code = f"self.{inp.code_name}"
+
+            # Check if constant needs batch expansion
+            # Conditions: axis != 0, constant has shape[0] == 1, and we have a variable input
+            if (axis_value != 0 and batch_size_source and
+                inp.shape and len(inp.shape) > 0 and inp.shape[0] == 1):
+                # Expand constant to match batch size
+                # Use -1 for all dimensions except batch (dim 0)
+                expand_dims = [-1] * len(inp.shape)
+                expand_dims_str = ", ".join(str(d) for d in expand_dims)
+                const_code = f"{const_code}.expand({batch_size_source}.shape[0], {expand_dims_str[4:]})"  # Skip first "-1, "
+            inputs.append(const_code)
         elif isinstance(inp, ParameterInfo):
             # Parameters always use buffer reference
             if ctx:
@@ -267,13 +331,6 @@ def _handle_concat(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
             inputs.append(inp.code_name)
 
     output = layer.outputs[0].code_name
-
-    # Get axis argument
-    axis_arg = next(
-        (arg for arg in layer.arguments if arg.pytorch_name == "axis"), None
-    )
-    axis = format_argument(axis_arg.value) if axis_arg else "0"
-
     inputs_list = f"[{', '.join(inputs)}]"
     return f"{output} = torch.cat({inputs_list}, dim={axis})"
 
