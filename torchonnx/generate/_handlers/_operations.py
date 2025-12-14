@@ -135,7 +135,10 @@ def _handle_reshape(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) 
 
         # For other reshapes, make batch-aware by replacing first dim with -1
         # ONNX models are often traced with batch_size=1, but we want dynamic batch
-        if len(shape_list) >= 1:
+        # Only replace if:
+        # 1. First dim is exactly 1 (hardcoded batch)
+        # 2. No existing -1 in shape (to avoid invalid multiple -1)
+        if len(shape_list) >= 1 and shape_list[0] == 1 and -1 not in shape_list:
             shape_list[0] = -1
         # Convert to tuple for cleaner code
         shape_literal = tuple(shape_list)
