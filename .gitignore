@@ -74,7 +74,11 @@ Thumbs.db
 
 # === GitHub Codespaces ===
 .devcontainer/
-/test/benchmarks/
-/test/baselines/
-/test/results/
-/test/temp/
+
+# === Test directories (large files) ===
+/tests/vnncomp2024_benchmarks
+/tests/benchmarks/
+/tests/baselines/
+/tests/results/
+/tests/data/
+/tests/temp/

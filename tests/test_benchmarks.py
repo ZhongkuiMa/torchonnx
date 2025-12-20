@@ -22,7 +22,6 @@ __all__ = [
 
 import importlib.util
 import shutil
-import sys
 import time
 from pathlib import Path
 
@@ -30,9 +29,7 @@ import numpy as np
 import onnxruntime as ort
 import torch
 
-sys.path.insert(0, "../..")
-
-from benchmark_utils import (
+from torchonnx.tests.benchmark_utils import (
     find_benchmarks,
     find_models,
     get_model_benchmark_name,
@@ -314,7 +311,7 @@ def convert_model(
 
 
 def convert_all_models(
-    benchmark_dir: str = "benchmarks",
+    benchmark_dir: str = "vnncomp2024_benchmarks",
     output_dir: str = "results/baselines",
     max_per_benchmark: int = 20,
 ) -> dict:
@@ -327,6 +324,7 @@ def convert_all_models(
     """
     benchmarks_root = Path(benchmark_dir)
     output_root = Path(output_dir)
+    output_root.mkdir(parents=True, exist_ok=True)
     benchmarks = find_benchmarks(benchmark_dir)
     models = find_models(benchmarks, max_per_benchmark)
 
@@ -649,7 +647,7 @@ def _print_verification_summary(
 
 def verify_benchmarks(
     results_dir: str = "results/baselines",
-    benchmarks_dir: str = "benchmarks",
+    benchmarks_dir: str = "vnncomp2024_benchmarks",
     max_per_benchmark: int = 20,
     dtype: str = "float32",
     device: str = "cpu",

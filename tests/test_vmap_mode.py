@@ -28,23 +28,20 @@ __all__ = [
 
 import importlib.util
 import json
-import sys
 import time
 from pathlib import Path
 
 import numpy as np
 import torch
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-from benchmark_utils import (
+from torchonnx.tests.benchmark_utils import (
     find_benchmarks,
     find_models,
     get_model_benchmark_name,
     get_model_relative_path,
     get_model_data_path,
 )
-from utils import if_has_batch_dim, BENCHMARKS_WITHOUT_BATCH_DIM
+from torchonnx.tests.utils import if_has_batch_dim, BENCHMARKS_WITHOUT_BATCH_DIM
 
 # Tolerance settings (same as test_benchmarks.py)
 TOLERANCE_EPSILON = 1e-10
@@ -299,7 +296,7 @@ def convert_model_vmap(
 
 
 def convert_models_without_batch_dim(
-    benchmark_dir: str = "benchmarks",
+    benchmark_dir: str = "vnncomp2024_benchmarks",
     output_dir: str = "results/vmap",
     max_per_benchmark: int = 20,
 ) -> dict:
@@ -312,6 +309,7 @@ def convert_models_without_batch_dim(
     """
     benchmarks_root = Path(benchmark_dir)
     output_root = Path(output_dir)
+    output_root.mkdir(parents=True, exist_ok=True)
     models = find_models_without_batch_dim(benchmark_dir, max_per_benchmark)
 
     print(f"\nConverting {len(models)} models WITHOUT batch dim to vmap mode")
@@ -358,7 +356,7 @@ def convert_models_without_batch_dim(
 
 
 def verify_vmap_vs_standard(
-    benchmark_dir: str = "benchmarks",
+    benchmark_dir: str = "vnncomp2024_benchmarks",
     vmap_dir: str = "results/vmap",
     standard_dir: str = "results/baselines",
     max_per_benchmark: int = 20,
@@ -490,7 +488,7 @@ def verify_vmap_vs_standard(
 
 
 def test_vmap_compatibility(
-    benchmark_dir: str = "benchmarks",
+    benchmark_dir: str = "vnncomp2024_benchmarks",
     vmap_dir: str = "results/vmap",
     max_per_benchmark: int = 20,
 ) -> dict:
@@ -615,7 +613,7 @@ def test_vmap_compatibility(
 
 
 def run_all_tests(
-    benchmark_dir: str = "benchmarks",
+    benchmark_dir: str = "vnncomp2024_benchmarks",
     output_dir: str = "results/vmap",
     standard_dir: str = "results/baselines",
     max_per_benchmark: int = 20,

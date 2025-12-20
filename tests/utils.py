@@ -1,4 +1,4 @@
-"""Test-specific utility functions for SlimONNX."""
+"""Test-specific utility functions for TorchONNX."""
 
 __docformat__ = "restructuredtext"
 __all__ = [
@@ -14,7 +14,7 @@ from pathlib import Path
 
 import numpy as np
 
-from slimonnx.test.benchmark_utils import get_benchmark_dir
+from torchonnx.tests.benchmark_utils import get_benchmark_dir
 
 
 def load_onnx_model(onnx_path: str):  # type: ignore
