@@ -27,6 +27,7 @@ from pathlib import Path
 
 import numpy as np
 import onnxruntime as ort
+import pytest
 import torch
 
 from torchonnx.tests.benchmark_utils import (
@@ -308,6 +309,87 @@ def convert_model(
             "pth_path": None,
             "error": str(error),
         }
+
+
+def get_benchmark_models():
+    """Collect all models from vnncomp2024 benchmarks for parametrization.
+
+    :return: List of model paths for parametrized testing
+    """
+    test_dir = Path(__file__).parent
+    benchmarks_dir = test_dir / "vnncomp2024_benchmarks"
+    benchmarks = find_benchmarks(str(benchmarks_dir))
+    models = find_models(benchmarks, max_per_benchmark=20)
+    return [str(m) for m in models]
+
+
+@pytest.mark.parametrize("model_path", get_benchmark_models())
+def test_convert_model(model_path, output_dir_baselines, benchmarks_root):
+    """Convert one ONNX model to PyTorch.
+
+    Parametrized test that runs conversion for each benchmark model.
+
+    :param model_path: Path to source ONNX model
+    :param output_dir_baselines: Output directory (from conftest fixture)
+    :param benchmarks_root: Benchmarks root (from conftest fixture)
+    """
+    model_path_obj = Path(model_path)
+    result = convert_model(model_path_obj, output_dir_baselines, benchmarks_root)
+
+    # Print progress (pytest -v shows this)
+    rel_path = get_model_relative_path(model_path_obj, benchmarks_root)
+    if result["success"]:
+        print(f"\n{rel_path}: OK ({result['time']:.2f}s)")
+    else:
+        print(f"\n{rel_path}: FAILED - {result['error']}")
+
+    # Assert success
+    assert result["success"], f"Conversion failed for {rel_path}: {result['error']}"
+
+
+@pytest.mark.parametrize("model_path", get_benchmark_models())
+@pytest.mark.parametrize("dtype", ["float32", "float64"])
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_verify_model_against_original(
+    model_path, dtype, device, output_dir_baselines, benchmarks_root
+):
+    """Verify converted PyTorch module against original ONNX model.
+
+    Parametrized test that verifies each model across dtypes and devices.
+
+    :param model_path: Path to original ONNX model
+    :param dtype: Data type to test (float32 or float64)
+    :param device: Device to test (cpu or cuda)
+    :param output_dir_baselines: Output directory (from conftest fixture)
+    :param benchmarks_root: Benchmarks root (from conftest fixture)
+    """
+    # Skip if CUDA not available
+    if device == "cuda" and not torch.cuda.is_available():
+        pytest.skip("CUDA not available")
+
+    # Get paths
+    model_path_obj = Path(model_path)
+    rel_path = get_model_relative_path(model_path_obj, benchmarks_root)
+    result_py = output_dir_baselines / rel_path.with_suffix(".py")
+    result_pth = output_dir_baselines / rel_path.with_suffix(".pth")
+    data_file = get_model_data_path(model_path_obj, benchmarks_root)
+
+    # Skip if converted model doesn't exist
+    if not result_py.exists():
+        pytest.skip(f"Converted model not found: {result_py.name}")
+    if not result_pth.exists():
+        pytest.skip(f"State dict not found: {result_pth.name}")
+
+    # Verify
+    status, error_msg, stats = _verify_one_benchmark(
+        result_py, result_pth, model_path_obj, data_file, rel_path, dtype, device
+    )
+
+    # Print status
+    print(f"\n{rel_path} ({dtype}, {device}): {status}")
+
+    # Assert success
+    assert status == "OK", f"Verification failed: {status} - {error_msg}"
 
 
 def convert_all_models(
@@ -737,24 +819,45 @@ def verify_benchmarks(
 
 
 def main() -> None:
-    """Main entry point for script execution."""
-    convert_all_models()
-    save_as_baseline()
+    """Main entry point for script execution.
 
-    # Test all dtype and device combinations
-    dtypes = ["float32", "float64"]
-    devices = ["cpu"]
+    Runs all tests using pytest. For individual test control:
+        pytest tests/test_benchmarks.py::test_convert_model
+        pytest tests/test_benchmarks.py::test_verify_model_against_original
+    """
+    import sys
 
-    # Add CUDA if available
-    if torch.cuda.is_available():
-        devices.append("cuda")
-        print(f"\nCUDA is available. Testing on: {devices}")
-    else:
-        print(f"\nCUDA is not available. Testing on: {devices}")
+    print("\n" + "=" * 70)
+    print("STEP 1: Converting ONNX models to PyTorch")
+    print("=" * 70)
+    exit_code = pytest.main([
+        __file__ + "::test_convert_model",
+        "-v",
+        "--tb=short",
+    ])
 
-    for dtype in dtypes:
-        for device in devices:
-            verify_benchmarks(dtype=dtype, device=device)
+    if exit_code != 0:
+        print("\nConversion tests failed. Skipping verification.")
+        sys.exit(exit_code)
+
+    print("\n" + "=" * 70)
+    print("STEP 2: Saving baselines")
+    print("=" * 70)
+    test_dir = Path(__file__).parent
+    results_dir = test_dir / "results" / "baselines"
+    baselines_dir = test_dir / "baselines"
+    save_as_baseline(str(results_dir), str(baselines_dir))
+
+    print("\n" + "=" * 70)
+    print("STEP 3: Verifying converted models")
+    print("=" * 70)
+    exit_code = pytest.main([
+        __file__ + "::test_verify_model_against_original",
+        "-v",
+        "--tb=short",
+    ])
+
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":
