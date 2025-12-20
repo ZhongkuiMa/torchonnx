@@ -7,4 +7,4 @@ __docformat__ = "restructuredtext"
 __all__ = ["NodeIR", "ModelIR", "build_model_ir"]
 
 from .builder import build_model_ir
-from .types import NodeIR, ModelIR
+from .types import ModelIR, NodeIR

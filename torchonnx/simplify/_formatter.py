@@ -54,9 +54,7 @@ def _wrap_long_line(line: str) -> list[str]:
 
     # Check if this is an assignment with a function/constructor call
     # Pattern: indent + var = something(args)
-    assignment_match = re.match(
-        r"^(\s*)(\S+)\s*=\s*(.+?)\((.*)\)$", line, re.DOTALL
-    )
+    assignment_match = re.match(r"^(\s*)(\S+)\s*=\s*(.+?)\((.*)\)$", line, re.DOTALL)
 
     if assignment_match:
         indent = assignment_match.group(1)
@@ -73,7 +71,7 @@ def _wrap_long_line(line: str) -> list[str]:
             # Format as multi-line
             result = [first_line]
             arg_indent = continuation_indent
-            for i, arg in enumerate(args):
+            for _i, arg in enumerate(args):
                 arg = arg.strip()
                 comma = ","  # Always trailing comma for Black
                 arg_line = f"{arg_indent}{arg}{comma}"
@@ -110,9 +108,7 @@ def _wrap_long_argument(arg: str, indent: str) -> list[str] | None:
 
     # Pattern: name=(expr if condition else expr)
     # Match ternary expressions (handle parenthesized ternary)
-    ternary_match = re.match(
-        r"^(\w+)=\((.+)\s+if\s+(.+)\s+else\s+(.+)\)$", arg, re.DOTALL
-    )
+    ternary_match = re.match(r"^(\w+)=\((.+)\s+if\s+(.+)\s+else\s+(.+)\)$", arg, re.DOTALL)
     if ternary_match:
         name = ternary_match.group(1)
         true_expr = ternary_match.group(2).strip()
@@ -127,9 +123,7 @@ def _wrap_long_argument(arg: str, indent: str) -> list[str] | None:
         ]
 
     # Pattern: name=expr if condition else expr (without outer parens)
-    ternary_match2 = re.match(
-        r"^(\w+)=(.+)\s+if\s+(.+)\s+else\s+(.+)$", arg, re.DOTALL
-    )
+    ternary_match2 = re.match(r"^(\w+)=(.+)\s+if\s+(.+)\s+else\s+(.+)$", arg, re.DOTALL)
     if ternary_match2:
         name = ternary_match2.group(1)
         true_expr = ternary_match2.group(2).strip()
@@ -185,19 +179,17 @@ def _normalize_blank_lines(code: str) -> str:
     :return: Code with normalized blank lines
     """
     lines = code.split("\n")
-    result = []
+    result: list[str] = []
     in_class = False
-    class_indent = 0
 
     prev_was_class_def = False
 
-    for i, line in enumerate(lines):
+    for _i, line in enumerate(lines):
         stripped = line.strip()
 
         # Detect entering a class
         if re.match(r"^class\s+\w+", stripped):
             in_class = True
-            class_indent = len(line) - len(line.lstrip())
 
             # Ensure 2 blank lines before class at module level
             _ensure_blank_lines_before(result, 2)
@@ -256,8 +248,7 @@ def _ensure_blank_lines_before(lines: list[str], count: int) -> None:
     # Add or remove blank lines as needed
     if existing_blanks < count:
         # Add blank lines
-        for _ in range(count - existing_blanks):
-            lines.append("")
+        lines.extend([""] * (count - existing_blanks))
     elif existing_blanks > count:
         # Remove excess blank lines
         for _ in range(existing_blanks - count):

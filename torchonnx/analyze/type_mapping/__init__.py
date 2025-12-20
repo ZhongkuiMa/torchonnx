@@ -11,16 +11,20 @@ __all__ = [
     "is_layer_with_args",
     "extract_layer_args",
 ]
-from onnx import numpy_helper, NodeProto, TensorProto
+from onnx import NodeProto, TensorProto, numpy_helper
 
-from ._layers import ONNX_TO_PYTORCH_LAYERS, is_layer_with_args, extract_layer_args
-from ._operations import (
-    is_operator,
-    convert_to_operator,
-    is_operation,
-    convert_to_operation,
-    extract_operation_args,
+from torchonnx.torchonnx.analyze.type_mapping._layers import (
+    ONNX_TO_PYTORCH_LAYERS,
+    extract_layer_args,
+    is_layer_with_args,
+)
+from torchonnx.torchonnx.analyze.type_mapping._operations import (
     ONNX_TO_PYTORCH_OPERATIONS,
+    convert_to_operation,
+    convert_to_operator,
+    extract_operation_args,
+    is_operation,
+    is_operator,
 )
 
 
@@ -54,22 +58,15 @@ def convert_to_operation_function(onnx_op_type: str) -> str:
     return ONNX_TO_PYTORCH_OPERATIONS.get(onnx_op_type, onnx_op_type)
 
 
-def convert_to_pytorch_type(
-    node: NodeProto, initializers: dict[str, TensorProto]
-) -> str:
+def convert_to_pytorch_type(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
     """Infer PyTorch layer type from ONNX node.
 
     :param node: ONNX node
     :param initializers: Optional ONNX initializers for weight shape inspection
     :return: PyTorch layer type (e.g., "Conv2d", "Linear") or operation type
     """
-
     # Handle Conv and ConvTranspose specially - need weight shape to determine 1D/2D
-    if (
-        node.op_type == "Conv"
-        and len(node.input) >= 2
-        and node.input[1] in initializers
-    ):
+    if node.op_type == "Conv" and len(node.input) >= 2 and node.input[1] in initializers:
         weight_tensor = initializers[node.input[1]]
         weight_array = numpy_helper.to_array(weight_tensor)
         weight_ndim = len(weight_array.shape)
@@ -77,16 +74,11 @@ def convert_to_pytorch_type(
         # Conv2d: (out_channels, in_channels, kernel_h, kernel_w) = 4D
         if weight_ndim == 3:
             return "nn.Conv1d"
-        elif weight_ndim == 4:
+        if weight_ndim == 4:
             return "nn.Conv2d"
-        else:
-            raise NotImplementedError(f"Unsupported Conv: {weight_ndim}D")
+        raise NotImplementedError(f"Unsupported Conv: {weight_ndim}D")
 
-    elif (
-        node.op_type == "ConvTranspose"
-        and len(node.input) >= 2
-        and node.input[1] in initializers
-    ):
+    if node.op_type == "ConvTranspose" and len(node.input) >= 2 and node.input[1] in initializers:
         weight_tensor = initializers[node.input[1]]
         weight_array = numpy_helper.to_array(weight_tensor)
         weight_ndim = len(weight_array.shape)
@@ -94,27 +86,26 @@ def convert_to_pytorch_type(
         # ConvTranspose2d: (in_channels, out_channels, kernel_h, kernel_w) = 4D
         if weight_ndim == 3:
             return "nn.ConvTranspose1d"
-        elif weight_ndim == 4:
+        if weight_ndim == 4:
             return "nn.ConvTranspose2d"
-        else:
-            raise NotImplementedError(f"Unsupported ConvTranspose: {weight_ndim}D")
+        raise NotImplementedError(f"Unsupported ConvTranspose: {weight_ndim}D")
 
-    elif node.op_type in ONNX_TO_PYTORCH_LAYERS:
-        # Special case: Gemm with dynamic weights should be F.linear, not nn.Linear
-        if node.op_type == "Gemm":
-            # Check if weights are static (in initializers)
-            if len(node.input) >= 2 and node.input[1] not in initializers:
-                # Dynamic weights - fall back to F.linear operation
-                return "F.linear"
-
+    if (
+        node.op_type == "Gemm"
+        and node.op_type in ONNX_TO_PYTORCH_LAYERS
+        and len(node.input) >= 2
+        and node.input[1] not in initializers
+    ):
+        # Dynamic weights - fall back to F.linear operation
+        return "F.linear"
+    if node.op_type in ONNX_TO_PYTORCH_LAYERS:
         # Add nn. prefix for layer types
         layer_type = ONNX_TO_PYTORCH_LAYERS[node.op_type]
         return f"nn.{layer_type}"
-    elif is_operator(node.op_type):
+    if is_operator(node.op_type):
         # Convert operator to torch.* function
         return convert_to_operator_function(node.op_type)
-    elif is_operation(node.op_type):
+    if is_operation(node.op_type):
         # Convert operation to appropriate PyTorch function
         return convert_to_operation_function(node.op_type)
-    else:
-        raise ValueError(f"Unsupported ONNX operator: {node.op_type}. ")
+    raise ValueError(f"Unsupported ONNX operator: {node.op_type}. ")

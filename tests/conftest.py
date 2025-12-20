@@ -3,7 +3,6 @@
 from pathlib import Path
 
 import pytest
-import torch
 
 
 @pytest.fixture(scope="session")

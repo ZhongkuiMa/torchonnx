@@ -40,6 +40,7 @@ def setup_benchmarks_symlink() -> int:
             print(f"Removing existing file/directory: {symlink_path}")
             if symlink_path.is_dir():
                 import shutil
+
                 shutil.rmtree(symlink_path)
             else:
                 symlink_path.unlink()

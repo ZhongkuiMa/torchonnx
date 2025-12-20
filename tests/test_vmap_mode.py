@@ -22,7 +22,7 @@ __docformat__ = "restructuredtext"
 __all__ = [
     "convert_model_vmap",
     "convert_models_without_batch_dim",
-    "verify_vmap_mode",
+    "verify_vmap_vs_standard",
     "test_vmap_compatibility",
 ]
 
@@ -39,10 +39,10 @@ from torchonnx.tests.benchmark_utils import (
     find_benchmarks,
     find_models,
     get_model_benchmark_name,
-    get_model_relative_path,
     get_model_data_path,
+    get_model_relative_path,
 )
-from torchonnx.tests.utils import if_has_batch_dim, BENCHMARKS_WITHOUT_BATCH_DIM
+from torchonnx.tests.utils import BENCHMARKS_WITHOUT_BATCH_DIM, if_has_batch_dim
 
 # Tolerance settings (same as test_benchmarks.py)
 TOLERANCE_EPSILON = 1e-10
@@ -67,13 +67,15 @@ VMAP_VERIFICATION_LIMITED_BENCHMARKS = (
 )
 
 # Models that are completely incompatible with vmap (will fail vmap call)
-VMAP_INCOMPATIBLE_BENCHMARKS = (
+VMAP_INCOMPATIBLE_BENCHMARKS: tuple[str, ...] = (
     # Currently all models with input-dependent slicing work with vmap,
     # they just may produce different outputs for out-of-bounds cases
 )
 
 
-def _load_pytorch_module(module_path: str, state_dict_path: str, dtype: str = "float32", device: str = "cpu"):
+def _load_pytorch_module(
+    module_path: str, state_dict_path: str, dtype: str = "float32", device: str = "cpu"
+):
     """Load a PyTorch module from file.
 
     :param module_path: Path to .py file
@@ -84,6 +86,8 @@ def _load_pytorch_module(module_path: str, state_dict_path: str, dtype: str = "f
     """
     module_file = Path(module_path)
     spec = importlib.util.spec_from_file_location(module_file.stem, module_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Failed to load module spec from {module_path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
@@ -136,12 +140,11 @@ def _run_pytorch_module(
 
     if isinstance(output, torch.Tensor):
         return {"output": output.cpu().numpy()}
-    elif isinstance(output, tuple):
+    if isinstance(output, tuple):
         return {f"output_{i}": out.cpu().numpy() for i, out in enumerate(output)}
-    elif isinstance(output, dict):
+    if isinstance(output, dict):
         return {k: v.cpu().numpy() for k, v in output.items()}
-    else:
-        return {"output": output}
+    return {"output": output}
 
 
 def _check_tolerance(max_abs: float, max_rel: float) -> bool:
@@ -167,7 +170,7 @@ def _compare_outputs(outputs1: dict, outputs2: dict) -> tuple[bool, str, dict]:
     all_diffs = []
     all_rel_diffs = []
 
-    for (k1, v1), (k2, v2) in zip(outputs1.items(), outputs2.items()):
+    for (_k1, v1), (_k2, v2) in zip(outputs1.items(), outputs2.items(), strict=False):
         if v1.shape != v2.shape:
             # Handle scalar vs (1,) shape mismatch
             if (v1.shape == () and v2.shape == (1,)) or (v1.shape == (1,) and v2.shape == ()):
@@ -180,10 +183,14 @@ def _compare_outputs(outputs1: dict, outputs2: dict) -> tuple[bool, str, dict]:
         all_rel_diffs.append(max_rel)
 
         if not _check_tolerance(max_abs, max_rel):
-            return False, f"max_abs={max_abs:.2e}, max_rel={max_rel:.2e}", {
-                "max_abs_diff": max_abs,
-                "max_rel_diff": max_rel,
-            }
+            return (
+                False,
+                f"max_abs={max_abs:.2e}, max_rel={max_rel:.2e}",
+                {
+                    "max_abs_diff": max_abs,
+                    "max_rel_diff": max_rel,
+                },
+            )
 
     stats = {
         "max_abs_diff": float(np.max(all_diffs)) if all_diffs else 0,
@@ -211,7 +218,7 @@ def _load_test_data(data_file: Path) -> list[np.ndarray]:
                             test_inputs.extend(bound_data["inputs"])
 
         return test_inputs
-    except (IOError, KeyError, ValueError):
+    except (OSError, KeyError, ValueError):
         return []
 
 
@@ -283,7 +290,7 @@ def convert_model_vmap(
             "error": None,
         }
 
-    except Exception as error:
+    except (FileNotFoundError, RuntimeError, ValueError, ImportError) as error:
         return {
             "success": False,
             "benchmark": benchmark_name,
@@ -337,9 +344,7 @@ def test_convert_vmap_model(model_path, output_dir_vmap, benchmarks_root):
 @pytest.mark.parametrize("model_path", get_vmap_models())
 @pytest.mark.parametrize("dtype", ["float32", "float64"])
 @pytest.mark.parametrize("device", ["cpu", "cuda"])
-def test_verify_vmap_vs_standard(
-    model_path, dtype, device, output_dir_vmap, benchmarks_root
-):
+def test_verify_vmap_vs_standard(model_path, dtype, device, output_dir_vmap, benchmarks_root):
     """Verify vmap mode outputs match standard mode outputs.
 
     Parametrized test that verifies each vmap model across dtypes and devices.
@@ -369,11 +374,11 @@ def test_verify_vmap_vs_standard(
 
     # Verify vmap vs standard (simplified check)
     try:
-        data_file = get_model_data_path(model_path_obj, benchmarks_root)
+        get_model_data_path(model_path_obj, benchmarks_root)
         # For now, just verify the files exist and can be loaded
         # A full verification would compare outputs, but that's complex due to input loading
         print(f"\n{rel_path} ({dtype}, {device}): Model files accessible")
-    except Exception as e:
+    except (FileNotFoundError, RuntimeError) as e:
         pytest.fail(f"Error verifying vmap vs standard: {e}")
 
 
@@ -387,9 +392,7 @@ def test_torch_vmap_compatibility(model_path, output_dir_vmap, benchmarks_root):
     :param output_dir_vmap: Output directory (from conftest fixture)
     :param benchmarks_root: Benchmarks root (from conftest fixture)
     """
-    try:
-        from torch.func import vmap
-    except ImportError:
+    if importlib.util.find_spec("torch.func.vmap") is None:
         pytest.skip("torch.func.vmap not available")
 
     model_path_obj = Path(model_path)
@@ -408,10 +411,12 @@ def test_torch_vmap_compatibility(model_path, output_dir_vmap, benchmarks_root):
     # Verify that vmap model can be loaded (actual vmap execution is complex due to input shaping)
     try:
         spec = importlib.util.spec_from_file_location(result_py_vmap.stem, str(result_py_vmap))
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Failed to load module spec from {result_py_vmap}")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         print(f"\n{rel_path}: Vmap model loaded successfully")
-    except Exception as e:
+    except (FileNotFoundError, ImportError, SyntaxError) as e:
         pytest.fail(f"Error loading vmap model: {e}")
 
 
@@ -442,7 +447,7 @@ def convert_models_without_batch_dim(
 
     for i, model_path in enumerate(models):
         rel_path = get_model_relative_path(model_path, benchmarks_root)
-        print(f"[{i+1}/{len(models)}] {rel_path}...", end=" ")
+        print(f"[{i + 1}/{len(models)}] {rel_path}...", end=" ")
 
         result = convert_model_vmap(model_path, output_root, benchmarks_root, vmap_mode=True)
         results.append(result)
@@ -455,7 +460,7 @@ def convert_models_without_batch_dim(
             print(f"FAILED: {result['error']}")
 
     print("\n" + "=" * 70)
-    print(f"CONVERSION SUMMARY (vmap mode)")
+    print("CONVERSION SUMMARY (vmap mode)")
     print("=" * 70)
     print(f"Total models: {len(models)}")
     print(f"Success: {success_count}")
@@ -463,7 +468,7 @@ def convert_models_without_batch_dim(
 
     # Save results
     results_file = output_root / "conversion_results.json"
-    with open(results_file, "w") as f:
+    with results_file.open("w") as f:
         json.dump(results, f, indent=2)
     print(f"\nResults saved to: {results_file}")
 
@@ -498,7 +503,7 @@ def verify_vmap_vs_standard(
     standard_root = Path(standard_dir)
 
     if device == "cuda" and not torch.cuda.is_available():
-        print(f"Warning: CUDA requested but not available. Falling back to CPU.")
+        print("Warning: CUDA requested but not available. Falling back to CPU.")
         device = "cpu"
 
     models = find_models_without_batch_dim(benchmark_dir, max_per_benchmark)
@@ -507,11 +512,11 @@ def verify_vmap_vs_standard(
     print("=" * 70)
 
     counts = {"passed": 0, "failed": 0, "skipped": 0}
-    all_results = {}
+    all_results: dict[str, dict[str, int | float | str]] = {}
 
     for i, model_path in enumerate(models):
         rel_path = get_model_relative_path(model_path, benchmarks_root)
-        print(f"[{i+1}/{len(models)}] {rel_path}...", end=" ")
+        print(f"[{i + 1}/{len(models)}] {rel_path}...", end=" ")
 
         vmap_py = vmap_root / rel_path.with_suffix(".py")
         vmap_pth = vmap_root / rel_path.with_suffix(".pth")
@@ -554,7 +559,9 @@ def verify_vmap_vs_standard(
 
             for inputs in test_inputs[:5]:  # Test first 5 inputs
                 vmap_out = _run_pytorch_module(str(vmap_py), str(vmap_pth), inputs, dtype, device)
-                standard_out = _run_pytorch_module(str(standard_py), str(standard_pth), inputs, dtype, device)
+                standard_out = _run_pytorch_module(
+                    str(standard_py), str(standard_pth), inputs, dtype, device
+                )
 
                 match, msg, stats = _compare_outputs(vmap_out, standard_out)
                 if match:
@@ -572,7 +579,9 @@ def verify_vmap_vs_standard(
                 counts["failed"] += 1
                 all_results[str(rel_path)] = {"status": "MISMATCH", "error": msg}
             elif expected_mismatch_count > 0:
-                print(f"PARTIAL ({matched_count} match, {expected_mismatch_count} expected_mismatch)")
+                print(
+                    f"PARTIAL ({matched_count} match, {expected_mismatch_count} expected_mismatch)"
+                )
                 counts["partial"] = counts.get("partial", 0) + 1
                 all_results[str(rel_path)] = {
                     "status": "PARTIAL",
@@ -585,7 +594,7 @@ def verify_vmap_vs_standard(
                 counts["passed"] += 1
                 all_results[str(rel_path)] = {"status": "OK", "max_diff": max_diff}
 
-        except Exception as e:
+        except (RuntimeError, ValueError, TypeError, OSError) as e:
             print(f"ERROR - {e}")
             counts["failed"] += 1
             all_results[str(rel_path)] = {"status": "ERROR", "error": str(e)}
@@ -607,29 +616,22 @@ def verify_vmap_vs_standard(
     }
 
 
-def test_vmap_compatibility(
-    benchmark_dir: str = "vnncomp2024_benchmarks",
-    vmap_dir: str = "results/vmap",
-    max_per_benchmark: int = 20,
-) -> dict:
+def test_vmap_compatibility(benchmarks_root, output_dir_vmap, max_per_benchmark: int) -> None:
     """Test that vmap mode models work with torch.vmap.
 
-    :param benchmark_dir: Root benchmark directory
-    :param vmap_dir: Directory with vmap mode converted models
-    :param max_per_benchmark: Max models per benchmark
-    :return: Test results
+    :param benchmarks_root: Root benchmark directory (from conftest fixture)
+    :param output_dir_vmap: Directory with vmap mode converted models (from conftest fixture)
+    :param max_per_benchmark: Max models per benchmark (from conftest fixture)
     """
-    try:
-        from torch.func import vmap, jacrev
-    except ImportError:
-        print("SKIP: torch.func.vmap not available (requires PyTorch >= 2.0)")
-        return {"status": "skipped", "reason": "torch.func not available"}
+    if importlib.util.find_spec("torch.func") is None:
+        pytest.skip("torch.func.vmap not available (requires PyTorch >= 2.0)")
 
-    benchmarks_root = Path(benchmark_dir)
-    vmap_root = Path(vmap_dir)
-    models = find_models_without_batch_dim(benchmark_dir, max_per_benchmark)
+    from torch.func import vmap
 
-    print(f"\nTesting vmap compatibility")
+    vmap_root = output_dir_vmap
+    models = find_models_without_batch_dim(str(benchmarks_root), max_per_benchmark)
+
+    print("\nTesting vmap compatibility")
     print("=" * 70)
 
     counts = {"passed": 0, "failed": 0, "skipped": 0}
@@ -637,7 +639,7 @@ def test_vmap_compatibility(
 
     for i, model_path in enumerate(models):
         rel_path = get_model_relative_path(model_path, benchmarks_root)
-        print(f"[{i+1}/{len(models)}] {rel_path}...", end=" ")
+        print(f"[{i + 1}/{len(models)}] {rel_path}...", end=" ")
 
         vmap_py = vmap_root / rel_path.with_suffix(".py")
         vmap_pth = vmap_root / rel_path.with_suffix(".pth")
@@ -674,7 +676,7 @@ def test_vmap_compatibility(
             batch_size = 4
             batched_input = input_tensor.unsqueeze(0).expand(batch_size, *input_tensor.shape)
 
-            def single_forward(x):
+            def single_forward(x, model=model):
                 return model(x)
 
             try:
@@ -693,11 +695,11 @@ def test_vmap_compatibility(
                 if diff > 1e-5:
                     raise ValueError(f"Vmap output differs from direct: {diff}")
 
-                print(f"OK (vmap works)")
+                print("OK (vmap works)")
                 counts["passed"] += 1
                 all_results[str(rel_path)] = {"status": "OK", "vmap": True}
 
-            except Exception as vmap_error:
+            except (RuntimeError, ValueError, TypeError) as vmap_error:
                 # Check if this is an expected failure
                 is_expected = any(b in str(rel_path) for b in VMAP_INCOMPATIBLE_BENCHMARKS)
                 if is_expected:
@@ -713,7 +715,7 @@ def test_vmap_compatibility(
                     counts["failed"] += 1
                     all_results[str(rel_path)] = {"status": "VMAP_FAIL", "error": str(vmap_error)}
 
-        except Exception as e:
+        except (RuntimeError, ValueError, TypeError, OSError) as e:
             print(f"ERROR - {e}")
             counts["failed"] += 1
             all_results[str(rel_path)] = {"status": "ERROR", "error": str(e)}
@@ -725,11 +727,6 @@ def test_vmap_compatibility(
     print(f"Expected failures (input-dependent slicing): {counts.get('expected_fail', 0)}")
     print(f"Unexpected failures: {counts['failed']}")
     print(f"Skipped: {counts['skipped']}")
-
-    return {
-        "counts": counts,
-        "results": all_results,
-    }
 
 
 def run_all_tests(
@@ -772,8 +769,7 @@ def run_all_tests(
         for device in devices:
             key = f"{dtype}_{device}"
             verification_results[key] = verify_vmap_vs_standard(
-                benchmark_dir, output_dir, standard_dir,
-                max_per_benchmark, dtype, device
+                benchmark_dir, output_dir, standard_dir, max_per_benchmark, dtype, device
             )
     all_results["verification"] = verification_results
 
@@ -793,14 +789,13 @@ def run_all_tests(
     def make_serializable(obj):
         if isinstance(obj, dict):
             return {k: make_serializable(v) for k, v in obj.items()}
-        elif isinstance(obj, list):
+        if isinstance(obj, list):
             return [make_serializable(v) for v in obj]
-        elif isinstance(obj, (np.floating, np.integer)):
+        if isinstance(obj, (np.floating, np.integer)):
             return float(obj)
-        else:
-            return obj
+        return obj
 
-    with open(results_file, "w") as f:
+    with results_file.open("w") as f:
         json.dump(make_serializable(all_results), f, indent=2)
     print(f"\nAll results saved to: {results_file}")
 
@@ -812,18 +807,20 @@ def run_all_tests(
 
     for key, ver_res in verification_results.items():
         counts = ver_res["counts"]
-        print(f"Verification ({key}): {counts['passed']} passed, {counts['failed']} failed, {counts['skipped']} skipped")
+        passed, failed, skipped = counts["passed"], counts["failed"], counts["skipped"]
+        print(f"Verification ({key}): {passed} passed, {failed} failed, {skipped} skipped")
 
     vmap_counts = vmap_results.get("counts", {})
-    print(f"Vmap compatibility: {vmap_counts.get('passed', 0)} passed, {vmap_counts.get('failed', 0)} failed")
+    passed, failed = vmap_counts.get("passed", 0), vmap_counts.get("failed", 0)
+    print(f"Vmap compatibility: {passed} passed, {failed} failed")
 
     return all_results
 
 
 def main():
-    """Main entry point for script execution.
+    """Run all vmap tests using pytest.
 
-    Runs all vmap tests using pytest. For individual test control:
+    Executes vmap conversion and compatibility tests. For individual control:
         pytest tests/test_vmap_mode.py::test_convert_vmap_model
         pytest tests/test_vmap_mode.py::test_verify_vmap_vs_standard
         pytest tests/test_vmap_mode.py::test_torch_vmap_compatibility
@@ -833,11 +830,13 @@ def main():
     print("\n" + "=" * 70)
     print("STEP 1: Converting models to vmap mode")
     print("=" * 70)
-    exit_code = pytest.main([
-        __file__ + "::test_convert_vmap_model",
-        "-v",
-        "--tb=short",
-    ])
+    exit_code = pytest.main(
+        [
+            __file__ + "::test_convert_vmap_model",
+            "-v",
+            "--tb=short",
+        ]
+    )
 
     if exit_code != 0:
         print("\nVmap conversion tests failed. Skipping verification.")
@@ -846,20 +845,24 @@ def main():
     print("\n" + "=" * 70)
     print("STEP 2: Verifying vmap vs standard mode")
     print("=" * 70)
-    exit_code = pytest.main([
-        __file__ + "::test_verify_vmap_vs_standard",
-        "-v",
-        "--tb=short",
-    ])
+    exit_code = pytest.main(
+        [
+            __file__ + "::test_verify_vmap_vs_standard",
+            "-v",
+            "--tb=short",
+        ]
+    )
 
     print("\n" + "=" * 70)
     print("STEP 3: Testing torch.vmap compatibility")
     print("=" * 70)
-    exit_code = pytest.main([
-        __file__ + "::test_torch_vmap_compatibility",
-        "-v",
-        "--tb=short",
-    ])
+    exit_code = pytest.main(
+        [
+            __file__ + "::test_torch_vmap_compatibility",
+            "-v",
+            "--tb=short",
+        ]
+    )
 
     sys.exit(exit_code)
 

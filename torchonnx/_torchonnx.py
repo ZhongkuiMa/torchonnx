@@ -31,7 +31,7 @@ class TorchONNX:
             compatibility with torch.vmap and functorch transforms.
         """
         # Stage 1: Normalize ONNX model
-        from .normalize import load_and_preprocess_onnx_model
+        from torchonnx.torchonnx.normalize import load_and_preprocess_onnx_model
 
         model = load_and_preprocess_onnx_model(
             onnx_path,
@@ -42,22 +42,22 @@ class TorchONNX:
         )
 
         # Stage 2: Build structural IR
-        from .build import build_model_ir
+        from torchonnx.torchonnx.build import build_model_ir
 
         raw_ir = build_model_ir(model)
 
         # Stage 3: Build semantic IR
-        from .analyze import build_semantic_ir
+        from torchonnx.torchonnx.analyze import build_semantic_ir
 
         semantic_ir = build_semantic_ir(raw_ir)
 
         # Stage 4: Optimize IR
-        from .optimize import optimize_semantic_ir
+        from torchonnx.torchonnx.optimize import optimize_semantic_ir
 
         optimized_ir = optimize_semantic_ir(semantic_ir)
 
         # Stage 5: Generate PyTorch code
-        from .generate import generate_pytorch_module, to_camel_case
+        from torchonnx.torchonnx.generate import generate_pytorch_module, to_camel_case
 
         model_name = Path(onnx_path).stem
         if benchmark_name:
@@ -73,11 +73,17 @@ class TorchONNX:
         )
 
         # Stage 6: Optimize generated code and filter state_dict
-        from .simplify import optimize_generated_code, add_file_header, format_code
-
-        optimized_code, state_dict = optimize_generated_code(
-            code, state_dict, enable=True
+        from torchonnx.torchonnx.simplify import (
+            add_file_header,
+            format_code,
+            optimize_generated_code,
         )
+
+        result = optimize_generated_code(code, state_dict, enable=True)
+        assert isinstance(result, tuple), (
+            "optimize_generated_code should return tuple when state_dict is provided"
+        )
+        optimized_code, state_dict = result
 
         # Stage 6b: Apply Black-compatible formatting
         formatted_code = format_code(optimized_code)
@@ -124,7 +130,7 @@ class TorchONNX:
         :param clear_docstrings: Clear node docstrings (default: True)
         :return: Preprocessed model
         """
-        from .normalize import load_and_preprocess_onnx_model
+        from torchonnx.torchonnx.normalize import load_and_preprocess_onnx_model
 
         return load_and_preprocess_onnx_model(
             onnx_path,

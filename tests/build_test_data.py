@@ -80,7 +80,7 @@ def _get_model_input_info(onnx_path: Path) -> tuple[str, list[int]] | None:
         ]
 
         return input_name, expected_shape
-    except Exception:
+    except (AttributeError, ValueError, IndexError):
         return None
 
 
@@ -111,9 +111,10 @@ def generate_test_data(
         outputs_list = []
 
         # Generate test samples with random inputs in reasonable range
+        rng = np.random.default_rng()
         for _ in range(num_samples):
             # Generate random input in [-1, 1] range
-            input_array = np.random.uniform(-1.0, 1.0, expected_shape).astype(np.float32)
+            input_array = rng.uniform(-1.0, 1.0, expected_shape).astype(np.float32)
 
             try:
                 output = session.run(None, {input_name: input_array})

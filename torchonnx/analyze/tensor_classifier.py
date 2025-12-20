@@ -8,9 +8,9 @@ __docformat__ = "restructuredtext"
 __all__ = ["classify_inputs", "classify_outputs"]
 
 import torch
-from onnx import TensorProto, numpy_helper
+from onnx import NodeProto, TensorProto, numpy_helper
 
-from .types import VariableInfo, ParameterInfo, ConstantInfo
+from torchonnx.torchonnx.analyze.types import ConstantInfo, ParameterInfo, VariableInfo
 
 # ONNX dtype to PyTorch dtype mapping
 _ONNX_TO_TORCH_DTYPE = {
@@ -71,25 +71,16 @@ def _get_parameter_role(
 
     # Strip nn. prefix if present for comparison
     layer_type = pytorch_type
-    if layer_type.startswith("nn."):
-        layer_type = layer_type[3:]
+    layer_type = layer_type.removeprefix("nn.")
 
     # Determine role based on layer type and position
     # First input (idx=0) is always the data input, not a parameter
 
-    if layer_type in ("Conv2d", "Conv1d"):
-        if idx == 1:
-            return "weight"
-        if idx == 2:
-            return "bias"
-
-    elif layer_type in ("ConvTranspose2d", "ConvTranspose1d"):
-        if idx == 1:
-            return "weight"
-        if idx == 2:
-            return "bias"
-
-    elif layer_type == "Linear":
+    if (
+        layer_type in ("Conv2d", "Conv1d")
+        or layer_type in ("ConvTranspose2d", "ConvTranspose1d")
+        or layer_type == "Linear"
+    ):
         if idx == 1:
             return "weight"
         if idx == 2:
@@ -118,7 +109,7 @@ def classify_inputs(
     input_names: list[str],
     initializers: dict[str, TensorProto],
     pytorch_type: str,
-    shapes: dict[str, tuple[int, ...] | None],
+    shapes: dict[str, tuple[int | str, ...] | None],
     code_name_counters: dict[str, int],
     variable_mapping: dict[str, str] | None = None,
     constant_mapping: dict[str, ConstantInfo] | None = None,
@@ -139,7 +130,7 @@ def classify_inputs(
     :param node: Optional ONNX NodeProto for extracting attributes (e.g., transB for Gemm)
     :return: Ordered list of typed input info objects
     """
-    results = []
+    results: list[VariableInfo | ParameterInfo | ConstantInfo] = []
 
     for onnx_name in input_names:
         # Skip empty strings (optional inputs not provided in ONNX)
@@ -161,16 +152,19 @@ def classify_inputs(
 
                 # Transpose Linear layer weights from ONNX format to PyTorch format
                 # ONNX Gemm behavior depends on transB attribute:
-                #   - transB=0 (default): weight shape = (in_features, out_features) → needs transpose
-                #   - transB=1: weight shape = (out_features, in_features) → already correct
-                # PyTorch nn.Linear expects: weight shape = (out_features, in_features)
-                if (pytorch_type in ["Linear", "nn.Linear"] and
-                    param_role == "weight" and
-                    torch_tensor.ndim == 2):
+                #   - transB=0 (default): weight = (in_features, out_features) → needs transpose
+                #   - transB=1: weight = (out_features, in_features) → already correct
+                # PyTorch nn.Linear expects: (out_features, in_features)
+                if (
+                    pytorch_type in ["Linear", "nn.Linear"]
+                    and param_role == "weight"
+                    and torch_tensor.ndim == 2
+                ):
                     # Check transB attribute from ONNX node
                     trans_b = 0  # Default value
                     if node is not None:
-                        from .attr_extractor import extract_onnx_attrs
+                        from torchonnx.torchonnx.analyze.attr_extractor import extract_onnx_attrs
+
                         attrs = extract_onnx_attrs(node, initializers)
                         trans_b = attrs.get("transB", 0)
 
@@ -237,7 +231,7 @@ def classify_inputs(
 
 def classify_outputs(
     output_names: list[str],
-    shapes: dict[str, tuple[int, ...] | None],
+    shapes: dict[str, tuple[int | str, ...] | None],
     code_name_counters: dict[str, int],
     variable_mapping: dict[str, str] | None = None,
 ) -> list[VariableInfo]:

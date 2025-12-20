@@ -11,7 +11,7 @@ from typing import Any
 
 from onnx import NodeProto, TensorProto
 
-from ..attr_extractor import extract_onnx_attrs
+from torchonnx.torchonnx.analyze.attr_extractor import extract_onnx_attrs
 
 ONNX_TO_PYTORCH_LAYERS: dict[str, str] = {
     # Convolution - Note: Conv/ConvTranspose require weight shape inspection
@@ -74,8 +74,7 @@ def is_layer_with_args(layer_type: str) -> bool:
     :return: True if layer has learnable parameters
     """
     # Strip nn. prefix if present
-    if layer_type.startswith("nn."):
-        layer_type = layer_type[3:]
+    layer_type = layer_type.removeprefix("nn.")
     return layer_type in LAYERS_WITH_ARGS
 
 
@@ -88,9 +87,7 @@ def _simplify_tuple(arg: tuple[int, ...] | int) -> tuple[int, ...] | int:
     if isinstance(arg, tuple):
         if len(arg) == 0:
             return arg
-        elif len(arg) == 1:
-            return arg[0]
-        elif all(x == arg[0] for x in arg):
+        if len(arg) == 1 or all(x == arg[0] for x in arg):
             return arg[0]
     return arg
 
@@ -105,8 +102,7 @@ def _check_symmetric_padding(pads: tuple[int, ...]) -> None:
     for i in range(dims):
         if pads[i] != pads[i + dims]:
             raise ValueError(
-                f"Asymmetric padding {pads} not supported. "
-                f"Start and end padding must be equal."
+                f"Asymmetric padding {pads} not supported. Start and end padding must be equal."
             )
 
 

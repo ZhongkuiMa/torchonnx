@@ -7,28 +7,25 @@ to PyTorch-style typed containers with resolved tensor data.
 __docformat__ = "restructuredtext"
 __all__ = ["build_semantic_ir"]
 
-from .tensor_classifier import (
-    classify_inputs,
-    classify_outputs,
-)
-from .type_mapping import (
+from torchonnx.torchonnx.analyze.tensor_classifier import classify_inputs, classify_outputs
+from torchonnx.torchonnx.analyze.type_mapping import (
     convert_to_pytorch_type,
-    is_layer_with_args,
     extract_layer_args,
-    is_operator,
-    is_operation,
     extract_operation_args,
+    is_layer_with_args,
+    is_operation,
+    is_operator,
 )
-from .types import (
+from torchonnx.torchonnx.analyze.types import (
+    ArgumentInfo,
+    ConstantInfo,
+    OperatorClass,
+    ParameterInfo,
     SemanticLayerIR,
     SemanticModelIR,
-    OperatorClass,
     VariableInfo,
-    ParameterInfo,
-    ConstantInfo,
-    ArgumentInfo,
 )
-from ..build import NodeIR, ModelIR
+from torchonnx.torchonnx.build import ModelIR, NodeIR
 
 
 def _classify_operator_class(pytorch_type: str) -> OperatorClass:
@@ -39,15 +36,13 @@ def _classify_operator_class(pytorch_type: str) -> OperatorClass:
     """
     if is_operator(pytorch_type):
         return OperatorClass.OPERATOR
-    elif is_operation(pytorch_type):
+    if is_operation(pytorch_type):
         return OperatorClass.OPERATION
-    else:
-        # If it has args, it's a layer
-        if is_layer_with_args(pytorch_type):
-            return OperatorClass.LAYER
-        else:
-            # Fallback to operation for stateless types
-            return OperatorClass.OPERATION
+    # If it has args, it's a layer
+    if is_layer_with_args(pytorch_type):
+        return OperatorClass.LAYER
+    # Fallback to operation for stateless types
+    return OperatorClass.OPERATION
 
 
 def _build_semantic_layer_ir(
@@ -165,10 +160,10 @@ def build_semantic_ir(model_ir: ModelIR) -> SemanticModelIR:
     constant_mapping: dict[str, ConstantInfo] = {}
 
     # Build semantic layers
-    semantic_layers = []
-    all_parameters = []
-    all_constants = []
-    all_variables = []
+    semantic_layers: list[SemanticLayerIR] = []
+    all_parameters: list[ParameterInfo] = []
+    all_constants: list[ConstantInfo] = []
+    all_variables: list[VariableInfo] = []
 
     # Process model inputs first (they are variables)
     for input_name in model_ir.input_names:
@@ -192,16 +187,14 @@ def build_semantic_ir(model_ir: ModelIR) -> SemanticModelIR:
 
         # Collect parameters and constants from inputs
         for typed_input in semantic_layer.inputs:
-            if isinstance(typed_input, ParameterInfo):
-                # Avoid duplicates by checking onnx_name
-                if not any(
-                    p.onnx_name == typed_input.onnx_name for p in all_parameters
-                ):
-                    all_parameters.append(typed_input)
-            elif isinstance(typed_input, ConstantInfo):
-                # Avoid duplicates by checking onnx_name
-                if not any(c.onnx_name == typed_input.onnx_name for c in all_constants):
-                    all_constants.append(typed_input)
+            if isinstance(typed_input, ParameterInfo) and not any(
+                p.onnx_name == typed_input.onnx_name for p in all_parameters
+            ):
+                all_parameters.append(typed_input)
+            elif isinstance(typed_input, ConstantInfo) and not any(
+                c.onnx_name == typed_input.onnx_name for c in all_constants
+            ):
+                all_constants.append(typed_input)
 
         # Collect all variables (outputs and intermediate variables)
         for var in semantic_layer.outputs:

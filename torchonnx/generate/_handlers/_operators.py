@@ -7,13 +7,8 @@ Generate code like: x2 = x0 + x1, x3 = x1 @ x2, etc.
 __docformat__ = "restructuredtext"
 __all__ = ["register_operator_handlers"]
 
-from ._registry import register_handler
-from ...analyze import (
-    SemanticLayerIR,
-    VariableInfo,
-    ParameterInfo,
-    ConstantInfo,
-)
+from torchonnx.torchonnx.analyze import ConstantInfo, ParameterInfo, SemanticLayerIR, VariableInfo
+from torchonnx.torchonnx.generate._handlers._registry import register_handler
 
 
 def _get_input_code_name(
@@ -35,11 +30,7 @@ def _get_input_code_name(
         if use_literal_for_scalar and inp.data.numel() == 1:
             # Scalar literal
             should_use_literal = True
-        elif (
-            use_literal_for_small_vector
-            and inp.data.ndim == 1
-            and inp.data.numel() <= 10
-        ):
+        elif use_literal_for_small_vector and inp.data.ndim == 1 and inp.data.numel() <= 10:
             # Small 1D vector literal
             should_use_literal = True
 
@@ -51,30 +42,26 @@ def _get_input_code_name(
                     isinstance(value, float) and value.is_integer()
                 ):
                     return str(int(value))
-                else:
-                    return str(value)
-            else:
-                # Small 1D vector - use torch.tensor([...])
-                values = inp.data.tolist()
-                return f"torch.tensor({values})"
-        else:
-            # Non-literal constant - mark as used
-            from .._forward_gen import get_forward_gen_context
+                return str(value)
+            # Small 1D vector - use torch.tensor([...])
+            values = inp.data.tolist()
+            return f"torch.tensor({values})"
+        # Non-literal constant - mark as used
+        from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
 
-            ctx = get_forward_gen_context()
-            if ctx:
-                ctx.mark_constant_used(inp.code_name)
-            return f"self.{inp.code_name}"
-    elif isinstance(inp, ParameterInfo):
+        ctx = get_forward_gen_context()
+        if ctx:
+            ctx.mark_constant_used(inp.code_name)
+        return f"self.{inp.code_name}"
+    if isinstance(inp, ParameterInfo):
         # Import here to avoid circular dependency
-        from .._forward_gen import get_forward_gen_context
+        from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
 
         ctx = get_forward_gen_context()
         if ctx:
             ctx.mark_parameter_used(inp.code_name)
         return f"self.{inp.code_name}"
-    else:
-        return inp.code_name
+    return inp.code_name
 
 
 def _handle_add(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
@@ -101,13 +88,10 @@ def _handle_add(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> s
     # Check if there are arguments (e.g., alpha for scaled add)
     if layer.arguments:
         # Use torch.add with arguments
-        args_str = ", ".join(
-            f"{arg.pytorch_name}={arg.value}" for arg in layer.arguments
-        )
+        args_str = ", ".join(f"{arg.pytorch_name}={arg.value}" for arg in layer.arguments)
         return f"{output} = torch.add({input1}, {input2}, {args_str})"
-    else:
-        # Use simple + operator
-        return f"{output} = {input1} + {input2}"
+    # Use simple + operator
+    return f"{output} = {input1} + {input2}"
 
 
 def _handle_sub(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:

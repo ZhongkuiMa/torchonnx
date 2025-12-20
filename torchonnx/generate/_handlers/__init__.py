@@ -13,7 +13,7 @@ __all__ = [
     "HANDLERS",
 ]
 
-from ._layers import register_layer_handlers
-from ._operations import register_operation_handlers
-from ._operators import register_operator_handlers
-from ._registry import get_handler, register_handler, HANDLERS
+from torchonnx.torchonnx.generate._handlers._layers import register_layer_handlers
+from torchonnx.torchonnx.generate._handlers._operations import register_operation_handlers
+from torchonnx.torchonnx.generate._handlers._operators import register_operator_handlers
+from torchonnx.torchonnx.generate._handlers._registry import HANDLERS, get_handler, register_handler

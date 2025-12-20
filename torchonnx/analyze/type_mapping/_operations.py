@@ -16,10 +16,11 @@ __all__ = [
 ]
 
 from typing import Any
+import numpy as np
 
-from onnx import numpy_helper, NodeProto, TensorProto
+from onnx import NodeProto, TensorProto, numpy_helper
 
-from ..attr_extractor import extract_onnx_attrs
+from torchonnx.torchonnx.analyze.attr_extractor import extract_onnx_attrs
 
 ONNX_TO_PYTORCH_OPERATORS: dict[str, str] = {
     # Unary operators
@@ -110,9 +111,7 @@ def convert_to_operation(layer_type: str) -> str:
     return ONNX_TO_PYTORCH_OPERATIONS[layer_type]
 
 
-def _extract_pad_args(
-    node: NodeProto, initializers: dict[str, TensorProto]
-) -> dict[str, Any]:
+def _extract_pad_args(node: NodeProto, initializers: dict[str, TensorProto]) -> dict[str, Any]:
     """Extract arguments for Pad operation.
 
     :param node: ONNX Pad node
@@ -131,6 +130,208 @@ def _extract_pad_args(
     return {"pad": pads, "mode": mode, "value": value}
 
 
+def _extract_squeeze_unsqueeze_args(
+    node: NodeProto, initializers: dict[str, TensorProto]
+) -> dict[str, Any]:
+    """Extract arguments for Squeeze/Unsqueeze operations."""
+    attrs = extract_onnx_attrs(node, initializers)
+    axes = attrs.get("axes", [])
+
+    # In opset 13+, axes moved from attribute to input (second input)
+    if not axes and len(node.input) >= 2:
+        axes_name = node.input[1]
+        if axes_name in initializers:
+            axes_array = numpy_helper.to_array(initializers[axes_name])
+            axes = tuple(axes_array.tolist())
+
+    return {"dim": axes[0] if len(axes) == 1 else tuple(axes)} if axes else {}
+
+
+def _extract_constant_of_shape_args(
+    node: NodeProto, initializers: dict[str, TensorProto]
+) -> dict[str, Any]:
+    """Extract arguments for ConstantOfShape operation."""
+    attrs = extract_onnx_attrs(node, initializers)
+    value = attrs.get("value")
+    if value is not None:
+        # Keep the numpy array to preserve dtype information
+        # The codegen phase will extract the scalar value and dtype
+        if isinstance(value, np.ndarray):
+            return {"value": value}
+        # Fallback for TensorProto
+        value_array = numpy_helper.to_array(value)
+        return {"value": value_array}
+    # Return 0-dimensional array to preserve type information
+    return {"value": np.array([0.0])}
+
+
+def _simplify_homogeneous_values(values: list[int], skip_default: int | None = None) -> int | tuple[int, ...]:
+    """Simplify homogeneous values into scalar or tuple.
+
+    :param values: List of values
+    :param skip_default: Default value to skip if not needed
+    :return: Scalar if all same, tuple otherwise
+    """
+    if not values:
+        return ()
+    if all(v == values[0] for v in values):
+        return values[0]
+    return tuple(values)
+
+
+def _process_conv_padding(pads: list[int], operation: str) -> int | tuple[int, ...]:
+    """Convert and validate ONNX padding to PyTorch format.
+
+    :param pads: ONNX padding values
+    :param operation: Operation name (Conv or ConvTranspose)
+    :return: PyTorch padding format
+    :raises ValueError: If padding is asymmetric
+    """
+    ndims = len(pads) // 2
+    symmetric = all(pads[i] == pads[i + ndims] for i in range(ndims))
+
+    if not symmetric:
+        raise ValueError(
+            f"Asymmetric padding {pads} not supported for F.{operation.lower()}. "
+            f"PyTorch F.{operation.lower()} only supports symmetric padding."
+        )
+
+    pad_values = pads[:ndims]
+    return _simplify_homogeneous_values(pad_values)
+
+
+def _extract_conv_args(
+    node: NodeProto, initializers: dict[str, TensorProto]
+) -> dict[str, Any]:
+    """Extract arguments for Conv operation."""
+    attrs = extract_onnx_attrs(node, initializers)
+    strides = attrs.get("strides")
+    pads = attrs.get("pads")
+    dilations = attrs.get("dilations")
+    groups = attrs.get("group", 1)
+
+    pytorch_args: dict[str, Any] = {}
+
+    if strides:
+        pytorch_args["stride"] = _simplify_homogeneous_values(strides)
+
+    if pads:
+        pytorch_args["padding"] = _process_conv_padding(pads, "Conv")
+
+    if dilations:
+        simplified = _simplify_homogeneous_values(dilations)
+        if simplified != 1:
+            pytorch_args["dilation"] = simplified
+
+    if groups != 1:
+        pytorch_args["groups"] = groups
+
+    return pytorch_args
+
+
+def _extract_conv_transpose_args(
+    node: NodeProto, initializers: dict[str, TensorProto]
+) -> dict[str, Any]:
+    """Extract arguments for ConvTranspose operation."""
+    attrs = extract_onnx_attrs(node, initializers)
+    strides = attrs.get("strides")
+    pads = attrs.get("pads")
+    dilations = attrs.get("dilations")
+    groups = attrs.get("group", 1)
+    output_padding = attrs.get("output_padding")
+
+    pytorch_args: dict[str, Any] = {}
+
+    if strides:
+        pytorch_args["stride"] = _simplify_homogeneous_values(strides)
+
+    if pads:
+        pytorch_args["padding"] = _process_conv_padding(pads, "ConvTranspose")
+
+    if output_padding:
+        simplified = _simplify_homogeneous_values(output_padding)
+        if simplified != 0:
+            pytorch_args["output_padding"] = simplified
+
+    if dilations:
+        simplified = _simplify_homogeneous_values(dilations)
+        if simplified != 1:
+            pytorch_args["dilation"] = simplified
+
+    if groups != 1:
+        pytorch_args["groups"] = groups
+
+    return pytorch_args
+
+
+# Dispatch dictionary for operation argument extraction
+_OPERATION_ARGS_EXTRACTORS: dict[str, Any] = {
+    "Pad": _extract_pad_args,
+    "Reshape": lambda node, initializers: {},
+    "Transpose": lambda node, initializers: {
+        "perm": extract_onnx_attrs(node, initializers).get("perm", [])
+    },
+    "Squeeze": _extract_squeeze_unsqueeze_args,
+    "Unsqueeze": _extract_squeeze_unsqueeze_args,
+    "Shape": lambda node, initializers: {},
+    "Gather": lambda node, initializers: {
+        "axis": extract_onnx_attrs(node, initializers).get("axis", 0)
+    },
+    "Cast": lambda node, initializers: {
+        "to": extract_onnx_attrs(node, initializers).get("to", 1)
+    },
+    "Concat": lambda node, initializers: {
+        "axis": extract_onnx_attrs(node, initializers).get("axis", 0)
+    },
+    "Gemm": lambda node, initializers: {
+        **{"alpha": extract_onnx_attrs(node, initializers).get("alpha", 1.0)},
+        **{"beta": extract_onnx_attrs(node, initializers).get("beta", 1.0)},
+        **{"transA": extract_onnx_attrs(node, initializers).get("transA", 0)},
+        **{"transB": extract_onnx_attrs(node, initializers).get("transB", 0)},
+    },
+    "Slice": lambda node, initializers: {
+        "starts": extract_onnx_attrs(node, initializers).get("starts", []),
+        "ends": extract_onnx_attrs(node, initializers).get("ends", []),
+        "axes": extract_onnx_attrs(node, initializers).get("axes", None),
+    },
+    "Sign": lambda node, initializers: {},
+    "Split": lambda node, initializers: {
+        "axis": extract_onnx_attrs(node, initializers).get("axis", 0)
+    },
+    "ConstantOfShape": _extract_constant_of_shape_args,
+    "ReduceMean": lambda node, initializers: {
+        "axes": extract_onnx_attrs(node, initializers).get("axes", None),
+        "keepdims": bool(extract_onnx_attrs(node, initializers).get("keepdims", 1)),
+    },
+    "ReduceSum": lambda node, initializers: {
+        "axes": extract_onnx_attrs(node, initializers).get("axes", None),
+        "keepdims": bool(extract_onnx_attrs(node, initializers).get("keepdims", 1)),
+    },
+    "Cos": lambda node, initializers: {},
+    "Sin": lambda node, initializers: {},
+    "Floor": lambda node, initializers: {},
+    "Neg": lambda node, initializers: {},
+    "Expand": lambda node, initializers: {},
+    "Range": lambda node, initializers: {},
+    "Where": lambda node, initializers: {},
+    "ScatterND": lambda node, initializers: {
+        "reduction": extract_onnx_attrs(node, initializers).get("reduction", "none")
+    },
+    "ArgMax": lambda node, initializers: {
+        "dim": extract_onnx_attrs(node, initializers).get("axis", 0),
+        "keepdim": bool(extract_onnx_attrs(node, initializers).get("keepdims", 1)),
+    },
+    "Min": lambda node, initializers: {},
+    "Max": lambda node, initializers: {},
+    "Clip": lambda node, initializers: {
+        "min": extract_onnx_attrs(node, initializers).get("min"),
+        "max": extract_onnx_attrs(node, initializers).get("max"),
+    },
+    "Conv": _extract_conv_args,
+    "ConvTranspose": _extract_conv_transpose_args,
+}
+
+
 def extract_operation_args(
     node: NodeProto,
     initializers: dict[str, TensorProto],
@@ -143,240 +344,7 @@ def extract_operation_args(
     :param layer_type: PyTorch layer type
     :return: Arguments for functional call
     """
-
-    if layer_type == "Pad":
-        return _extract_pad_args(node, initializers)
-    elif layer_type == "Reshape":
+    extractor = _OPERATION_ARGS_EXTRACTORS.get(layer_type)
+    if extractor is None:
         return {}
-    elif layer_type == "Transpose":
-        attrs = extract_onnx_attrs(node, initializers)
-        return {"perm": attrs.get("perm", [])}
-    elif layer_type == "Squeeze":
-        attrs = extract_onnx_attrs(node, initializers)
-        axes = attrs.get("axes", [])
-
-        # In opset 13+, axes moved from attribute to input (second input)
-        if not axes and len(node.input) >= 2:
-            axes_name = node.input[1]
-            if axes_name in initializers:
-                axes_array = numpy_helper.to_array(initializers[axes_name])
-                axes = tuple(axes_array.tolist())
-
-        return {"dim": axes[0] if len(axes) == 1 else tuple(axes)} if axes else {}
-    elif layer_type == "Unsqueeze":
-        attrs = extract_onnx_attrs(node, initializers)
-        axes = attrs.get("axes", [])
-
-        # In opset 13+, axes moved from attribute to input (second input)
-        if not axes and len(node.input) >= 2:
-            axes_name = node.input[1]
-            if axes_name in initializers:
-                axes_array = numpy_helper.to_array(initializers[axes_name])
-                axes = tuple(axes_array.tolist())
-
-        return {"dim": axes[0] if len(axes) == 1 else tuple(axes)} if axes else {}
-    elif layer_type == "Shape":
-        return {}
-    elif layer_type == "Gather":
-        attrs = extract_onnx_attrs(node, initializers)
-        return {"axis": attrs.get("axis", 0)}
-    elif layer_type == "Cast":
-        attrs = extract_onnx_attrs(node, initializers)
-        return {"to": attrs.get("to", 1)}
-    elif layer_type == "Concat":
-        attrs = extract_onnx_attrs(node, initializers)
-        return {"axis": attrs.get("axis", 0)}
-    elif layer_type == "Gemm":
-        attrs = extract_onnx_attrs(node, initializers)
-        return {
-            "alpha": attrs.get("alpha", 1.0),
-            "beta": attrs.get("beta", 1.0),
-            "transA": attrs.get("transA", 0),
-            "transB": attrs.get("transB", 0),
-        }
-    elif layer_type == "Slice":
-        attrs = extract_onnx_attrs(node, initializers)
-        return {
-            "starts": attrs.get("starts", []),
-            "ends": attrs.get("ends", []),
-            "axes": attrs.get("axes", None),
-        }
-    elif layer_type == "Sign":
-        return {}
-    elif layer_type == "Split":
-        attrs = extract_onnx_attrs(node, initializers)
-        return {"axis": attrs.get("axis", 0)}
-    elif layer_type == "ConstantOfShape":
-        attrs = extract_onnx_attrs(node, initializers)
-        value = attrs.get("value")
-        if value is not None:
-            import numpy as np
-
-            # Keep the numpy array to preserve dtype information
-            # The codegen phase will extract the scalar value and dtype
-            if isinstance(value, np.ndarray):
-                return {"value": value}
-            else:
-                # Fallback for TensorProto
-                # numpy_helper is already imported at module level
-                value_array = numpy_helper.to_array(value)
-                return {"value": value_array}
-        # Return 0-dimensional array to preserve type information
-        import numpy as np
-
-        return {"value": np.array([0.0])}
-    elif layer_type == "ReduceMean":
-        attrs = extract_onnx_attrs(node, initializers)
-        axes = attrs.get("axes", None)
-        keepdims = attrs.get("keepdims", 1)
-        return {"axes": axes, "keepdims": bool(keepdims)}
-    elif layer_type == "ReduceSum":
-        attrs = extract_onnx_attrs(node, initializers)
-        axes = attrs.get("axes", None)
-        keepdims = attrs.get("keepdims", 1)
-        return {"axes": axes, "keepdims": bool(keepdims)}
-    elif layer_type == "Cos":
-        return {}
-    elif layer_type == "Sin":
-        return {}
-    elif layer_type == "Floor":
-        return {}
-    elif layer_type == "Neg":
-        return {}
-    elif layer_type == "Expand":
-        return {}
-    elif layer_type == "Range":
-        return {}
-    elif layer_type == "Where":
-        return {}
-    elif layer_type == "ScatterND":
-        attrs = extract_onnx_attrs(node, initializers)
-        return {"reduction": attrs.get("reduction", "none")}
-    elif layer_type == "ArgMax":
-        attrs = extract_onnx_attrs(node, initializers)
-        return {
-            "dim": attrs.get("axis", 0),
-            "keepdim": bool(attrs.get("keepdims", 1)),
-        }
-    elif layer_type == "Min":
-        return {}
-    elif layer_type == "Max":
-        return {}
-    elif layer_type == "Clip":
-        attrs = extract_onnx_attrs(node, initializers)
-        return {"min": attrs.get("min"), "max": attrs.get("max")}
-    elif layer_type == "Conv":
-        attrs = extract_onnx_attrs(node, initializers)
-
-        # Get ONNX attributes with defaults
-        strides = attrs.get("strides")
-        pads = attrs.get("pads")
-        dilations = attrs.get("dilations")
-        groups = attrs.get("group", 1)
-
-        # Convert ONNX padding format to PyTorch format
-        # ONNX: [top, left, bottom, right] for 2D
-        # PyTorch: (pad_h, pad_w) - single value for symmetric padding
-        pytorch_args = {}
-
-        if strides:
-            # Simplify if all values are the same
-            if len(strides) > 0 and all(s == strides[0] for s in strides):
-                pytorch_args["stride"] = strides[0]
-            else:
-                pytorch_args["stride"] = tuple(strides)
-
-        if pads:
-            # Check if padding is symmetric
-            ndims = len(pads) // 2
-            symmetric = all(pads[i] == pads[i + ndims] for i in range(ndims))
-
-            if symmetric:
-                # Extract first half: [top, left, ...]
-                pad_values = pads[:ndims]
-                # Simplify if all values are the same
-                if all(p == pad_values[0] for p in pad_values):
-                    pytorch_args["padding"] = pad_values[0]
-                else:
-                    pytorch_args["padding"] = tuple(pad_values)
-            else:
-                raise ValueError(
-                    f"Asymmetric padding {pads} not supported for F.conv. "
-                    "PyTorch F.conv only supports symmetric padding."
-                )
-
-        if dilations:
-            # Simplify if all values are the same
-            if len(dilations) > 0 and all(d == dilations[0] for d in dilations):
-                if dilations[0] != 1:  # Only add if non-default
-                    pytorch_args["dilation"] = dilations[0]
-            else:
-                pytorch_args["dilation"] = tuple(dilations)
-
-        if groups != 1:
-            pytorch_args["groups"] = groups
-
-        return pytorch_args
-    elif layer_type == "ConvTranspose":
-        attrs = extract_onnx_attrs(node, initializers)
-
-        # Get ONNX attributes with defaults
-        strides = attrs.get("strides")
-        pads = attrs.get("pads")
-        dilations = attrs.get("dilations")
-        groups = attrs.get("group", 1)
-        output_padding = attrs.get("output_padding")
-
-        # Convert ONNX padding format to PyTorch format
-        pytorch_args = {}
-
-        if strides:
-            # Simplify if all values are the same
-            if len(strides) > 0 and all(s == strides[0] for s in strides):
-                pytorch_args["stride"] = strides[0]
-            else:
-                pytorch_args["stride"] = tuple(strides)
-
-        if pads:
-            # Check if padding is symmetric
-            ndims = len(pads) // 2
-            symmetric = all(pads[i] == pads[i + ndims] for i in range(ndims))
-
-            if symmetric:
-                # Extract first half: [top, left, ...]
-                pad_values = pads[:ndims]
-                # Simplify if all values are the same
-                if all(p == pad_values[0] for p in pad_values):
-                    pytorch_args["padding"] = pad_values[0]
-                else:
-                    pytorch_args["padding"] = tuple(pad_values)
-            else:
-                raise ValueError(
-                    f"Asymmetric padding {pads} not supported for F.conv_transpose. "
-                    "PyTorch F.conv_transpose only supports symmetric padding."
-                )
-
-        if output_padding:
-            # Simplify if all values are the same
-            if len(output_padding) > 0 and all(
-                p == output_padding[0] for p in output_padding
-            ):
-                if output_padding[0] != 0:  # Only add if non-default
-                    pytorch_args["output_padding"] = output_padding[0]
-            else:
-                pytorch_args["output_padding"] = tuple(output_padding)
-
-        if dilations:
-            # Simplify if all values are the same
-            if len(dilations) > 0 and all(d == dilations[0] for d in dilations):
-                if dilations[0] != 1:  # Only add if non-default
-                    pytorch_args["dilation"] = dilations[0]
-            else:
-                pytorch_args["dilation"] = tuple(dilations)
-
-        if groups != 1:
-            pytorch_args["groups"] = groups
-
-        return pytorch_args
-    else:
-        return {}
+    return extractor(node, initializers)

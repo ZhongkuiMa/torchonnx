@@ -16,8 +16,8 @@ __all__ = [
 ]
 
 from dataclasses import dataclass
-from typing import Any
 from enum import Enum
+from typing import Any
 
 import torch
 
@@ -30,12 +30,12 @@ class VariableInfo:
 
     :param onnx_name: Original ONNX tensor name (for reference/tracing)
     :param code_name: Generated variable name in code (e.g., "x1", "x2")
-    :param shape: Inferred shape (None if unknown/dynamic)
+    :param shape: Inferred shape (None if unknown/dynamic, may contain symbolic str dims)
     """
 
     onnx_name: str
     code_name: str
-    shape: tuple[int, ...] | None
+    shape: tuple[int | str, ...] | None
 
 
 @dataclass(frozen=True)
@@ -172,4 +172,4 @@ class SemanticModelIR:
     variables: list[VariableInfo]
     input_names: list[str]
     output_names: list[str]
-    shapes: dict[str, tuple[int, ...] | None]
+    shapes: dict[str, tuple[int | str, ...] | None]

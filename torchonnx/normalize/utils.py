@@ -11,7 +11,7 @@ __all__ = [
     "extract_onnx_opset_version",
 ]
 
-from onnx import ValueInfoProto, ModelProto, NodeProto, TensorProto
+from onnx import ModelProto, NodeProto, TensorProto, ValueInfoProto
 
 
 def get_onnx_input_nodes(model: ModelProto) -> list[ValueInfoProto]:
@@ -32,7 +32,7 @@ def get_onnx_output_nodes(model: ModelProto) -> list[ValueInfoProto]:
     :param model: ONNX model
     :return: List of output ValueInfoProto
     """
-    return [out for out in model.graph.output]
+    return list(model.graph.output)
 
 
 def get_onnx_model_input_names(model: ModelProto) -> list[str]:
@@ -60,7 +60,7 @@ def get_onnx_nodes(model: ModelProto) -> list[NodeProto]:
     :param model: ONNX model
     :return: List of ONNX nodes
     """
-    return [node for node in model.graph.node]
+    return list(model.graph.node)
 
 
 def get_onnx_initializers(model: ModelProto) -> dict[str, TensorProto]:
@@ -85,7 +85,7 @@ def get_onnx_model_shapes(
     model: ModelProto, set_batch_to_one: bool = True
 ) -> dict[str, tuple[int | str, ...] | None]:
     """Get shapes of all input and output tensors in the ONNX model."""
-    shapes: dict[str, tuple[int | str, ...]] = {}
+    shapes: dict[str, tuple[int | str, ...] | None] = {}
 
     def _get_shape_from_type(tensor_type, set_batch: bool) -> tuple[int | str, ...] | None:
         """Extract shape from tensor type, handling symbolic dimensions consistently."""

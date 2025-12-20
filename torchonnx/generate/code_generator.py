@@ -8,12 +8,16 @@ __all__ = ["generate_pytorch_module"]
 
 import torch
 
-from ._forward_gen import generate_forward_method, get_forward_gen_context, ForwardGenContext
-from ._init_gen import generate_init_method, build_layer_name_mapping
-from ._state_dict_gen import build_state_dict
-from ._templates import MODULE_TEMPLATE
-from ._utils import sanitize_identifier
-from ..analyze import SemanticModelIR
+from torchonnx.torchonnx.analyze import SemanticModelIR
+from torchonnx.torchonnx.generate._forward_gen import (
+    ForwardGenContext,
+    generate_forward_method,
+    set_forward_gen_context,
+)
+from torchonnx.torchonnx.generate._init_gen import build_layer_name_mapping, generate_init_method
+from torchonnx.torchonnx.generate._state_dict_gen import build_state_dict
+from torchonnx.torchonnx.generate._templates import MODULE_TEMPLATE
+from torchonnx.torchonnx.generate._utils import sanitize_identifier
 
 
 def generate_pytorch_module(
@@ -89,13 +93,124 @@ def _generate_forward_with_context(
     helper_context = _get_helper_needs_from_ir(semantic_ir, vmap_mode=vmap_mode)
 
     # Set context globally before forward generation so handlers can access it
-    from . import _forward_gen as fg_module
-    fg_module._forward_gen_context = helper_context
+    set_forward_gen_context(helper_context)
 
     # Generate forward method
     forward_method = generate_forward_method(semantic_ir, layer_name_mapping)
 
     return forward_method, helper_context
+
+
+def _check_slice_needs_helper(
+    layer, producer_map: dict[str, tuple], vmap_mode: bool, ctx: "ForwardGenContext"
+) -> bool:
+    """Check if Slice operation needs dynamic_slice helper.
+
+    :param layer: Slice layer
+    :param producer_map: Producer mapping for slice length detection
+    :param vmap_mode: If True, detect static slice lengths
+    :param ctx: Context to update with helper needs
+    :return: True if helper is needed, False otherwise
+    """
+    from torchonnx.torchonnx.analyze import ConstantInfo
+
+    if len(layer.inputs) < 3:
+        return False
+
+    starts_input = layer.inputs[1]
+    ends_input = layer.inputs[2]
+    axes_input = layer.inputs[3] if len(layer.inputs) > 3 else None
+    steps_input = layer.inputs[4] if len(layer.inputs) > 4 else None
+
+    # All constants -> native slicing, no helper needed
+    all_constants = (
+        isinstance(starts_input, ConstantInfo)
+        and isinstance(ends_input, ConstantInfo)
+        and (axes_input is None or isinstance(axes_input, ConstantInfo))
+        and (steps_input is None or isinstance(steps_input, ConstantInfo))
+    )
+    if all_constants:
+        return False
+
+    # Check if can use torch.narrow (all params constant, single axis, step=1)
+    axes_constant = axes_input is None or isinstance(axes_input, ConstantInfo)
+    steps_constant = steps_input is None or isinstance(steps_input, ConstantInfo)
+    starts_constant = isinstance(starts_input, ConstantInfo)
+    ends_constant = isinstance(ends_input, ConstantInfo)
+
+    if axes_constant and steps_constant and starts_constant and ends_constant:
+        axes_list = _extract_axes_list(axes_input)
+        steps_list = _extract_steps_list(steps_input, len(axes_list))
+
+        if len(axes_list) == 1 and steps_list[0] == 1:
+            assert isinstance(starts_input, ConstantInfo)
+            assert isinstance(ends_input, ConstantInfo)
+            start_val = int(starts_input.data.item())
+            end_val = int(ends_input.data.item())
+            if end_val - start_val > 0:
+                return False
+
+    # Helper is needed - detect static lengths if vmap_mode
+    if vmap_mode:
+        static_lengths = _detect_static_slice_lengths(
+            layer, starts_input, ends_input, axes_input, steps_input, producer_map
+        )
+        if static_lengths is not None:
+            ctx.slice_length_hints[layer.name] = static_lengths
+
+    return True
+
+
+def _extract_axes_list(axes_input) -> list:
+    """Extract axes list from axes input."""
+    if axes_input is None:
+        return [0]
+    from torchonnx.torchonnx.analyze import ConstantInfo
+
+    assert isinstance(axes_input, ConstantInfo)
+    axes_data = axes_input.data.tolist()
+    return axes_data if isinstance(axes_data, list) else [axes_data]
+
+
+def _extract_steps_list(steps_input, axes_len: int) -> list:
+    """Extract steps list from steps input."""
+    if steps_input is None:
+        return [1] * axes_len
+    from torchonnx.torchonnx.analyze import ConstantInfo
+
+    assert isinstance(steps_input, ConstantInfo)
+    steps_data = steps_input.data.tolist()
+    return steps_data if isinstance(steps_data, list) else [steps_data]
+
+
+def _check_expand_needs_helper(layer) -> bool:
+    """Check if Expand operation needs helper.
+
+    :param layer: Expand layer
+    :return: True if helper is needed
+    """
+    from torchonnx.torchonnx.analyze import ConstantInfo
+
+    if len(layer.inputs) < 2:
+        return False
+
+    shape_input = layer.inputs[1]
+    output_info = layer.outputs[0]
+    output_shape = output_info.shape if output_info else None
+
+    # Known output shape with all integers -> no helper
+    if output_shape and all(isinstance(dim, int) for dim in output_shape):
+        return False
+
+    # Constant shape with known data shape -> no helper
+    if isinstance(shape_input, ConstantInfo):
+        data_input = layer.inputs[0]
+        if hasattr(data_input, "shape") and data_input.shape:
+            data_shape = data_input.shape
+            if all(isinstance(d, int) for d in data_shape):
+                return False
+
+    return True
 
 
 def _get_helper_needs_from_ir(
@@ -111,14 +226,12 @@ def _get_helper_needs_from_ir(
     :param vmap_mode: If True, detect static slice lengths for vmap compatibility
     :return: Context with helper needs flags
     """
-    from ._forward_gen import ForwardGenContext
-    from ..analyze import ConstantInfo, VariableInfo
+    from torchonnx.torchonnx.generate._forward_gen import ForwardGenContext
 
     ctx = ForwardGenContext()
     ctx.vmap_mode = vmap_mode
 
     # Build producer mapping for vmap slice length detection
-    # Maps onnx_name -> (producer_layer, output_index)
     producer_map: dict[str, tuple] = {}
     if vmap_mode:
         for layer in semantic_ir.layers:
@@ -127,91 +240,12 @@ def _get_helper_needs_from_ir(
 
     for layer in semantic_ir.layers:
         if layer.onnx_op_type == "Slice":
-            # Check if this slice can be handled without helper
-            if len(layer.inputs) >= 3:
-                starts_input = layer.inputs[1]
-                ends_input = layer.inputs[2]
-                axes_input = layer.inputs[3] if len(layer.inputs) > 3 else None
-                steps_input = layer.inputs[4] if len(layer.inputs) > 4 else None
-
-                # All constants -> native slicing, no helper needed
-                all_constants = (
-                    isinstance(starts_input, ConstantInfo)
-                    and isinstance(ends_input, ConstantInfo)
-                    and (axes_input is None or isinstance(axes_input, ConstantInfo))
-                    and (steps_input is None or isinstance(steps_input, ConstantInfo))
-                )
-                if all_constants:
-                    continue
-
-                # Check if single-axis with step=1 and constant bounds -> torch.narrow, no helper needed
-                # We only use narrow when ALL parameters are constant because ONNX Slice
-                # has bounds clipping that torch.narrow doesn't handle.
-                axes_constant = axes_input is None or isinstance(axes_input, ConstantInfo)
-                steps_constant = steps_input is None or isinstance(steps_input, ConstantInfo)
-                starts_constant = isinstance(starts_input, ConstantInfo)
-                ends_constant = isinstance(ends_input, ConstantInfo)
-
-                if axes_constant and steps_constant and starts_constant and ends_constant:
-                    if axes_input is None:
-                        axes_list = [0]
-                    else:
-                        axes_list = axes_input.data.tolist()
-                        if not isinstance(axes_list, list):
-                            axes_list = [axes_list]
-
-                    if steps_input is None:
-                        steps_list = [1] * len(axes_list)
-                    else:
-                        steps_list = steps_input.data.tolist()
-                        if not isinstance(steps_list, list):
-                            steps_list = [steps_list]
-
-                    # Single axis with step=1 and constant bounds uses torch.narrow
-                    if len(axes_list) == 1 and steps_list[0] == 1:
-                        start_val = int(starts_input.data.item())
-                        end_val = int(ends_input.data.item())
-                        if end_val - start_val > 0:
-                            continue
-
-                # Otherwise needs helper
+            if _check_slice_needs_helper(layer, producer_map, vmap_mode, ctx):
                 ctx.needs_dynamic_slice = True
-
-                # In vmap_mode, try to detect static slice lengths
-                if vmap_mode:
-                    static_lengths = _detect_static_slice_lengths(
-                        layer, starts_input, ends_input, axes_input, steps_input,
-                        producer_map
-                    )
-                    if static_lengths is not None:
-                        ctx.slice_length_hints[layer.name] = static_lengths
-
         elif layer.onnx_op_type == "ScatterND":
             ctx.needs_scatter_nd = True
-
-        elif layer.onnx_op_type == "Expand":
-            # Check if this expand can be handled without helper
-            if len(layer.inputs) >= 2:
-                shape_input = layer.inputs[1]
-
-                # Check output shape from inference
-                output_info = layer.outputs[0]
-                output_shape = output_info.shape if output_info else None
-
-                # Known output shape with all integers -> reshape, no helper
-                if output_shape and all(isinstance(dim, int) for dim in output_shape):
-                    continue
-
-                # Constant shape with known data shape -> inline expand
-                if isinstance(shape_input, ConstantInfo):
-                    data_input = layer.inputs[0]
-                    if hasattr(data_input, 'shape') and data_input.shape:
-                        data_shape = data_input.shape
-                        if all(isinstance(d, int) for d in data_shape):
-                            continue
-
-                # Otherwise needs helper
-                ctx.needs_dynamic_expand = True
+        elif layer.onnx_op_type == "Expand" and _check_expand_needs_helper(layer):
+            ctx.needs_dynamic_expand = True
 
     return ctx
 
@@ -233,13 +267,13 @@ def _detect_static_slice_lengths(
     :param producer_map: Maps onnx_name -> (producer_layer, output_index)
     :return: List of static slice lengths, or None if can't determine
     """
-    from ..analyze import ConstantInfo, VariableInfo
+    from torchonnx.torchonnx.analyze import ConstantInfo
 
     # Get axes list
     if axes_input is None:
         # Default: slice all axes from 0
         num_axes = 1  # Assume single axis if starts is 1D
-        if hasattr(starts_input, 'shape') and starts_input.shape:
+        if hasattr(starts_input, "shape") and starts_input.shape:
             num_axes = starts_input.shape[0] if len(starts_input.shape) > 0 else 1
         axes_list = list(range(num_axes))
     elif isinstance(axes_input, ConstantInfo):
@@ -263,9 +297,7 @@ def _detect_static_slice_lengths(
         step = steps_list[i] if i < len(steps_list) else 1
 
         # Try to determine if (ends - starts) is constant for this axis
-        slice_len = _get_static_slice_length(
-            starts_input, ends_input, i, step, producer_map
-        )
+        slice_len = _get_static_slice_length(starts_input, ends_input, i, step, producer_map)
 
         if slice_len is None:
             return None  # Can't determine static length for this axis
@@ -273,6 +305,94 @@ def _detect_static_slice_lengths(
         static_lengths.append(slice_len)
 
     return static_lengths
+
+
+def _extract_value_at_index(data, axis_idx: int):
+    """Extract scalar value from data at given axis index.
+
+    :param data: Converted data (list or scalar)
+    :param axis_idx: Index into array
+    :return: Scalar value
+    """
+    if isinstance(data, list) and axis_idx < len(data):
+        return data[axis_idx]
+    return data if not isinstance(data, list) else data[0]
+
+
+def _try_constant_case(starts_input, ends_input, axis_idx: int, step: int) -> int | None:
+    """Try to determine length when both starts and ends are constants.
+
+    :param starts_input: Starts input (should be ConstantInfo)
+    :param ends_input: Ends input (should be ConstantInfo)
+    :param axis_idx: Axis index
+    :param step: Step size
+    :return: Slice length or None
+    """
+    from torchonnx.torchonnx.analyze import ConstantInfo
+
+    if not (isinstance(starts_input, ConstantInfo) and isinstance(ends_input, ConstantInfo)):
+        return None
+
+    starts_data = starts_input.data.tolist()
+    ends_data = ends_input.data.tolist()
+    start_val = _extract_value_at_index(starts_data, axis_idx)
+    end_val = _extract_value_at_index(ends_data, axis_idx)
+
+    length = (end_val - start_val + step - 1) // step
+    return max(0, int(length))
+
+
+def _try_add_pattern_case(
+    starts_input, ends_input, axis_idx: int, step: int, producer_map
+) -> int | None:
+    """Try to detect ends = starts + constant pattern.
+
+    :param starts_input: Starts input
+    :param ends_input: Ends input
+    :param axis_idx: Axis index (unused but kept for symmetry)
+    :param step: Step size
+    :param producer_map: Producer mapping
+    :return: Slice length or None
+    """
+    from torchonnx.torchonnx.analyze import ConstantInfo, VariableInfo
+
+    if not (isinstance(ends_input, VariableInfo) and ends_input.onnx_name in producer_map):
+        return None
+
+    ends_producer = _find_producer_through_shape_ops(ends_input.onnx_name, producer_map)
+    if ends_producer is None or ends_producer.onnx_op_type != "Add":
+        return None
+
+    if len(ends_producer.inputs) != 2:
+        return None
+
+    add_input0 = ends_producer.inputs[0]
+    add_input1 = ends_producer.inputs[1]
+
+    # Find constant and variable operands
+    const_operand = None
+    var_operand = None
+    if isinstance(add_input0, ConstantInfo):
+        const_operand = add_input0
+        var_operand = add_input1
+    elif isinstance(add_input1, ConstantInfo):
+        const_operand = add_input1
+        var_operand = add_input0
+
+    if const_operand is None or var_operand is None:
+        return None
+
+    # Check if var_operand and starts_input share the same source
+    if not (isinstance(var_operand, VariableInfo) and isinstance(starts_input, VariableInfo)):
+        return None
+
+    if not _are_from_same_source(var_operand, starts_input, producer_map):
+        return None
+
+    # Pattern matched: slice_length = const_val / step
+    const_val = int(const_operand.data.item())
+    length = (const_val + step - 1) // step
+    return max(0, length)
 
 
 def _get_static_slice_length(
@@ -287,64 +407,15 @@ def _get_static_slice_length(
     :param producer_map: Maps onnx_name -> (producer_layer, output_index)
     :return: Static slice length, or None if can't determine
     """
-    from ..analyze import ConstantInfo, VariableInfo
-
     # Case 1: Both are constants
-    if isinstance(starts_input, ConstantInfo) and isinstance(ends_input, ConstantInfo):
-        starts_data = starts_input.data.tolist()
-        ends_data = ends_input.data.tolist()
-        if isinstance(starts_data, list) and axis_idx < len(starts_data):
-            start_val = starts_data[axis_idx]
-        else:
-            start_val = starts_data if not isinstance(starts_data, list) else starts_data[0]
-        if isinstance(ends_data, list) and axis_idx < len(ends_data):
-            end_val = ends_data[axis_idx]
-        else:
-            end_val = ends_data if not isinstance(ends_data, list) else ends_data[0]
+    length = _try_constant_case(starts_input, ends_input, axis_idx, step)
+    if length is not None:
+        return length
 
-        length = (end_val - start_val + step - 1) // step
-        return max(0, int(length))
-
-    # Case 2: ends = starts + constant (common pattern in cctsdb_yolo)
-    # Need to trace through shape-preserving ops like Unsqueeze to find the Add
-    if isinstance(ends_input, VariableInfo) and ends_input.onnx_name in producer_map:
-        # Trace through shape-preserving ops to find the actual producer
-        ends_producer = _find_producer_through_shape_ops(ends_input.onnx_name, producer_map)
-        if ends_producer is None:
-            return None
-
-        # Check if ends is produced by an Add operation
-        if ends_producer.onnx_op_type == "Add" and len(ends_producer.inputs) == 2:
-            add_input0 = ends_producer.inputs[0]
-            add_input1 = ends_producer.inputs[1]
-
-            # Find the constant operand and the variable operand
-            const_operand = None
-            var_operand = None
-
-            if isinstance(add_input0, ConstantInfo):
-                const_operand = add_input0
-                var_operand = add_input1
-            elif isinstance(add_input1, ConstantInfo):
-                const_operand = add_input1
-                var_operand = add_input0
-
-            if const_operand is not None and var_operand is not None:
-                # Check if the variable operand is related to starts
-                # For single-element case, check if both trace back to same source
-                const_val = const_operand.data.item()
-
-                # Check if var_operand matches starts_input or a transform of it
-                starts_onnx = starts_input.onnx_name if isinstance(starts_input, VariableInfo) else None
-
-                # Direct match: var_operand is starts_input
-                if isinstance(var_operand, VariableInfo) and starts_onnx:
-                    # Check if they share the same source
-                    # For unsqueeze pattern: starts = unsqueeze(x), ends = unsqueeze(x+c)
-                    if _are_from_same_source(var_operand, starts_input, producer_map):
-                        # slice_length = const_val / step
-                        length = (int(const_val) + step - 1) // step
-                        return max(0, length)
+    # Case 2: ends = starts + constant pattern
+    length = _try_add_pattern_case(starts_input, ends_input, axis_idx, step, producer_map)
+    if length is not None:
+        return length
 
     return None
 
@@ -357,7 +428,7 @@ def _find_producer_through_shape_ops(onnx_name: str, producer_map, depth: int = 
     :param depth: Max depth to trace
     :return: Producer layer, or None if can't find
     """
-    from ..analyze import VariableInfo
+    from torchonnx.torchonnx.analyze import VariableInfo
 
     shape_ops = {"Unsqueeze", "Squeeze", "Reshape", "Flatten"}
     current = onnx_name
@@ -392,7 +463,7 @@ def _are_from_same_source(var1, var2, producer_map) -> bool:
 
     Here x14 and x15 are from the same source (x4) with a constant offset.
     """
-    from ..analyze import VariableInfo
+    from torchonnx.torchonnx.analyze import VariableInfo
 
     if not isinstance(var1, VariableInfo) or not isinstance(var2, VariableInfo):
         return False
@@ -402,10 +473,7 @@ def _are_from_same_source(var1, var2, producer_map) -> bool:
     source2 = _trace_to_source(var2, producer_map)
 
     # If both trace to the same source, they're related
-    if source1 and source2 and source1 == source2:
-        return True
-
-    return False
+    return bool(source1 and source2 and source1 == source2)
 
 
 def _trace_to_source(var, producer_map, depth: int = 5) -> str | None:
@@ -416,7 +484,7 @@ def _trace_to_source(var, producer_map, depth: int = 5) -> str | None:
     :param depth: Max depth to trace
     :return: Source onnx_name, or None if can't trace
     """
-    from ..analyze import VariableInfo
+    from torchonnx.torchonnx.analyze import VariableInfo
 
     if not isinstance(var, VariableInfo):
         return None
@@ -434,12 +502,12 @@ def _trace_to_source(var, producer_map, depth: int = 5) -> str | None:
         if producer.onnx_op_type not in shape_ops:
             # For Add, trace through the non-constant input
             if producer.onnx_op_type == "Add" and len(producer.inputs) == 2:
-                from ..analyze import ConstantInfo
+                from torchonnx.torchonnx.analyze import ConstantInfo
+
                 for inp in producer.inputs:
-                    if not isinstance(inp, ConstantInfo):
-                        if isinstance(inp, VariableInfo):
-                            current = inp.onnx_name
-                            break
+                    if not isinstance(inp, ConstantInfo) and isinstance(inp, VariableInfo):
+                        current = inp.onnx_name
+                        break
                 else:
                     return current
             else:
@@ -466,9 +534,7 @@ def _generate_imports(semantic_ir: SemanticModelIR) -> str:
     ]
 
     # Check if F.* operations are used
-    needs_functional = any(
-        layer.pytorch_type.startswith("F.") for layer in semantic_ir.layers
-    )
+    needs_functional = any(layer.pytorch_type.startswith("F.") for layer in semantic_ir.layers)
 
     if needs_functional:
         imports.append("import torch.nn.functional as F")

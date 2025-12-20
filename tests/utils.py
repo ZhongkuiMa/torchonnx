@@ -11,19 +11,22 @@ __all__ = [
 ]
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
+from onnx import ModelProto
 
 from torchonnx.tests.benchmark_utils import get_benchmark_dir
 
 
-def load_onnx_model(onnx_path: str):  # type: ignore
+def load_onnx_model(onnx_path: str) -> ModelProto:
     """Load ONNX model and convert to version 21.
 
     :param onnx_path: Path to ONNX model file
     :return: ONNX ModelProto converted to version 21
     """
     import onnx
+
     from slimonnx.slimonnx.preprocess.version_converter import convert_model_version
 
     model = onnx.load(onnx_path)
@@ -64,14 +67,12 @@ def check_shape_compatibility(inferred_shape, expected_shape) -> bool:
     """
     if inferred_shape == expected_shape:
         return True
-    if inferred_shape == [] and expected_shape == [1]:
-        return True
-    return False
+    return bool(inferred_shape == [] and expected_shape == [1])
 
 
 def infer_shape(
     model, has_batch_dim: bool = True, verbose: bool = False
-) -> dict[str, list[int]]:
+) -> dict[str, int | list[int]]:
     """Run shape inference on model and validate against expected I/O shapes.
 
     :param model: ONNX ModelProto
@@ -80,12 +81,12 @@ def infer_shape(
     :return: Dictionary mapping tensor names to inferred shapes
     :raises ValueError: If inferred shapes don't match expected shapes
     """
-    from shapeonnx import infer_onnx_shape, extract_io_shapes
+    from shapeonnx import extract_io_shapes, infer_onnx_shape
     from shapeonnx.shapeonnx.utils import (
+        convert_constant_to_initializer,
         get_initializers,
         get_input_nodes,
         get_output_nodes,
-        convert_constant_to_initializer,
     )
 
     initializers = get_initializers(model)
@@ -111,8 +112,8 @@ def infer_shape(
                 f"inferred shape {shape}, expected shape {expected_shape}"
             )
 
-    for output_name in output_nodes:
-        output_name = output_name.name
+    for output_info in output_nodes:
+        output_name = output_info.name
         shape = data_shapes[output_name]
         expected_shape = expected_output_shapes[output_name]
         if not check_shape_compatibility(shape, expected_shape):
@@ -147,7 +148,7 @@ def _load_precomputed_data(data_file: Path) -> list[np.ndarray]:
                             inputs_list.extend(bound_data["inputs"])
 
         return inputs_list
-    except (IOError, KeyError, ValueError):
+    except (OSError, KeyError, ValueError):
         return []
 
 
@@ -164,7 +165,7 @@ def _get_vnnlib_names_from_csv(instances_csv: Path, onnx_rel_path: str) -> list[
 
     vnnlib_names = []
     try:
-        with open(instances_csv) as file_handle:
+        with instances_csv.open() as file_handle:
             for line in file_handle.readlines()[1:]:
                 line = line.strip()
                 if not line:
@@ -177,13 +178,13 @@ def _get_vnnlib_names_from_csv(instances_csv: Path, onnx_rel_path: str) -> list[
                         vnnlib_name = Path(vnnlib_path).stem
                         if vnnlib_name not in vnnlib_names:
                             vnnlib_names.append(vnnlib_name)
-    except IOError as error:
+    except OSError as error:
         raise FileNotFoundError(f"Error reading instances.csv: {error}") from error
 
     return vnnlib_names
 
 
-def _get_model_input_info(onnx_path: str) -> tuple[str, list]:
+def _get_model_input_info(onnx_path: str) -> tuple[str, Any]:
     """Get model input name and dimensions.
 
     :param onnx_path: Path to ONNX model
@@ -273,15 +274,13 @@ def _load_from_vnnlib_data(
 
                 arr = _reshape_array_to_input_dims(arr, input_dims)
                 inputs_list.append(arr)
-            except (IOError, KeyError, ValueError, IndexError):
+            except (OSError, KeyError, ValueError, IndexError):
                 continue
 
     return inputs_list
 
 
-def load_test_inputs(
-    onnx_path: str, benchmarks_dir: str = "benchmarks"
-) -> list[np.ndarray]:
+def load_test_inputs(onnx_path: str, benchmarks_dir: str = "benchmarks") -> list[np.ndarray]:
     """Load test inputs for an ONNX model.
 
     Tries in order:
@@ -312,15 +311,12 @@ def load_test_inputs(
 
     vnnlib_names = _get_vnnlib_names_from_csv(instances_csv, onnx_rel_path)
     if not vnnlib_names:
-        raise FileNotFoundError(
-            f"No VNNLib files found for {onnx_rel_path} in instances.csv"
-        )
+        raise FileNotFoundError(f"No VNNLib files found for {onnx_rel_path} in instances.csv")
 
     vnnlib_data_dir = benchmark_dir / "vnnlib_data"
     if not vnnlib_data_dir.exists():
         raise FileNotFoundError(
-            f"No vnnlib_data directory found in {benchmark_dir}. "
-            f"Run extract_inputs() first."
+            f"No vnnlib_data directory found in {benchmark_dir}. Run extract_inputs() first."
         )
 
     input_name, input_dims = _get_model_input_info(onnx_path)

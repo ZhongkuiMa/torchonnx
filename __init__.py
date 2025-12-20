@@ -1,1 +1,1 @@
-from .torchonnx import *
+from torchonnx.torchonnx import *

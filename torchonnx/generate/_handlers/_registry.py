@@ -11,9 +11,9 @@ __all__ = [
     "HANDLERS",
 ]
 
-from typing import Callable
+from collections.abc import Callable
 
-from ...analyze import SemanticLayerIR
+from torchonnx.torchonnx.analyze import SemanticLayerIR
 
 # Handler type: takes SemanticLayerIR and layer_name_mapping, returns code string
 Handler = Callable[[SemanticLayerIR, dict[str, str]], str]

@@ -6,5 +6,5 @@ Generates complete PyTorch nn.Module from semantic IR.
 __docformat__ = "restructuredtext"
 __all__ = ["generate_pytorch_module", "to_camel_case"]
 
-from ._utils import to_camel_case
-from .code_generator import generate_pytorch_module
+from torchonnx.torchonnx.generate._utils import to_camel_case
+from torchonnx.torchonnx.generate.code_generator import generate_pytorch_module

@@ -46,7 +46,5 @@ def test_benchmark_directory_exists(benchmark_name: str) -> None:
 def test_benchmark_has_instances_csv(benchmark_name: str) -> None:
     """Test that each benchmark has instances.csv."""
     tests_dir = Path(__file__).parent
-    instances_csv = (
-        tests_dir / "vnncomp2024_benchmarks" / benchmark_name / "instances.csv"
-    )
+    instances_csv = tests_dir / "vnncomp2024_benchmarks" / benchmark_name / "instances.csv"
     assert instances_csv.exists(), f"instances.csv not found for {benchmark_name}"

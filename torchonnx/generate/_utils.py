@@ -37,25 +37,21 @@ def format_argument(value: Any) -> str:
     """
     if value is None:
         return "None"
-    elif isinstance(value, bool):
+    if isinstance(value, (bool, int, float)):
         return str(value)
-    elif isinstance(value, (int, float)):
-        return str(value)
-    elif isinstance(value, str):
+    if isinstance(value, str):
         return repr(value)
-    elif isinstance(value, (list, tuple)):
+    if isinstance(value, (list, tuple)):
         if len(value) == 0:
             return "[]" if isinstance(value, list) else "()"
         formatted = ", ".join(format_argument(v) for v in value)
         if isinstance(value, list):
             return f"[{formatted}]"
-        elif len(value) == 1:
+        if len(value) == 1:
             return f"({formatted},)"
-        else:
-            return f"({formatted})"
-    else:
-        # Fallback to repr for other types
-        return repr(value)
+        return f"({formatted})"
+    # Fallback to repr for other types
+    return repr(value)
 
 
 def sanitize_identifier(name: str) -> str:

@@ -17,14 +17,14 @@ __all__ = [
     "classify_outputs",
 ]
 
-from .builder import build_semantic_ir
-from .tensor_classifier import classify_inputs, classify_outputs
-from .types import (
-    OperatorClass,
-    VariableInfo,
-    ParameterInfo,
-    ConstantInfo,
+from torchonnx.torchonnx.analyze.builder import build_semantic_ir
+from torchonnx.torchonnx.analyze.tensor_classifier import classify_inputs, classify_outputs
+from torchonnx.torchonnx.analyze.types import (
     ArgumentInfo,
+    ConstantInfo,
+    OperatorClass,
+    ParameterInfo,
     SemanticLayerIR,
     SemanticModelIR,
+    VariableInfo,
 )

@@ -27,6 +27,8 @@ def load_pytorch_module(module_path: str, state_dict_path: str):
     """
     module_file = Path(module_path)
     spec = importlib.util.spec_from_file_location(module_file.stem, module_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Failed to load module spec from {module_path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
@@ -69,7 +71,7 @@ def run_onnx_node_by_node(onnx_model_path: str, input_data: np.ndarray):
     print(f"Outputs: {output_names}")
     print(f"Number of nodes: {len(onnx_model.graph.node)}")
 
-    return {name: output for name, output in zip(output_names, outputs)}
+    return dict(zip(output_names, outputs, strict=False))
 
 
 def create_intermediate_onnx_model(onnx_model_path: str, output_names: list):
@@ -110,8 +112,8 @@ def analyze_model_nodes(
     onnx_model_path: str,
     pytorch_module_path: str,
     state_dict_path: str,
-    input_shape: tuple = None,
-    max_nodes: int = None,
+    input_shape: tuple | None = None,
+    max_nodes: int | None = None,
 ):
     """Analyze ONNX model nodes and compare with PyTorch.
 
@@ -132,23 +134,24 @@ def analyze_model_nodes(
             for dim in input_tensor.type.tensor_type.shape.dim
         )
 
-    print(f"\n{'='*80}")
-    print(f"Analyzing ONNX Model Node-by-Node")
-    print(f"{'='*80}")
+    print(f"\n{'=' * 80}")
+    print("Analyzing ONNX Model Node-by-Node")
+    print(f"{'=' * 80}")
     print(f"ONNX Model: {onnx_model_path}")
     print(f"PyTorch Module: {pytorch_module_path}")
     print(f"Input shape: {input_shape}")
-    print(f"{'='*80}\n")
+    print(f"{'=' * 80}\n")
 
     # Create input data
-    input_data = np.random.randn(*input_shape).astype(np.float32)
+    rng = np.random.default_rng()
+    input_data = rng.standard_normal(input_shape).astype(np.float32)
 
     # Load PyTorch model
     print("Loading PyTorch model...")
     try:
         pytorch_model = load_pytorch_module(pytorch_module_path, state_dict_path)
         print("[OK] PyTorch model loaded successfully\n")
-    except Exception as e:
+    except (FileNotFoundError, RuntimeError, ImportError) as e:
         print(f"[FAIL] Failed to load PyTorch model: {e}\n")
         return
 
@@ -162,7 +165,7 @@ def analyze_model_nodes(
         if isinstance(pytorch_output, torch.Tensor):
             pytorch_output = pytorch_output.numpy()
         print(f"[OK] PyTorch output shape: {pytorch_output.shape}\n")
-    except Exception as e:
+    except (RuntimeError, ValueError, TypeError, AttributeError) as e:
         print(f"[FAIL] PyTorch model failed: {e}\n")
         import traceback
 
@@ -174,9 +177,7 @@ def analyze_model_nodes(
 
     # Collect all intermediate tensor names
     intermediate_names = []
-    for node in (
-        onnx_model.graph.node[:max_nodes] if max_nodes else onnx_model.graph.node
-    ):
+    for node in onnx_model.graph.node[:max_nodes] if max_nodes else onnx_model.graph.node:
         for output in node.output:
             if output not in intermediate_names:
                 intermediate_names.append(output)
@@ -185,54 +186,42 @@ def analyze_model_nodes(
 
     # Create modified ONNX model with intermediate outputs
     try:
-        modified_model = create_intermediate_onnx_model(
-            onnx_model_path, intermediate_names
-        )
+        modified_model = create_intermediate_onnx_model(onnx_model_path, intermediate_names)
 
         # Save temporary model
         temp_model_path = Path(onnx_model_path).parent / "temp_intermediate.onnx"
         onnx.save(modified_model, str(temp_model_path))
 
         # Run with intermediate outputs
-        session = ort.InferenceSession(
-            str(temp_model_path), providers=["CPUExecutionProvider"]
-        )
+        session = ort.InferenceSession(str(temp_model_path), providers=["CPUExecutionProvider"])
         input_name = session.get_inputs()[0].name
 
         onnx_outputs = session.run(None, {input_name: input_data})
         output_names = [out.name for out in session.get_outputs()]
 
-        onnx_results = {
-            name: output for name, output in zip(output_names, onnx_outputs)
-        }
+        onnx_results = dict(zip(output_names, onnx_outputs, strict=False))
 
         # Clean up temp file
         temp_model_path.unlink()
 
         print(f"[OK] ONNX model executed, captured {len(onnx_results)} outputs\n")
 
-    except Exception as e:
+    except (RuntimeError, ValueError, OSError) as e:
         print(f"[FAIL] Failed to run ONNX with intermediate outputs: {e}\n")
         # Fall back to just final output
-        session = ort.InferenceSession(
-            onnx_model_path, providers=["CPUExecutionProvider"]
-        )
+        session = ort.InferenceSession(onnx_model_path, providers=["CPUExecutionProvider"])
         input_name = session.get_inputs()[0].name
         onnx_outputs = session.run(None, {input_name: input_data})
         output_names = [out.name for out in session.get_outputs()]
-        onnx_results = {
-            name: output for name, output in zip(output_names, onnx_outputs)
-        }
+        onnx_results = dict(zip(output_names, onnx_outputs, strict=False))
         print(f"Using final outputs only: {len(onnx_results)} outputs\n")
 
     # Analyze nodes
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print("Node Analysis")
-    print(f"{'='*80}\n")
+    print(f"{'=' * 80}\n")
 
-    nodes_to_analyze = (
-        onnx_model.graph.node[:max_nodes] if max_nodes else onnx_model.graph.node
-    )
+    nodes_to_analyze = onnx_model.graph.node[:max_nodes] if max_nodes else onnx_model.graph.node
 
     for idx, node in enumerate(nodes_to_analyze):
         print(f"Node {idx + 1}/{len(nodes_to_analyze)}: {node.op_type}")
@@ -255,9 +244,9 @@ def analyze_model_nodes(
         print()
 
     # Compare final outputs
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print("Final Output Comparison")
-    print(f"{'='*80}\n")
+    print(f"{'=' * 80}\n")
 
     final_output_name = onnx_model.graph.output[0].name
     if final_output_name in onnx_results:
@@ -271,7 +260,7 @@ def analyze_model_nodes(
             max_diff = np.max(diff)
             mean_diff = np.mean(diff)
 
-            print(f"\n[OK] Shapes match!")
+            print("\n[OK] Shapes match!")
             print(f"Max absolute difference: {max_diff:.6e}")
             print(f"Mean absolute difference: {mean_diff:.6e}")
 
@@ -279,38 +268,32 @@ def analyze_model_nodes(
                 print("[OK] Outputs match within tolerance!")
             else:
                 print("[WARN] Outputs differ significantly")
-                print(
-                    f"ONNX output range: [{onnx_final.min():.6f}, {onnx_final.max():.6f}]"
-                )
-                print(
-                    f"PyTorch output range: [{pytorch_output.min():.6f}, {pytorch_output.max():.6f}]"
-                )
+                onnx_min, onnx_max = onnx_final.min(), onnx_final.max()
+                print(f"ONNX output range: [{onnx_min:.6f}, {onnx_max:.6f}]")
+                pt_min, pt_max = pytorch_output.min(), pytorch_output.max()
+                print(f"PyTorch output range: [{pt_min:.6f}, {pt_max:.6f}]")
         else:
-            print(f"\n[FAIL] Shape mismatch!")
+            print("\n[FAIL] Shape mismatch!")
     else:
         print(f"[FAIL] Final output '{final_output_name}' not found in ONNX results")
 
-    print(f"\n{'='*80}\n")
+    print(f"\n{'=' * 80}\n")
 
 
 def main():
-    """Main entry point."""
+    """Parse arguments and analyze ONNX model nodes."""
     parser = argparse.ArgumentParser(
         description="Analyze ONNX model nodes and compare with PyTorch module"
     )
     parser.add_argument("onnx_model", type=str, help="Path to ONNX model file")
-    parser.add_argument(
-        "pytorch_module", type=str, help="Path to PyTorch module file (.py)"
-    )
+    parser.add_argument("pytorch_module", type=str, help="Path to PyTorch module file (.py)")
     parser.add_argument("state_dict", type=str, help="Path to state dict file (.pth)")
     parser.add_argument(
         "--input-shape",
         type=str,
         help="Input shape as comma-separated values (e.g., '1,3,224,224')",
     )
-    parser.add_argument(
-        "--max-nodes", type=int, help="Maximum number of nodes to analyze"
-    )
+    parser.add_argument("--max-nodes", type=int, help="Maximum number of nodes to analyze")
 
     args = parser.parse_args()
 

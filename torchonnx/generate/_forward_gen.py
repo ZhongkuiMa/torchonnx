@@ -4,20 +4,17 @@ Main forward generation logic with handler dispatch.
 """
 
 __docformat__ = "restructuredtext"
-__all__ = ["generate_forward_method", "ForwardGenContext"]
+__all__ = ["generate_forward_method", "ForwardGenContext", "set_forward_gen_context"]
 
-from ._handlers import (
+from torchonnx.torchonnx.analyze import SemanticLayerIR, SemanticModelIR
+from torchonnx.torchonnx.generate._handlers import (
+    HANDLERS,
     get_handler,
     register_layer_handlers,
     register_operation_handlers,
     register_operator_handlers,
-    HANDLERS,
 )
-from ._templates import INDENT, FORWARD_TEMPLATE
-from ..analyze import (
-    SemanticModelIR,
-    SemanticLayerIR,
-)
+from torchonnx.torchonnx.generate._templates import FORWARD_TEMPLATE, INDENT
 
 
 # Global context for tracking used constants during forward generation
@@ -61,6 +58,15 @@ def get_forward_gen_context() -> ForwardGenContext | None:
     return _forward_gen_context
 
 
+def set_forward_gen_context(context: ForwardGenContext | None) -> None:
+    """Set forward generation context.
+
+    :param context: Context to set or None to clear
+    """
+    global _forward_gen_context
+    _forward_gen_context = context
+
+
 def _ensure_handlers_registered() -> None:
     """Ensure all handlers are registered (lazy initialization).
 
@@ -71,6 +77,103 @@ def _ensure_handlers_registered() -> None:
         register_layer_handlers()
         register_operation_handlers()
         register_operator_handlers()
+
+
+def _build_io_code_names(semantic_ir: SemanticModelIR) -> tuple[list[str], list[str]]:
+    """Build input and output code name mappings from semantic IR.
+
+    :param semantic_ir: Semantic IR from Stage 3
+    :return: Tuple of (input_code_names, output_code_names)
+    """
+    input_code_names: list[str] = []
+    for input_name in semantic_ir.input_names:
+        # Find the variable with this onnx_name
+        var = next(
+            (v for v in semantic_ir.variables if v.onnx_name == input_name),
+            None,
+        )
+        if var:
+            input_code_names.append(var.code_name)
+        else:
+            # Fallback (shouldn't happen with valid IR)
+            input_code_names.append(input_name)
+
+    output_code_names: list[str] = []
+    for output_name in semantic_ir.output_names:
+        # Find the variable with this onnx_name
+        var = next(
+            (v for v in semantic_ir.variables if v.onnx_name == output_name),
+            None,
+        )
+        if var:
+            output_code_names.append(var.code_name)
+        else:
+            # Fallback (shouldn't happen with valid IR)
+            output_code_names.append(output_name)
+
+    return input_code_names, output_code_names
+
+
+def _initialize_forward_context(input_code_names: list[str]) -> None:
+    """Initialize forward generation context.
+
+    Sets first input name for device inference in handlers.
+
+    :param input_code_names: List of input variable code names
+    """
+    global _forward_gen_context
+
+    if _forward_gen_context is None:
+        _forward_gen_context = ForwardGenContext()
+
+    if input_code_names:
+        _forward_gen_context.first_input_name = input_code_names[0]
+
+
+def _generate_forward_body(
+    semantic_ir: SemanticModelIR,
+    layer_name_mapping: dict[str, str],
+) -> list[str]:
+    """Generate forward method body lines from all layers.
+
+    Handles vmap mode slice initialization and error handling for each layer.
+
+    :param semantic_ir: Semantic IR from Stage 3
+    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
+    :return: List of indented code lines
+    """
+    global _forward_gen_context
+
+    body_lines: list[str] = []
+
+    # In vmap mode with dynamic slices, initialize validity tracking variable
+    if (
+        _forward_gen_context
+        and _forward_gen_context.vmap_mode
+        and _forward_gen_context.needs_dynamic_slice
+    ):
+        first_input = _forward_gen_context.first_input_name or "x0"
+        valid_init = (
+            f"_slice_valid = torch.ones((), dtype={first_input}.dtype, device={first_input}.device)"
+        )
+        body_lines.append(f"{INDENT}{INDENT}{valid_init}")
+
+    # Generate code for each layer
+    for layer in semantic_ir.layers:
+        try:
+            code_line = _generate_layer_code(layer, layer_name_mapping)
+            body_lines.append(f"{INDENT}{INDENT}{code_line}")
+        except (KeyError, RuntimeError, ValueError, AttributeError) as error:
+            # Add comment for failed layer
+            body_lines.append(
+                f"{INDENT}{INDENT}# ERROR generating {layer.name} ({layer.pytorch_type}): {error}"
+            )
+            # Add placeholder
+            if layer.outputs:
+                output_name = layer.outputs[0].code_name
+                body_lines.append(f"{INDENT}{INDENT}{output_name} = None  # Placeholder")
+
+    return body_lines
 
 
 def generate_forward_method(
@@ -95,71 +198,14 @@ def generate_forward_method(
     if layer_name_mapping is None:
         layer_name_mapping = {}
 
-    # Use existing context if already set (e.g., by _generate_forward_with_context),
-    # otherwise create a new one. This preserves vmap_mode and other settings.
-    if _forward_gen_context is None:
-        _forward_gen_context = ForwardGenContext()
+    # Build input and output code names
+    input_code_names, output_code_names = _build_io_code_names(semantic_ir)
 
-    # Build mapping from onnx_name to code_name for inputs
-    # Also track the first input for device inference
-    input_code_names: list[str] = []
-    for input_name in semantic_ir.input_names:
-        # Find the variable with this onnx_name
-        var = next(
-            (v for v in semantic_ir.variables if v.onnx_name == input_name),
-            None,
-        )
-        if var:
-            input_code_names.append(var.code_name)
-        else:
-            # Fallback (shouldn't happen with valid IR)
-            input_code_names.append(input_name)
+    # Initialize forward generation context
+    _initialize_forward_context(input_code_names)
 
-    # Store first input name for device inference in handlers
-    if input_code_names:
-        _forward_gen_context.first_input_name = input_code_names[0]
-
-    # Build mapping from onnx_name to code_name for outputs
-    output_code_names: list[str] = []
-    for output_name in semantic_ir.output_names:
-        # Find the variable with this onnx_name
-        var = next(
-            (v for v in semantic_ir.variables if v.onnx_name == output_name),
-            None,
-        )
-        if var:
-            output_code_names.append(var.code_name)
-        else:
-            # Fallback (shouldn't happen with valid IR)
-            output_code_names.append(output_name)
-
-    # Generate code for each layer
-    body_lines: list[str] = []
-
-    # In vmap mode with dynamic slices, initialize validity tracking variable
-    # This tracks whether any slice was empty (out-of-bounds)
-    if _forward_gen_context.vmap_mode and _forward_gen_context.needs_dynamic_slice:
-        first_input = _forward_gen_context.first_input_name or "x0"
-        body_lines.append(
-            f"{INDENT}{INDENT}_slice_valid = torch.ones((), dtype={first_input}.dtype, device={first_input}.device)"
-        )
-
-    for layer in semantic_ir.layers:
-        try:
-            code_line = _generate_layer_code(layer, layer_name_mapping)
-            body_lines.append(f"{INDENT}{INDENT}{code_line}")
-        except Exception as error:
-            # Add comment for failed layer
-            body_lines.append(
-                f"{INDENT}{INDENT}# ERROR generating {layer.name} "
-                f"({layer.pytorch_type}): {error}"
-            )
-            # Add placeholder
-            if layer.outputs:
-                output_name = layer.outputs[0].code_name
-                body_lines.append(
-                    f"{INDENT}{INDENT}{output_name} = None  # Placeholder"
-                )
+    # Generate forward method body
+    body_lines = _generate_forward_body(semantic_ir, layer_name_mapping)
 
     # Assemble forward method
     input_args_str = ", ".join(input_code_names)
@@ -180,9 +226,7 @@ def generate_forward_method(
     return forward_code
 
 
-def _generate_layer_code(
-    layer: SemanticLayerIR, layer_name_mapping: dict[str, str]
-) -> str:
+def _generate_layer_code(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Generate code for a single layer using registered handler.
 
     :param layer: Semantic layer IR
@@ -195,8 +239,5 @@ def _generate_layer_code(
     if handler:
         # Use registered handler
         return handler(layer, layer_name_mapping)
-    else:
-        # No handler found - generate error comment
-        raise ValueError(
-            f"No handler registered for pytorch_type: {layer.pytorch_type}"
-        )
+    # No handler found - generate error comment
+    raise ValueError(f"No handler registered for pytorch_type: {layer.pytorch_type}")

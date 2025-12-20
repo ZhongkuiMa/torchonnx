@@ -59,6 +59,6 @@ class ModelIR:
     layers: list[NodeIR]
     input_names: list[str]
     output_names: list[str]
-    shapes: dict[str, tuple[int, ...] | None]
+    shapes: dict[str, tuple[int | str, ...] | None]
     initializers: dict[str, TensorProto]
     model: ModelProto

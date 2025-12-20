@@ -7,14 +7,9 @@ Generate code like: x2 = x0.reshape(...), x3 = F.pad(x1, ...), etc.
 __docformat__ = "restructuredtext"
 __all__ = ["register_operation_handlers"]
 
-from ._registry import register_handler
-from .._utils import format_argument
-from ...analyze import (
-    SemanticLayerIR,
-    VariableInfo,
-    ParameterInfo,
-    ConstantInfo,
-)
+from torchonnx.torchonnx.analyze import ConstantInfo, ParameterInfo, SemanticLayerIR, VariableInfo
+from torchonnx.torchonnx.generate._handlers._registry import register_handler
+from torchonnx.torchonnx.generate._utils import format_argument
 
 
 def _get_input_code_names(layer: SemanticLayerIR) -> list[str]:
@@ -26,7 +21,7 @@ def _get_input_code_names(layer: SemanticLayerIR) -> list[str]:
     :param layer: Semantic layer IR
     :return: List of code names
     """
-    from .._forward_gen import get_forward_gen_context
+    from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
 
     names = []
     ctx = get_forward_gen_context()
@@ -48,39 +43,35 @@ def _get_input_code_names(layer: SemanticLayerIR) -> list[str]:
 def _get_input_code_name_selective(
     inp: VariableInfo | ParameterInfo | ConstantInfo,
     use_literal: bool = False,
-) -> str:
+) -> str | None:
     """Get code name for a single input with optional literal optimization.
 
     :param inp: Input info
     :param use_literal: If True, use literal for constant values (don't mark as used)
-    :return: Code name string
+    :return: Code name string or None if use_literal is True for a constant
     """
-    from .._forward_gen import get_forward_gen_context
+    from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
 
     if isinstance(inp, ConstantInfo):
         if use_literal:
             # Use literal value, don't mark as used
             return None  # Caller should extract literal themselves
-        else:
-            # Use buffer reference, mark as used
-            ctx = get_forward_gen_context()
-            if ctx:
-                ctx.mark_constant_used(inp.code_name)
-            return f"self.{inp.code_name}"
-    elif isinstance(inp, ParameterInfo):
+        # Use buffer reference, mark as used
+        ctx = get_forward_gen_context()
+        if ctx:
+            ctx.mark_constant_used(inp.code_name)
+        return f"self.{inp.code_name}"
+    if isinstance(inp, ParameterInfo):
         # Parameters always use buffer reference
         ctx = get_forward_gen_context()
         if ctx:
             ctx.mark_parameter_used(inp.code_name)
         return f"self.{inp.code_name}"
-    else:
-        # Variable - just return code name
-        return inp.code_name
+    # Variable - just return code name
+    return inp.code_name
 
 
-def _format_args_with_inputs(
-    layer: SemanticLayerIR, extra_inputs: list[str] | None = None
-) -> str:
+def _format_args_with_inputs(layer: SemanticLayerIR, extra_inputs: list[str] | None = None) -> str:
     """Format function arguments (inputs + keyword args).
 
     :param layer: Semantic layer IR
@@ -97,6 +88,35 @@ def _format_args_with_inputs(
             args_parts.append(f"{arg.pytorch_name}={formatted_value}")
 
     return ", ".join(args_parts)
+
+
+def _compute_inferred_dim(
+    input_shape: list[int] | tuple[int | str, ...], shape_list: list
+) -> int | None:
+    """Compute inferred dimension when shape contains -1.
+
+    :param input_shape: Input tensor shape (only concrete int dimensions are used)
+    :param shape_list: Target reshape shape with -1 placeholder
+    :return: Inferred dimension or None if can't compute
+    """
+    import math
+
+    # Convert to list of ints, filtering out symbolic dimensions
+    int_shape = [d for d in input_shape if isinstance(d, int)]
+    total_elements: int = int(math.prod(int_shape))
+
+    known_product: int = 1
+    minus_one_idx: int = -1
+    for i, dim in enumerate(shape_list):
+        if dim == -1:
+            minus_one_idx = i
+        elif isinstance(dim, int):
+            known_product *= dim
+
+    if known_product <= 0 or minus_one_idx < 0:
+        return None
+
+    return total_elements // known_product
 
 
 def _handle_reshape(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
@@ -119,75 +139,48 @@ def _handle_reshape(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) 
     if len(layer.inputs) < 2:
         raise ValueError("Reshape requires input and shape")
 
-    # Process data input (always use buffer reference if needed)
     data = _get_input_code_name_selective(layer.inputs[0], use_literal=False)
     shape_input = layer.inputs[1]
 
-    # If shape is a constant, use Python literal directly (don't mark as used)
+    # If shape is a constant, use Python literal directly
     if isinstance(shape_input, ConstantInfo):
         shape_data = shape_input.data
         shape_list = shape_data.tolist()
-        # Convert to list for modification
         if not isinstance(shape_list, list):
             shape_list = [shape_list]
 
-        # Detect flatten pattern: reshape(batch_size, -1) or reshape(1, -1)
-        # This is common before fully connected layers in CNNs
-        # Use flatten(1) which is batch-aware: flattens from dim 1 onwards
+        # Detect flatten pattern: reshape(batch_size, -1) -> flatten(1)
         if len(shape_list) == 2 and shape_list[1] == -1:
             return f"{output} = {data}.flatten(1)"
 
-        # For other reshapes, make batch-aware by replacing first dim with -1
-        # ONNX models are often traced with batch_size=1, but we want dynamic batch
-        #
-        # If shape contains -1 and first dim is 1, we need to:
-        # 1. Compute what -1 resolves to using input shape
-        # 2. Replace -1 with computed value
-        # 3. Set first dim to -1 for dynamic batch
+        # Handle batch-aware reshaping for first dim=1 cases
         if len(shape_list) >= 1 and shape_list[0] == 1:
             if -1 in shape_list:
-                # Get input shape to compute the -1 dimension
                 input_info = layer.inputs[0]
-                input_shape = input_info.shape if hasattr(input_info, 'shape') else None
+                input_shape = input_info.shape if hasattr(input_info, "shape") else None
 
-                if input_shape and all(isinstance(d, int) for d in input_shape):
-                    # Calculate total elements (excluding batch dimension)
-                    # Input shape includes batch=1, so total = product of all dims
-                    import math
-                    total_elements = math.prod(input_shape)
-
-                    # Calculate product of known dimensions in target shape
-                    known_product = 1
-                    minus_one_idx = -1
-                    for i, dim in enumerate(shape_list):
-                        if dim == -1:
-                            minus_one_idx = i
-                        else:
-                            known_product *= dim
-
-                    # Compute what -1 should be
-                    if known_product > 0 and minus_one_idx >= 0:
-                        inferred_dim = total_elements // known_product
+                if (
+                    input_shape
+                    and all(isinstance(d, int) for d in input_shape)
+                    and all(isinstance(d, int) or d == -1 for d in shape_list)
+                ):
+                    inferred_dim = _compute_inferred_dim(input_shape, shape_list)
+                    if inferred_dim is not None:
+                        minus_one_idx = shape_list.index(-1)
                         shape_list[minus_one_idx] = inferred_dim
-                        # Now set batch dim to -1
                         shape_list[0] = -1
             else:
-                # No -1 in shape, safe to replace first dim with -1
                 shape_list[0] = -1
 
-        # Convert to tuple for cleaner code
         shape_literal = tuple(shape_list)
         return f"{output} = {data}.reshape{shape_literal}"
 
-    # Dynamic shape - use tolist() at runtime (mark as used)
-    # Convert to int to handle cases where shape tensor has float dtype
+    # Dynamic shape - use tolist() at runtime
     shape_code = _get_input_code_name_selective(shape_input, use_literal=False)
     return f"{output} = {data}.reshape([int(x) for x in {shape_code}.tolist()])"
 
 
-def _handle_transpose(
-    layer: SemanticLayerIR, layer_name_mapping: dict[str, str]
-) -> str:
+def _handle_transpose(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Handle transpose/permute operation.
 
     Generates: output = input.permute(dims)
@@ -199,16 +192,13 @@ def _handle_transpose(
     output = layer.outputs[0].code_name
 
     # Get perm argument
-    perm_arg = next(
-        (arg for arg in layer.arguments if arg.pytorch_name == "perm"), None
-    )
+    perm_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "perm"), None)
 
     if perm_arg:
         perm = format_argument(perm_arg.value)
         return f"{output} = {inputs[0]}.permute({perm})"
-    else:
-        # Default transpose (swap last two dims)
-        return f"{output} = {inputs[0]}.transpose(-2, -1)"
+    # Default transpose (swap last two dims)
+    return f"{output} = {inputs[0]}.transpose(-2, -1)"
 
 
 def _handle_squeeze(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
@@ -226,13 +216,10 @@ def _handle_squeeze(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) 
     if dim_arg:
         dim = format_argument(dim_arg.value)
         return f"{output} = {inputs[0]}.squeeze({dim})"
-    else:
-        return f"{output} = {inputs[0]}.squeeze()"
+    return f"{output} = {inputs[0]}.squeeze()"
 
 
-def _handle_unsqueeze(
-    layer: SemanticLayerIR, layer_name_mapping: dict[str, str]
-) -> str:
+def _handle_unsqueeze(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Handle unsqueeze operation.
 
     In ONNX opset 13+, axes is the second input tensor.
@@ -253,20 +240,18 @@ def _handle_unsqueeze(
     if dim_arg and dim_arg.value is not None:
         dim = format_argument(dim_arg.value)
         return f"{output} = {data}.unsqueeze({dim})"
-    elif len(layer.inputs) >= 2:
+    if len(layer.inputs) >= 2:
         # ONNX opset 13+: axes is the second input
         axes_input = layer.inputs[1]
         if isinstance(axes_input, ConstantInfo):
             # Use literal (don't mark as used)
             axes_value = int(axes_input.data.item())
             return f"{output} = {data}.unsqueeze({axes_value})"
-        else:
-            # Dynamic axes (mark as used)
-            axes_code = _get_input_code_name_selective(axes_input, use_literal=False)
-            return f"{output} = {data}.unsqueeze({axes_code}.item())"
-    else:
-        # Fallback: unsqueeze at dim 0
-        return f"{output} = {data}.unsqueeze(0)"
+        # Dynamic axes (mark as used)
+        axes_code = _get_input_code_name_selective(axes_input, use_literal=False)
+        return f"{output} = {data}.unsqueeze({axes_code}.item())"
+    # Fallback: unsqueeze at dim 0
+    return f"{output} = {data}.unsqueeze(0)"
 
 
 def _handle_concat(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
@@ -283,14 +268,12 @@ def _handle_concat(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
     :param layer: Semantic layer IR
     :return: Generated code line
     """
-    from .._forward_gen import get_forward_gen_context
+    from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
 
     ctx = get_forward_gen_context()
 
     # Get axis argument
-    axis_arg = next(
-        (arg for arg in layer.arguments if arg.pytorch_name == "axis"), None
-    )
+    axis_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "axis"), None)
     axis_value = int(axis_arg.value) if axis_arg else 0
     axis = format_argument(axis_value)
 
@@ -313,13 +296,20 @@ def _handle_concat(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
 
             # Check if constant needs batch expansion
             # Conditions: axis != 0, constant has shape[0] == 1, and we have a variable input
-            if (axis_value != 0 and batch_size_source and
-                inp.shape and len(inp.shape) > 0 and inp.shape[0] == 1):
+            if (
+                axis_value != 0
+                and batch_size_source
+                and inp.shape
+                and len(inp.shape) > 0
+                and inp.shape[0] == 1
+            ):
                 # Expand constant to match batch size
                 # Use -1 for all dimensions except batch (dim 0)
                 expand_dims = [-1] * len(inp.shape)
                 expand_dims_str = ", ".join(str(d) for d in expand_dims)
-                const_code = f"{const_code}.expand({batch_size_source}.shape[0], {expand_dims_str[4:]})"  # Skip first "-1, "
+                # Skip first "-1, " to start from dim 1
+                dims_part = expand_dims_str[4:]
+                const_code = f"{const_code}.expand({batch_size_source}.shape[0], {dims_part})"
             inputs.append(const_code)
         elif isinstance(inp, ParameterInfo):
             # Parameters always use buffer reference
@@ -363,12 +353,8 @@ def _handle_pad(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> s
     value_code = inputs[2] if len(inputs) >= 3 else None
 
     # Get mode from arguments
-    mode_arg = next(
-        (arg for arg in layer.arguments if arg.pytorch_name == "mode"), None
-    )
-    mode = (
-        format_argument(mode_arg.value) if mode_arg and mode_arg.value else "'constant'"
-    )
+    mode_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "mode"), None)
+    mode = format_argument(mode_arg.value) if mode_arg and mode_arg.value else "'constant'"
 
     # Check if pads is a constant - if so, convert to Python literal
     if isinstance(pads_input, ConstantInfo):
@@ -381,7 +367,7 @@ def _handle_pad(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> s
         ends = pads_data[half:]
         # Reverse and interleave
         pytorch_pads = []
-        for b, e in zip(reversed(begins), reversed(ends)):
+        for b, e in zip(reversed(begins), reversed(ends), strict=False):
             pytorch_pads.extend([b, e])
         pads_str = str(pytorch_pads)
     else:
@@ -409,6 +395,27 @@ def _handle_pad(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> s
     return f"{output} = F.pad({args_str})"
 
 
+def _format_bound_arg(bound_name: str, bound_input, both_bounds_constant: bool) -> str | None:
+    """Format a clamp bound argument (min or max).
+
+    :param bound_name: Name of bound ('min' or 'max')
+    :param bound_input: Input tensor info
+    :param both_bounds_constant: Whether both min and max are constant
+    :return: Formatted argument string or None
+    """
+    if bound_input is None:
+        return None
+
+    if both_bounds_constant and isinstance(bound_input, ConstantInfo):
+        value = bound_input.data.item()
+        if isinstance(value, (int, bool)) or (isinstance(value, float) and value.is_integer()):
+            return f"{bound_name}={int(value)}"
+        return f"{bound_name}={value}"
+
+    code = _get_input_code_name_selective(bound_input, use_literal=False)
+    return f"{bound_name}={code}"
+
+
 def _handle_clip(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Handle torch.clamp operation.
 
@@ -424,7 +431,7 @@ def _handle_clip(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> 
     # Process data input
     data_input = layer.inputs[0]
     if isinstance(data_input, (ParameterInfo, ConstantInfo)):
-        from .._forward_gen import get_forward_gen_context
+        from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
 
         ctx = get_forward_gen_context()
         if ctx:
@@ -438,45 +445,23 @@ def _handle_clip(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> 
 
     args_parts = [data_code]
 
-    # Check if both min and max are constants (for type consistency)
+    # Get min/max inputs
     min_input = layer.inputs[1] if len(layer.inputs) > 1 else None
     max_input = layer.inputs[2] if len(layer.inputs) > 2 else None
 
-    both_bounds_constant = (
-        min_input is None or isinstance(min_input, ConstantInfo)
-    ) and (max_input is None or isinstance(max_input, ConstantInfo))
+    # Check if both bounds are constant
+    both_bounds_constant = (min_input is None or isinstance(min_input, ConstantInfo)) and (
+        max_input is None or isinstance(max_input, ConstantInfo)
+    )
 
-    # Handle min value
-    if min_input is not None:
-        if both_bounds_constant and isinstance(min_input, ConstantInfo):
-            # Use literal (don't mark as used)
-            min_value = min_input.data.item()
-            if isinstance(min_value, (int, bool)) or (
-                isinstance(min_value, float) and min_value.is_integer()
-            ):
-                args_parts.append(f"min={int(min_value)}")
-            else:
-                args_parts.append(f"min={min_value}")
-        else:
-            # Use tensor reference (mark as used)
-            min_code = _get_input_code_name_selective(min_input, use_literal=False)
-            args_parts.append(f"min={min_code}")
+    # Add formatted bound arguments
+    min_arg = _format_bound_arg("min", min_input, both_bounds_constant)
+    if min_arg:
+        args_parts.append(min_arg)
 
-    # Handle max value
-    if max_input is not None:
-        if both_bounds_constant and isinstance(max_input, ConstantInfo):
-            # Use literal (don't mark as used)
-            max_value = max_input.data.item()
-            if isinstance(max_value, (int, bool)) or (
-                isinstance(max_value, float) and max_value.is_integer()
-            ):
-                args_parts.append(f"max={int(max_value)}")
-            else:
-                args_parts.append(f"max={max_value}")
-        else:
-            # Use tensor reference (mark as used)
-            max_code = _get_input_code_name_selective(max_input, use_literal=False)
-            args_parts.append(f"max={max_code}")
+    max_arg = _format_bound_arg("max", max_input, both_bounds_constant)
+    if max_arg:
+        args_parts.append(max_arg)
 
     # Add any additional keyword arguments from layer.arguments
     for arg in layer.arguments:
@@ -508,31 +493,26 @@ def _handle_gather(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
     indices_input = layer.inputs[1]
 
     # Get axis argument
-    axis_arg = next(
-        (arg for arg in layer.arguments if arg.pytorch_name == "axis"), None
-    )
+    axis_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "axis"), None)
     axis = int(axis_arg.value) if axis_arg else 0
 
     # Check if indices is a constant - use literals only for small indices (≤10 elements)
     if isinstance(indices_input, ConstantInfo):
         indices_data = indices_input.data
         # Note: INT64_MAX (9223372036854775807) means "until the end", convert to -1
-        INT64_MAX = 9223372036854775807
+        int64_max = 9223372036854775807
 
         if indices_data.numel() == 1:
             # Scalar index - use bracket slicing notation (don't mark as used)
             idx_value = int(indices_data.item())
-            idx_value = -1 if idx_value == INT64_MAX else idx_value
+            idx_value = -1 if idx_value == int64_max else idx_value
             # Build slice with proper axis
             slices = [":" for _ in range(axis)] + [str(idx_value)]
             return f"{output} = {data}[{', '.join(slices)}]"
-        else:
-            # All indices use buffer reference for device control and performance
-            # (avoid creating tensors on every forward pass)
-            indices_code = _get_input_code_name_selective(
-                indices_input, use_literal=False
-            )
-            return f"{output} = {data}.index_select({axis}, {indices_code}.reshape(-1).long())"
+        # All indices use buffer reference for device control and performance
+        # (avoid creating tensors on every forward pass)
+        indices_code = _get_input_code_name_selective(indices_input, use_literal=False)
+        return f"{output} = {data}.index_select({axis}, {indices_code}.reshape(-1).long())"
 
     # Runtime indices - need dynamic handling (mark as used)
     indices_code = _get_input_code_name_selective(indices_input, use_literal=False)
@@ -545,9 +525,7 @@ def _handle_gather(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
     )
 
 
-def _handle_constant_of_shape(
-    layer: SemanticLayerIR, layer_name_mapping: dict[str, str]
-) -> str:
+def _handle_constant_of_shape(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Handle ConstantOfShape operation.
 
     Creates a tensor of given shape filled with a constant value.
@@ -559,9 +537,7 @@ def _handle_constant_of_shape(
     output = layer.outputs[0].code_name
 
     # Get value argument and determine dtype
-    value_arg = next(
-        (arg for arg in layer.arguments if arg.pytorch_name == "value"), None
-    )
+    value_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "value"), None)
     dtype_str = ""
     if value_arg:
         val = value_arg.value
@@ -588,7 +564,7 @@ def _handle_constant_of_shape(
     shape_input = layer.inputs[0]
 
     # Get device from first forward input
-    from .._forward_gen import get_forward_gen_context
+    from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
 
     ctx = get_forward_gen_context()
     device_expr = f"{ctx.first_input_name}.device" if ctx and ctx.first_input_name else "'cpu'"
@@ -601,10 +577,9 @@ def _handle_constant_of_shape(
         else:
             shape_literal = (shape_data,)
         return f"{output} = torch.full({shape_literal}, {value}{dtype_str}, device={device_expr})"
-    else:
-        # Dynamic shape (mark as used)
-        shape_code = _get_input_code_name_selective(shape_input, use_literal=False)
-        return f"{output} = torch.full({shape_code}.tolist(), {value}{dtype_str}, device={device_expr})"
+    # Dynamic shape (mark as used)
+    shape_code = _get_input_code_name_selective(shape_input, use_literal=False)
+    return f"{output} = torch.full({shape_code}.tolist(), {value}{dtype_str}, device={device_expr})"
 
 
 def _handle_arange(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
@@ -629,20 +604,19 @@ def _handle_arange(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
             # Use literal value directly (don't mark as used)
             value = inp.data.item()
             # Format as int or float appropriately
-            if isinstance(value, (int, bool)) or (
-                isinstance(value, float) and value.is_integer()
-            ):
+            if isinstance(value, (int, bool)) or (isinstance(value, float) and value.is_integer()):
                 args.append(str(int(value)))
             else:
                 args.append(str(value))
         else:
             # Runtime value (mark as used if parameter)
             runtime_arg = _get_input_code_name_selective(inp, use_literal=False)
+            assert runtime_arg is not None
             args.append(runtime_arg)
             has_runtime_value = True
 
     # Add device parameter: use runtime value's device if available, else first input's device
-    from .._forward_gen import get_forward_gen_context
+    from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
 
     if has_runtime_value and runtime_arg:
         device_expr = f", device={runtime_arg}.device"
@@ -653,10 +627,126 @@ def _handle_arange(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
 
     if len(args) >= 3:
         return f"{output} = torch.arange({args[0]}, {args[1]}, {args[2]}{device_expr})"
-    elif len(args) == 2:
+    if len(args) == 2:
         return f"{output} = torch.arange({args[0]}, {args[1]}{device_expr})"
+    return f"{output} = torch.arange({args[0]}{device_expr})"
+
+
+def _generate_literal_slice(
+    data: str, starts: list, ends: list, axes: list, steps: list, output: str
+) -> str:
+    """Generate Python literal slicing code.
+
+    :param data: Data variable name
+    :param starts: Start indices
+    :param ends: End indices
+    :param axes: Axes to slice
+    :param steps: Step sizes
+    :param output: Output variable name
+    :return: Generated code
+    """
+    int64_max = 9223372036854775807
+    slice_parts = {}
+
+    for i, axis in enumerate(axes):
+        start = starts[i] if starts[i] != int64_max else 0
+        end = "" if ends[i] == int64_max else ends[i]
+        step = steps[i]
+
+        # Build slice string for this axis
+        if step == 1:
+            if end == "":
+                slice_parts[axis] = f"{start}:" if start != 0 else ":"
+            else:
+                slice_parts[axis] = f"{start}:{end}"
+        else:
+            if end == "":
+                slice_parts[axis] = f"{start}::{step}" if start != 0 else f"::{step}"
+            else:
+                slice_parts[axis] = f"{start}:{end}:{step}"
+
+    # Build slice tuple
+    max_axis = max(axes) if axes else 0
+    slice_strs = [slice_parts.get(ax, ":") for ax in range(max_axis + 1)]
+    slice_expr = ", ".join(slice_strs)
+    return f"{output} = {data}[{slice_expr}]"
+
+
+def _try_narrow_slice(
+    data: str,
+    starts_input,
+    ends_input,
+    axes_input,
+    steps_input,
+    output: str,
+) -> str | None:
+    """Try to use torch.narrow for single-axis constant slicing.
+
+    :param data: Data variable name
+    :param starts_input: Starts input (should be ConstantInfo)
+    :param ends_input: Ends input (should be ConstantInfo)
+    :param axes_input: Axes input
+    :param steps_input: Steps input
+    :param output: Output variable name
+    :return: Generated code or None if narrow can't be used
+    """
+    # Get axes and steps values
+    if axes_input is None:
+        axes_list = [0]
     else:
-        return f"{output} = torch.arange({args[0]}{device_expr})"
+        assert isinstance(axes_input, ConstantInfo)
+        axes_list = axes_input.data.tolist()
+        if not isinstance(axes_list, list):
+            axes_list = [axes_list]
+
+    if steps_input is None:
+        steps_list = [1] * len(axes_list)
+    else:
+        assert isinstance(steps_input, ConstantInfo)
+        steps_list = steps_input.data.tolist()
+        if not isinstance(steps_list, list):
+            steps_list = [steps_list]
+
+    # Only use narrow for single-axis, step=1
+    if len(axes_list) != 1 or steps_list[0] != 1:
+        return None
+
+    axis = axes_list[0]
+    assert isinstance(starts_input, ConstantInfo)
+    assert isinstance(ends_input, ConstantInfo)
+    start_val = int(starts_input.data.item())
+    end_val = int(ends_input.data.item())
+    length = end_val - start_val
+
+    if length <= 0:
+        return None
+
+    return f"{output} = {data}.narrow({axis}, {start_val}, {length})"
+
+
+def _normalize_int64_max(values):
+    """Convert INT64_MAX to -1 in a list or scalar."""
+    if isinstance(values, list):
+        return [_normalize_int64_max(v) for v in values]
+    return -1 if values == 9223372036854775807 else values
+
+
+def _encode_slice_input(input_val, default: str) -> str:
+    """Encode a slice input (constant or variable) as code.
+
+    :param input_val: Input value (ConstantInfo, VariableInfo, or None)
+    :param default: Default value if input is None
+    :return: Code representation
+    """
+    if input_val is None:
+        return default
+    if isinstance(input_val, ConstantInfo):
+        values = _normalize_int64_max(input_val.data.tolist())
+        return str(values)
+
+    code_val = _get_input_code_name_selective(input_val, use_literal=False)
+    assert code_val is not None
+    return code_val
 
 
 def _handle_slice(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
@@ -671,181 +761,84 @@ def _handle_slice(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) ->
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
     :return: Generated code line
     """
-    from .._forward_gen import get_forward_gen_context
+    from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
 
     output = layer.outputs[0].code_name
 
     # ONNX Slice inputs: data, starts, ends, [axes], [steps]
-    if len(layer.inputs) >= 3:
-        # Process data input (always use buffer reference if needed)
+    if len(layer.inputs) < 3:
         data = _get_input_code_name_selective(layer.inputs[0], use_literal=False)
+        return f"{output} = {data}"
 
-        # Check if all slice parameters are constants
-        starts_input = layer.inputs[1]
-        ends_input = layer.inputs[2]
-        axes_input = layer.inputs[3] if len(layer.inputs) > 3 else None
-        steps_input = layer.inputs[4] if len(layer.inputs) > 4 else None
+    data_val = _get_input_code_name_selective(layer.inputs[0], use_literal=False)
+    assert data_val is not None
+    data = data_val
+    starts_input = layer.inputs[1]
+    ends_input = layer.inputs[2]
+    axes_input = layer.inputs[3] if len(layer.inputs) > 3 else None
+    steps_input = layer.inputs[4] if len(layer.inputs) > 4 else None
 
-        # Try to convert to Python literal slicing if all are constants
-        all_constants = isinstance(starts_input, ConstantInfo) and isinstance(
-            ends_input, ConstantInfo
+    # Check if all parameters are constants
+    all_constants = (
+        isinstance(starts_input, ConstantInfo)
+        and isinstance(ends_input, ConstantInfo)
+        and (axes_input is None or isinstance(axes_input, ConstantInfo))
+        and (steps_input is None or isinstance(steps_input, ConstantInfo))
+    )
+
+    if all_constants:
+        assert isinstance(starts_input, ConstantInfo)
+        assert isinstance(ends_input, ConstantInfo)
+        starts = starts_input.data.tolist()
+        ends = ends_input.data.tolist()
+        axes = (
+            axes_input.data.tolist()
+            if axes_input and isinstance(axes_input, ConstantInfo)
+            else list(range(len(starts)))
         )
-        if axes_input is not None:
-            all_constants = all_constants and isinstance(axes_input, ConstantInfo)
-        if steps_input is not None:
-            all_constants = all_constants and isinstance(steps_input, ConstantInfo)
+        steps = (
+            steps_input.data.tolist()
+            if steps_input and isinstance(steps_input, ConstantInfo)
+            else [1] * len(starts)
+        )
+        return _generate_literal_slice(data, starts, ends, axes, steps, output)
 
-        if all_constants:
-            # Use literals (don't mark as used)
-            starts = starts_input.data.tolist()
-            ends = ends_input.data.tolist()
-            axes = axes_input.data.tolist() if axes_input else list(range(len(starts)))
-            steps = steps_input.data.tolist() if steps_input else [1] * len(starts)
+    # Check if we can use torch.narrow
+    axes_constant = axes_input is None or isinstance(axes_input, ConstantInfo)
+    steps_constant = steps_input is None or isinstance(steps_input, ConstantInfo)
+    starts_constant = isinstance(starts_input, ConstantInfo)
+    ends_constant = isinstance(ends_input, ConstantInfo)
 
-            # Build slice expression for each axis
-            # We need to know the data ndim to build proper slices
-            # For safety, build a generic slice tuple
-            # Note: INT64_MAX (9223372036854775807) means "until the end", omit it
-            INT64_MAX = 9223372036854775807
-            slice_parts = {}
-            for i, axis in enumerate(axes):
-                start = starts[i] if starts[i] != INT64_MAX else 0
-                # For end: if INT64_MAX, omit it (empty string) to mean "to the end"
-                if ends[i] == INT64_MAX:
-                    end = ""
-                else:
-                    end = ends[i]
-                step = steps[i]
-                # Build slice string
-                if step == 1:
-                    if end == "":
-                        slice_parts[axis] = f"{start}:" if start != 0 else ":"
-                    else:
-                        slice_parts[axis] = f"{start}:{end}"
-                else:
-                    if end == "":
-                        slice_parts[axis] = (
-                            f"{start}::{step}" if start != 0 else f"::{step}"
-                        )
-                    else:
-                        slice_parts[axis] = f"{start}:{end}:{step}"
+    if axes_constant and steps_constant and starts_constant and ends_constant:
+        narrow_code = _try_narrow_slice(
+            data, starts_input, ends_input, axes_input, steps_input, output
+        )
+        if narrow_code:
+            return narrow_code
 
-            # Generate indexing code
-            # Sort by axis and build tuple
-            max_axis = max(axes) if axes else 0
-            slice_strs = []
-            for ax in range(max_axis + 1):
-                if ax in slice_parts:
-                    slice_strs.append(slice_parts[ax])
-                else:
-                    slice_strs.append(":")
+    # Fall back to dynamic_slice helper
+    ctx = get_forward_gen_context()
+    if ctx:
+        ctx.needs_dynamic_slice = True
 
-            # Add ... for remaining dimensions if needed
-            slice_expr = ", ".join(slice_strs)
-            return f"{output} = {data}[{slice_expr}]"
+    starts_code = _encode_slice_input(starts_input, "None")
+    ends_code = _encode_slice_input(ends_input, "None")
+    axes_code = _encode_slice_input(axes_input, "None")
+    steps_code = _encode_slice_input(steps_input, "None")
 
-        # Check if we can use torch.narrow for single-axis slicing with step=1
-        # This avoids the dynamic_slice helper when axes and steps are constant
-        # NOTE: We only use narrow when BOTH starts and ends are constants, because
-        # ONNX Slice semantics include bounds clipping that torch.narrow doesn't handle.
-        # Dynamic indices could be out of bounds which torch.narrow can't handle.
-        axes_constant = axes_input is None or isinstance(axes_input, ConstantInfo)
-        steps_constant = steps_input is None or isinstance(steps_input, ConstantInfo)
-        starts_constant = isinstance(starts_input, ConstantInfo)
-        ends_constant = isinstance(ends_input, ConstantInfo)
+    # In vmap mode, dynamic_slice returns (result, valid_flag) tuple
+    if ctx and ctx.vmap_mode:
+        slice_lengths = ctx.get_slice_lengths(layer.name)
+        slice_lengths_code = str(slice_lengths) if slice_lengths else "None"
+        valid_var = f"{output}_valid"
+        fn_args = (
+            f"{data}, {starts_code}, {ends_code}, {axes_code}, {steps_code}, {slice_lengths_code}"
+        )
+        valid_update = f"_slice_valid = _slice_valid * {valid_var}"
+        return f"{output}, {valid_var} = dynamic_slice({fn_args}); {valid_update}"
 
-        if axes_constant and steps_constant and starts_constant and ends_constant:
-            # Get axes and steps values
-            if axes_input is None:
-                axes_list = [0]  # Default to axis 0
-            else:
-                axes_list = axes_input.data.tolist()
-                if not isinstance(axes_list, list):
-                    axes_list = [axes_list]
-
-            if steps_input is None:
-                steps_list = [1] * len(axes_list)
-            else:
-                steps_list = steps_input.data.tolist()
-                if not isinstance(steps_list, list):
-                    steps_list = [steps_list]
-
-            # Use torch.narrow for single-axis slicing with step=1 and constant bounds
-            if len(axes_list) == 1 and steps_list[0] == 1:
-                axis = axes_list[0]
-                start_val = int(starts_input.data.item())
-                end_val = int(ends_input.data.item())
-                length = end_val - start_val
-
-                # Only use narrow if we have valid positive length
-                if length > 0:
-                    return f"{output} = {data}.narrow({axis}, {start_val}, {length})"
-
-        # Fall back to dynamic slice - use literals for constants
-        # Mark that we need the dynamic_slice helper
-        ctx = get_forward_gen_context()
-        if ctx:
-            ctx.needs_dynamic_slice = True
-
-        # For constant inputs, extract literal values (don't mark as used)
-        # Note: INT64_MAX (9223372036854775807) means "until the end", convert to -1
-        INT64_MAX = 9223372036854775807
-
-        def normalize_int64_max(values):
-            """Convert INT64_MAX to -1 in a list or scalar."""
-            if isinstance(values, list):
-                return [normalize_int64_max(v) for v in values]
-            return -1 if values == INT64_MAX else values
-
-        if isinstance(starts_input, ConstantInfo):
-            starts_values = normalize_int64_max(starts_input.data.tolist())
-            starts_code = str(starts_values)
-        else:
-            starts_code = _get_input_code_name_selective(
-                starts_input, use_literal=False
-            )
-
-        if isinstance(ends_input, ConstantInfo):
-            ends_values = normalize_int64_max(ends_input.data.tolist())
-            ends_code = str(ends_values)
-        else:
-            ends_code = _get_input_code_name_selective(ends_input, use_literal=False)
-
-        if axes_input is None:
-            axes_code = "None"
-        elif isinstance(axes_input, ConstantInfo):
-            axes_code = str(axes_input.data.tolist())
-        else:
-            axes_code = _get_input_code_name_selective(axes_input, use_literal=False)
-
-        if steps_input is None:
-            steps_code = "None"
-        elif isinstance(steps_input, ConstantInfo):
-            steps_code = str(steps_input.data.tolist())
-        else:
-            steps_code = _get_input_code_name_selective(steps_input, use_literal=False)
-
-        # Use dynamic_slice helper for complex slicing
-        ctx = get_forward_gen_context()
-
-        # In vmap mode, dynamic_slice returns (result, valid_flag) tuple
-        # We need to unpack it and accumulate validity
-        if ctx and ctx.vmap_mode:
-            # Get slice length hints if available
-            slice_lengths = ctx.get_slice_lengths(layer.name)
-            slice_lengths_code = str(slice_lengths) if slice_lengths else "None"
-
-            # Generate tuple unpacking and validity accumulation
-            valid_var = f"{output}_valid"
-            call = f"dynamic_slice({data}, {starts_code}, {ends_code}, {axes_code}, {steps_code}, {slice_lengths_code})"
-            # Unpack tuple and accumulate validity
-            return f"{output}, {valid_var} = {call}; _slice_valid = _slice_valid * {valid_var}"
-        else:
-            return f"{output} = dynamic_slice({data}, {starts_code}, {ends_code}, {axes_code}, {steps_code})"
-
-    # Fallback for invalid inputs
-    data = _get_input_code_name_selective(layer.inputs[0], use_literal=False)
-    return f"{output} = {data}"
+    slice_args = f"{data}, {starts_code}, {ends_code}, {axes_code}, {steps_code}"
+    return f"{output} = dynamic_slice({slice_args})"
 
 
 def _handle_cast(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
@@ -889,7 +882,94 @@ def _handle_shape(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) ->
     inputs = _get_input_code_names(layer)
     output = layer.outputs[0].code_name
 
-    return f"{output} = torch.tensor({inputs[0]}.shape, dtype=torch.int64, device={inputs[0]}.device)"
+    return (
+        f"{output} = torch.tensor({inputs[0]}.shape, dtype=torch.int64, device={inputs[0]}.device)"
+    )
+
+
+def _convert_expand_semantics(data_shape: tuple[int, ...], target_shape: list[int]) -> list[int]:
+    """Convert ONNX expand semantics to PyTorch expand format.
+
+    In ONNX: if target[i]==1 and data[i]!=1, expand keeps original dimension.
+    This function converts to PyTorch format using -1 to indicate "keep original".
+
+    :param data_shape: Input data shape
+    :param target_shape: Target shape from constant
+    :return: Converted shape with -1 for dimensions to keep
+    """
+    converted = []
+    data_ndim = len(data_shape)
+    target_ndim = len(target_shape)
+
+    for i, t in enumerate(target_shape):
+        if i < target_ndim - data_ndim:
+            # New dimension from target
+            converted.append(int(t))
+        else:
+            # Existing dimension: check if we should keep original (use -1)
+            data_idx = i - (target_ndim - data_ndim)
+            if t == 1 and data_shape[data_idx] != 1:
+                converted.append(-1)  # Keep original dimension
+            else:
+                converted.append(int(t))
+
+    return converted
+
+
+def _handle_expand_constant_shape(
+    data: str,
+    shape_input: ConstantInfo,
+    data_shape: tuple[int | str, ...] | None,
+    output: str,
+) -> str:
+    """Handle expand with constant shape input.
+
+    :param data: Code name for data input
+    :param shape_input: Constant shape input
+    :param data_shape: Data input shape if known (may contain symbolic dims), None otherwise
+    :param output: Output variable name
+    :return: Generated code or None to defer to runtime helper
+    """
+    from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
+
+    target_shape = shape_input.data.tolist()
+    if not isinstance(target_shape, list):
+        target_shape = [target_shape]
+
+    # If we know both shapes with all concrete (integer) dimensions, convert semantics
+    if data_shape and all(isinstance(d, int) for d in data_shape):
+        # Extract all int elements (we've verified all are int above)
+        int_dims = [d for d in data_shape if isinstance(d, int)]
+        concrete_shape: tuple[int, ...] = tuple(int_dims)
+        converted = _convert_expand_semantics(concrete_shape, target_shape)
+        return f"{output} = {data}.expand({converted})"
+
+    # Data shape unknown or contains symbolic dims - use dynamic helper
+    ctx = get_forward_gen_context()
+    if ctx:
+        ctx.needs_dynamic_expand = True
+    return f"{output} = dynamic_expand({data}, {target_shape})"
+
+
+def _handle_expand_runtime_shape(
+    data: str,
+    shape_input: VariableInfo | ParameterInfo | ConstantInfo,
+    output: str,
+) -> str:
+    """Handle expand with runtime shape input.
+
+    :param data: Code name for data input
+    :param shape_input: Runtime shape input
+    :param output: Output variable name
+    :return: Generated code
+    """
+    from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
+
+    ctx = get_forward_gen_context()
+    if ctx:
+        ctx.needs_dynamic_expand = True
+    shape_code = _get_input_code_name_selective(shape_input, use_literal=False)
+    return f"{output} = dynamic_expand({data}, {shape_code})"
 
 
 def _handle_expand(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
@@ -903,8 +983,6 @@ def _handle_expand(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
     :return: Generated code line
     """
-    from .._forward_gen import get_forward_gen_context
-
     output = layer.outputs[0].code_name
 
     if len(layer.inputs) < 2:
@@ -912,6 +990,7 @@ def _handle_expand(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
 
     # Process data input
     data = _get_input_code_name_selective(layer.inputs[0], use_literal=False)
+    assert data is not None, "Expand data input must have a code name"
     shape_input = layer.inputs[1]
 
     # Get the output shape from ONNX shape inference
@@ -919,53 +998,20 @@ def _handle_expand(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
     output_shape = output_info.shape if output_info else None
 
     # If we know the output shape with all concrete dimensions, just use reshape
-    # Only use this shortcut if all dimensions are integers (not symbolic like 'unk__35')
     if output_shape and all(isinstance(dim, int) for dim in output_shape):
         return f"{output} = {data}.reshape({tuple(output_shape)})"
 
-    # For constant shapes, try to use inline .expand() with ONNX semantics conversion
+    # For constant shapes, use optimized constant shape handler
     if isinstance(shape_input, ConstantInfo):
-        target_shape = shape_input.data.tolist()
-        if not isinstance(target_shape, list):
-            target_shape = [target_shape]
-
         # Get data shape info if available
         data_input = layer.inputs[0]
         data_shape = None
-        if hasattr(data_input, 'shape') and data_input.shape:
+        if hasattr(data_input, "shape") and data_input.shape:
             data_shape = data_input.shape
-
-        # If we know both shapes, we can do the ONNX->PyTorch conversion at codegen time
-        if data_shape and all(isinstance(d, int) for d in data_shape):
-            # Convert ONNX semantics: if target[i]==1 and data[i]!=1, use -1 (keep dim)
-            converted = []
-            data_ndim = len(data_shape)
-            target_ndim = len(target_shape)
-            for i, t in enumerate(target_shape):
-                if i < target_ndim - data_ndim:
-                    # New dimension from target
-                    converted.append(int(t))
-                else:
-                    # Existing dimension
-                    data_idx = i - (target_ndim - data_ndim)
-                    if t == 1 and data_shape[data_idx] != 1:
-                        converted.append(-1)  # Keep original dimension
-                    else:
-                        converted.append(int(t))
-            return f"{output} = {data}.expand({converted})"
-
-        # Data shape unknown - use helper
-        ctx = get_forward_gen_context()
-        if ctx:
-            ctx.needs_dynamic_expand = True
-        return f"{output} = dynamic_expand({data}, {target_shape})"
+        return _handle_expand_constant_shape(data, shape_input, data_shape, output)
 
     # Runtime shape - use helper
-    ctx = get_forward_gen_context()
-    if ctx:
-        ctx.needs_dynamic_expand = True
-    shape_code = _get_input_code_name_selective(shape_input, use_literal=False)
-    return f"{output} = dynamic_expand({data}, {shape_code})"
+    return _handle_expand_runtime_shape(data, shape_input, output)
 
 
 def _handle_split(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
@@ -982,9 +1028,7 @@ def _handle_split(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) ->
     data = _get_input_code_name_selective(layer.inputs[0], use_literal=False)
 
     # Get axis argument and convert to dim
-    axis_arg = next(
-        (arg for arg in layer.arguments if arg.pytorch_name == "axis"), None
-    )
+    axis_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "axis"), None)
     dim = format_argument(axis_arg.value) if axis_arg else "0"
 
     # Process split sizes (second input if present)
@@ -1004,20 +1048,15 @@ def _handle_split(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) ->
         output_names = ", ".join(out.code_name for out in layer.outputs)
         if split_sizes_code:
             return f"{output_names} = {data}.split({split_sizes_code}, dim={dim})"
-        else:
-            return f"{output_names} = {data}.chunk({len(layer.outputs)}, dim={dim})"
-    else:
-        # Single output - return as tuple (rare but possible)
-        output = layer.outputs[0].code_name
-        if split_sizes_code:
-            return f"{output} = {data}.split({split_sizes_code}, dim={dim})"
-        else:
-            return f"{output} = {data}.chunk(2, dim={dim})"
+        return f"{output_names} = {data}.chunk({len(layer.outputs)}, dim={dim})"
+    # Single output - return as tuple (rare but possible)
+    output = layer.outputs[0].code_name
+    if split_sizes_code:
+        return f"{output} = {data}.split({split_sizes_code}, dim={dim})"
+    return f"{output} = {data}.chunk(2, dim={dim})"
 
 
-def _handle_scatter_nd(
-    layer: SemanticLayerIR, layer_name_mapping: dict[str, str]
-) -> str:
+def _handle_scatter_nd(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Handle ScatterND operation.
 
     ScatterND requires a helper function as there's no direct PyTorch equivalent.
@@ -1030,7 +1069,7 @@ def _handle_scatter_nd(
     :param layer: Semantic layer IR
     :return: Generated code line
     """
-    from .._forward_gen import get_forward_gen_context
+    from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
 
     inputs = _get_input_code_names(layer)
     output = layer.outputs[0].code_name
@@ -1044,9 +1083,10 @@ def _handle_scatter_nd(
     if len(inputs) >= 3:
         # In vmap mode, pass the accumulated validity flag
         if ctx and ctx.vmap_mode:
-            return f"{output} = scatter_nd({inputs[0]}, {inputs[1]}, {inputs[2]}, valid=_slice_valid)"
-        else:
-            return f"{output} = scatter_nd({inputs[0]}, {inputs[1]}, {inputs[2]})"
+            return (
+                f"{output} = scatter_nd({inputs[0]}, {inputs[1]}, {inputs[2]}, valid=_slice_valid)"
+            )
+        return f"{output} = scatter_nd({inputs[0]}, {inputs[1]}, {inputs[2]})"
     return f"{output} = {inputs[0]}"
 
 
@@ -1074,16 +1114,12 @@ def _handle_reduce(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
         args_parts.append(f"{axes_input}.tolist()")
     else:
         # Check arguments for axes
-        axes_arg = next(
-            (arg for arg in layer.arguments if arg.pytorch_name == "axes"), None
-        )
+        axes_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "axes"), None)
         if axes_arg and axes_arg.value is not None:
             args_parts.append(format_argument(axes_arg.value))
 
     # Add keepdim (note: PyTorch uses 'keepdim' not 'keepdims')
-    keepdims_arg = next(
-        (arg for arg in layer.arguments if arg.pytorch_name == "keepdims"), None
-    )
+    keepdims_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "keepdims"), None)
     if keepdims_arg and keepdims_arg.value is not None:
         args_parts.append(f"keepdim={format_argument(keepdims_arg.value)}")
 
@@ -1128,8 +1164,52 @@ def _handle_linear(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
 
     if bias:
         return f"{output} = F.linear({data}, {weight}, {bias})"
-    else:
-        return f"{output} = F.linear({data}, {weight})"
+    return f"{output} = F.linear({data}, {weight})"
+
+
+def _get_conv_func_from_ndim(ndim: int) -> str | None:
+    """Get conv function name from tensor dimensionality.
+
+    :param ndim: Number of dimensions (3=1d, 4=2d, 5=3d)
+    :return: Conv function name or None if invalid
+    """
+    if ndim == 3:
+        return "F.conv1d"
+    if ndim == 4:
+        return "F.conv2d"
+    if ndim == 5:
+        return "F.conv3d"
+    return None
+
+
+def _determine_conv_func(layer: SemanticLayerIR) -> str:
+    """Determine conv function type from shape information.
+
+    First tries weight shape (most reliable), then data shape.
+    Raises error if neither can be determined.
+
+    :param layer: Semantic layer IR
+    :return: Conv function name (F.conv1d, F.conv2d, or F.conv3d)
+    """
+    # Try weight shape (most reliable)
+    weight_input = layer.inputs[1]
+    if weight_input.shape:
+        conv_func = _get_conv_func_from_ndim(len(weight_input.shape))
+        if conv_func:
+            return conv_func
+
+    # Try data input shape
+    data_input = layer.inputs[0]
+    if data_input.shape:
+        conv_func = _get_conv_func_from_ndim(len(data_input.shape))
+        if conv_func:
+            return conv_func
+
+    # Could not determine
+    raise ValueError(
+        f"Cannot determine conv dimensionality statically for layer {layer.name}. "
+        "Missing shape information for both input and weight."
+    )
 
 
 def _handle_conv(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
@@ -1147,48 +1227,8 @@ def _handle_conv(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> 
     if len(inputs) < 2:
         raise ValueError("Conv requires input and weight")
 
-    data = inputs[0]
-    weight = inputs[1]
-
-    # Determine conv type statically from shape information
-    conv_func = None
-
-    # Try to determine from weight shape (most reliable)
-    # Weight can be ParameterInfo, ConstantInfo, or VariableInfo (if computed at runtime)
-    weight_input = layer.inputs[1]
-    if weight_input.shape:
-        weight_ndim = len(weight_input.shape)
-        # Conv1d weight: (out_channels, in_channels, kernel_size) = 3D
-        # Conv2d weight: (out_channels, in_channels, kernel_h, kernel_w) = 4D
-        # Conv3d weight: (out_channels, in_channels, kernel_d, kernel_h, kernel_w) = 5D
-        if weight_ndim == 3:
-            conv_func = "F.conv1d"
-        elif weight_ndim == 4:
-            conv_func = "F.conv2d"
-        elif weight_ndim == 5:
-            conv_func = "F.conv3d"
-
-    # If weight doesn't have shape, try input data shape
-    if conv_func is None:
-        data_input = layer.inputs[0]
-        if data_input.shape:
-            data_ndim = len(data_input.shape)
-            # Conv1d input: (batch, channels, length) = 3D
-            # Conv2d input: (batch, channels, height, width) = 4D
-            # Conv3d input: (batch, channels, depth, height, width) = 5D
-            if data_ndim == 3:
-                conv_func = "F.conv1d"
-            elif data_ndim == 4:
-                conv_func = "F.conv2d"
-            elif data_ndim == 5:
-                conv_func = "F.conv3d"
-
-    # If still can't determine, raise error (should not happen with valid ONNX)
-    if conv_func is None:
-        raise ValueError(
-            f"Cannot determine conv dimensionality statically for layer {layer.name}. "
-            "Missing shape information for both input and weight."
-        )
+    # Determine conv function type from shape information
+    conv_func = _determine_conv_func(layer)
 
     # Build arguments
     args_str = _format_args_with_inputs(layer)
@@ -1199,7 +1239,7 @@ def _handle_conv(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> 
 def _handle_generic_torch_function(
     layer: SemanticLayerIR, layer_name_mapping: dict[str, str]
 ) -> str:
-    """Generic handler for torch.* functions.
+    """Handle generic torch.* functions.
 
     :param layer: Semantic layer IR
     :return: Generated code line
@@ -1209,10 +1249,8 @@ def _handle_generic_torch_function(
     return f"{output} = {layer.pytorch_type}({args_str})"
 
 
-def _handle_generic_method(
-    layer: SemanticLayerIR, layer_name_mapping: dict[str, str]
-) -> str:
-    """Generic handler for tensor methods.
+def _handle_generic_method(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
+    """Handle generic tensor methods.
 
     :param layer: Semantic layer IR
     :return: Generated code line

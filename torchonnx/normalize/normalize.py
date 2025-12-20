@@ -6,7 +6,7 @@ __all__ = ["load_and_preprocess_onnx_model"]
 import warnings
 
 import onnx
-from onnx import ModelProto, version_converter, TensorProto
+from onnx import ModelProto, TensorProto, version_converter
 
 # Recommended opset range based on shapeonnx compatibility testing
 RECOMMENDED_OPSET = 20
@@ -35,7 +35,7 @@ def _check_model(model: ModelProto) -> None:
     try:
         onnx.checker.check_model(model)
     except (ValueError, AttributeError, TypeError) as error:
-        raise ValueError(f"Invalid ONNX model: {error}")
+        raise ValueError(f"Invalid ONNX model: {error}") from error
 
 
 def _convert_version(
@@ -114,9 +114,12 @@ def _infer_shapes(model: ModelProto, use_shapeonnx: bool = False) -> ModelProto:
                         for value_info in model.graph.value_info:
                             if value_info.name == output:
                                 # Update existing value_info
-                                shape = shapes[output]
+                                shape_val = shapes[output]
+                                shape_list = (
+                                    [shape_val] if isinstance(shape_val, int) else shape_val
+                                )
                                 value_info.type.tensor_type.shape.ClearField("dim")
-                                for dim_value in shape:
+                                for dim_value in shape_list:
                                     dim = value_info.type.tensor_type.shape.dim.add()
                                     dim.dim_value = dim_value
                                 found = True
@@ -126,8 +129,9 @@ def _infer_shapes(model: ModelProto, use_shapeonnx: bool = False) -> ModelProto:
                             # Create new value_info
                             value_info = model.graph.value_info.add()
                             value_info.name = output
-                            shape = shapes[output]
-                            for dim_value in shape:
+                            shape_val = shapes[output]
+                            shape_list = [shape_val] if isinstance(shape_val, int) else shape_val
+                            for dim_value in shape_list:
                                 dim = value_info.type.tensor_type.shape.dim.add()
                                 dim.dim_value = dim_value
         except (ValueError, RuntimeError, AttributeError, ImportError) as error:

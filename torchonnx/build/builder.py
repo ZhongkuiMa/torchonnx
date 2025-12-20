@@ -9,15 +9,15 @@ __all__ = ["build_model_ir"]
 
 from onnx import ModelProto, NodeProto
 
-from .types import NodeIR, ModelIR
 from ..normalize import (
-    get_onnx_initializers,
-    get_onnx_nodes,
     extract_onnx_opset_version,
+    get_onnx_initializers,
     get_onnx_model_input_names,
     get_onnx_model_output_names,
     get_onnx_model_shapes,
+    get_onnx_nodes,
 )
+from .types import ModelIR, NodeIR
 
 
 def _clean_shape(shape: tuple[int | str, ...] | None) -> tuple[int, ...] | None:
@@ -41,7 +41,7 @@ def _clean_shape(shape: tuple[int | str, ...] | None) -> tuple[int, ...] | None:
 
 def _build_node_ir(
     node: NodeProto,
-    shapes: dict[str, tuple[int, ...] | None],
+    shapes: dict[str, tuple[int | str, ...] | None],
     node_counter: int,
 ) -> NodeIR:
     """Build pure structural NodeIR for a single ONNX node.

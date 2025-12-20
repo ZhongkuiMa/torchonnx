@@ -7,8 +7,10 @@ __docformat__ = "restructuredtext"
 __all__ = ["optimize_generated_code"]
 
 import re
+
 import torch
-from ._line_optimizer import optimize_line
+
+from torchonnx.torchonnx.simplify._line_optimizer import optimize_line
 
 
 def optimize_generated_code(
@@ -44,9 +46,7 @@ def optimize_generated_code(
 
     # Filter state_dict if provided
     if state_dict is not None:
-        filtered_state_dict = {
-            k: v for k, v in state_dict.items() if k not in removed_buffers
-        }
+        filtered_state_dict = {k: v for k, v in state_dict.items() if k not in removed_buffers}
         return code, filtered_state_dict
 
     return code
