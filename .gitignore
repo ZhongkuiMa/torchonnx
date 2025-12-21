@@ -81,6 +81,8 @@ Thumbs.db
 # === Test directories (large files) ===
 tests/vnncomp2024_benchmarks/
 tests/benchmarks/
-tests/baselines/
 tests/data/
 tests/temp/
+
+# === Test baselines - commit .py files (golden references), ignore .pth files (large) ===
+tests/baselines/**/*.pth
