@@ -37,6 +37,9 @@ coverage.xml
 
 # === pytest / unittest ===
 .pytest_cache/
+tests/.pytest_cache/
+tests/results/
+tests/__pycache__/
 
 # === mypy, pylint, etc ===
 .mypy_cache/
@@ -76,9 +79,8 @@ Thumbs.db
 .devcontainer/
 
 # === Test directories (large files) ===
-/tests/vnncomp2024_benchmarks
-/tests/benchmarks/
-/tests/baselines/
-/tests/results/
-/tests/data/
-/tests/temp/
+tests/vnncomp2024_benchmarks/
+tests/benchmarks/
+tests/baselines/
+tests/data/
+tests/temp/

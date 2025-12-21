@@ -1,22 +1,21 @@
-"""Baseline management for SlimONNX regression testing.
+"""TorchONNX Model Conversion Test Suite.
 
 This module provides functions to:
-1. Optimize models and save to results/baselines/
-2. Save results as archived baselines to baselines/
-3. Verify results against baselines (structural + numerical)
-4. Verify results against original benchmark models
+1. Convert ONNX models to PyTorch and save to results/baselines/
+2. Verify converted models against original benchmark models (structural + numerical)
 
 Directory structure:
-- benchmarks/          # Original unoptimized models
-- results/baselines/   # Current optimization results
+- benchmarks/          # Original ONNX models
+- results/baselines/   # Current conversion results (.py and .pth files)
 - baselines/           # Archived good baselines for regression testing
+
+To update baselines, run update_baselines.py after converting models.
 """
 
 __docformat__ = "restructuredtext"
 __all__ = [
     "convert_model",
     "convert_all_models",
-    "save_as_baseline",
     "verify_benchmarks",
 ]
 
@@ -515,44 +514,6 @@ def convert_all_models(
     }
 
 
-def save_as_baseline(
-    results_dir: str = "results/baselines", baselines_dir: str = "baselines"
-) -> tuple[int, int]:
-    """Save current results as archived baselines.
-
-    Copies entire results directory structure to baselines directory.
-
-    :param results_dir: Source directory containing current results
-    :param baselines_dir: Target directory for archived baselines
-    :return: Tuple of (num_copied, num_failed)
-    """
-    results_path = Path(results_dir)
-    baselines_path = Path(baselines_dir)
-
-    if not results_path.exists():
-        raise FileNotFoundError(f"Results directory not found: {results_dir}")
-
-    print(f"Saving {results_dir}/ as baselines to {baselines_dir}/")
-    print("=" * 70)
-
-    # Remove old baselines if they exist
-    if baselines_path.exists():
-        print(f"Removing old baselines {baselines_path}...")
-        shutil.rmtree(baselines_path)
-
-    # Copy results to baselines
-    shutil.copytree(results_path, baselines_path)
-
-    # Count files
-    onnx_count = len(list(baselines_path.rglob("*.onnx")))
-    json_count = len(list(baselines_path.rglob("*.json")))
-
-    print(f"Copied {onnx_count} ONNX files and {json_count} JSON files")
-    print("=" * 70)
-
-    return onnx_count, json_count
-
-
 def _validate_verification_directories(results_path: Path, benchmarks_path: Path) -> None:
     """Validate that all required directories exist for verification.
 
@@ -923,15 +884,7 @@ def main() -> None:
         sys.exit(exit_code)
 
     print("\n" + "=" * 70)
-    print("STEP 2: Saving baselines")
-    print("=" * 70)
-    test_dir = Path(__file__).parent
-    results_dir = test_dir / "results" / "baselines"
-    baselines_dir = test_dir / "baselines"
-    save_as_baseline(str(results_dir), str(baselines_dir))
-
-    print("\n" + "=" * 70)
-    print("STEP 3: Verifying converted models")
+    print("STEP 2: Verifying converted models")
     print("=" * 70)
     exit_code = pytest.main(
         [
