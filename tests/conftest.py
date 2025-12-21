@@ -37,6 +37,17 @@ def output_dir_vmap():
 
 
 @pytest.fixture(scope="session")
+def baselines_dir():
+    """Baselines directory for storing reference models.
+
+    :return: Path to baselines directory (created if needed)
+    """
+    path = Path(__file__).parent / "baselines"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+@pytest.fixture(scope="session")
 def max_per_benchmark():
     """Maximum models per benchmark to test.
 

@@ -15,25 +15,21 @@ from torchonnx.tests.benchmark_utils import find_benchmarks, find_models
 
 def get_benchmark_models():
     """Collect all models from vnncomp2024 benchmarks."""
-    test_dir = Path(__file__).parent
-    benchmarks_dir = test_dir / "vnncomp2024_benchmarks"
+    benchmarks_dir = Path(__file__).parent / "vnncomp2024_benchmarks"
     benchmarks = find_benchmarks(str(benchmarks_dir))
     models = find_models(benchmarks, max_per_benchmark=20)
     return [str(m) for m in models]
 
 
 @pytest.fixture(scope="session")
-def baselines_dir():
-    """Baseline directory for storing reference models."""
-    test_dir = Path(__file__).parent
-    return test_dir / "baselines"
-
-
-@pytest.fixture(scope="session")
 def results_dir():
-    """Results directory for generated models."""
-    test_dir = Path(__file__).parent
-    return test_dir / "results" / "baselines"
+    """Results directory for generated models (created if needed).
+
+    Note: baselines_dir fixture is provided by conftest.py
+    """
+    path = Path(__file__).parent / "results" / "baselines"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 @pytest.mark.parametrize("model_path", get_benchmark_models())
