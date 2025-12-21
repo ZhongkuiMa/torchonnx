@@ -86,19 +86,17 @@ def update_benchmark(
         print(f"  [SKIP] No results: {benchmark_name}")
         return 0, 0
 
-    # Copy onnx subdirectory
-    onnx_result = result_bench_dir / "onnx"
-    onnx_baseline = baseline_bench_dir / "onnx"
-
-    if not onnx_result.exists():
-        print(f"  [SKIP] No onnx directory: {result_bench_dir}")
+    # Count .py files as indicator of work
+    py_files = list(result_bench_dir.glob("*.py"))
+    if not py_files:
+        print(f"  [SKIP] No converted models: {result_bench_dir}")
         return 0, 0
 
-    # Copy the entire onnx directory
+    # Copy the entire benchmark directory
     success = 0
     total = 1
 
-    copied, _ = copy_baseline(onnx_result, onnx_baseline, dry_run)
+    copied, _ = copy_baseline(result_bench_dir, baseline_bench_dir, dry_run)
     if copied:
         success += 1
 

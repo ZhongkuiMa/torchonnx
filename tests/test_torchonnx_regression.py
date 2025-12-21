@@ -48,8 +48,8 @@ def test_conversion_baseline_exists(model_path, baselines_dir):
     model_name = model_path_obj.stem
 
     # Expected paths
-    baseline_py = baselines_dir / benchmark_name / "onnx" / f"{model_name}.py"
-    baseline_pth = baselines_dir / benchmark_name / "onnx" / f"{model_name}.pth"
+    baseline_py = baselines_dir / benchmark_name / f"{model_name}.py"
+    baseline_pth = baselines_dir / benchmark_name / f"{model_name}.pth"
 
     # Skip if no baseline exists yet
     if not baseline_py.exists() or not baseline_pth.exists():
@@ -64,7 +64,7 @@ def test_conversion_baseline_exists(model_path, baselines_dir):
 def test_conversion_results_match_baseline(model_path, baselines_dir, results_dir):
     """Verify converted model files match baseline versions.
 
-    Compares results/baselines/{benchmark}/onnx/ vs baselines/{benchmark}/onnx/
+    Compares results/baselines/{benchmark}/ vs baselines/{benchmark}/
 
     :param model_path: Path to ONNX model file
     :param baselines_dir: Directory containing baseline models
@@ -75,10 +75,10 @@ def test_conversion_results_match_baseline(model_path, baselines_dir, results_di
     model_name = model_path_obj.stem
 
     # Expected paths
-    baseline_py = baselines_dir / benchmark_name / "onnx" / f"{model_name}.py"
-    baseline_pth = baselines_dir / benchmark_name / "onnx" / f"{model_name}.pth"
-    results_py = results_dir / benchmark_name / "onnx" / f"{model_name}.py"
-    results_pth = results_dir / benchmark_name / "onnx" / f"{model_name}.pth"
+    baseline_py = baselines_dir / benchmark_name / f"{model_name}.py"
+    baseline_pth = baselines_dir / benchmark_name / f"{model_name}.pth"
+    results_py = results_dir / benchmark_name / f"{model_name}.py"
+    results_pth = results_dir / benchmark_name / f"{model_name}.pth"
 
     # Skip if no baseline exists yet
     if not baseline_py.exists() or not baseline_pth.exists():

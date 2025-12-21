@@ -6,8 +6,8 @@ This module provides functions to:
 
 Directory structure:
 - benchmarks/          # Original ONNX models
-- results/baselines/   # Current conversion results (.py and .pth files)
-- baselines/           # Archived good baselines for regression testing
+- results/baselines/{benchmark_name}/   # Current conversion results (.py and .pth files)
+- baselines/{benchmark_name}/           # Golden reference baselines for regression testing
 
 To update baselines, run update_baselines.py after converting models.
 """
@@ -287,10 +287,10 @@ def convert_model(
     """
     benchmark_name = get_model_benchmark_name(model_path)
     model_name = model_path.name
+    model_stem = model_path.stem
 
-    rel_path = get_model_relative_path(model_path, benchmarks_root)
-    pytorch_module_path = output_dir / rel_path.with_suffix(".py")
-    state_dict_path = output_dir / rel_path.with_suffix(".pth")
+    pytorch_module_path = output_dir / benchmark_name / f"{model_stem}.py"
+    state_dict_path = output_dir / benchmark_name / f"{model_stem}.pth"
 
     pytorch_module_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -390,9 +390,11 @@ def test_verify_model_against_original(
 
     # Get paths
     model_path_obj = Path(model_path)
-    rel_path = get_model_relative_path(model_path_obj, benchmarks_root)
-    result_py = output_dir_baselines / rel_path.with_suffix(".py")
-    result_pth = output_dir_baselines / rel_path.with_suffix(".pth")
+    benchmark_name = get_model_benchmark_name(model_path_obj)
+    model_stem = model_path_obj.stem
+    rel_path = Path(benchmark_name) / model_stem
+    result_py = output_dir_baselines / benchmark_name / f"{model_stem}.py"
+    result_pth = output_dir_baselines / benchmark_name / f"{model_stem}.pth"
     data_file = get_model_data_path(model_path_obj, benchmarks_root)
 
     # Skip if converted model doesn't exist
