@@ -161,4 +161,3 @@ class Ml4acopf202414IeeeMl4acopfLinearNonresidual(nn.Module):
         x105 = x103 + x104
         x106 = torch.cat([x17, x49, x58, x54, x62, x66, x70, x100, x105], dim=1)
         return x106
-

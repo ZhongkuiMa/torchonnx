@@ -413,9 +413,9 @@ class Cgan2023CganImgsz32Nch3SmallTransformer(nn.Module):
         x152 = self.c127 / x151
         x153 = F.conv2d(x149, x152, self.c128, padding=1)
         x154 = self.relu7(x153)
-        x155 = F.pad(x154, [0, 0, 0, 0, 0, 0, 0, 0], mode='constant', value=0.0)
+        x155 = F.pad(x154, [0, 0, 0, 0, 0, 0, 0, 0], mode="constant", value=0.0)
         x156 = self.avgpool2d1(x155)
-        x157 = F.pad(x149, [0, 0, 0, 0, 0, 0, 0, 0], mode='constant', value=0.0)
+        x157 = F.pad(x149, [0, 0, 0, 0, 0, 0, 0, 0], mode="constant", value=0.0)
         x158 = self.avgpool2d2(x157)
         x159 = self.c133 @ self.c134
         x160 = self.c135 @ x159
@@ -427,13 +427,13 @@ class Cgan2023CganImgsz32Nch3SmallTransformer(nn.Module):
         x166 = self.c140 @ x165
         x167 = self.c141 / x166
         x168 = F.conv2d(x164, x167, self.c142, padding=1)
-        x169 = F.pad(x168, [0, 0, 0, 0, 0, 0, 0, 0], mode='constant', value=0.0)
+        x169 = F.pad(x168, [0, 0, 0, 0, 0, 0, 0, 0], mode="constant", value=0.0)
         x170 = self.avgpool2d3(x169)
         x171 = self.c145 @ self.c146
         x172 = self.c147 @ x171
         x173 = self.c148 / x172
         x174 = F.conv2d(x164, x173, self.c149)
-        x175 = F.pad(x174, [0, 0, 0, 0, 0, 0, 0, 0], mode='constant', value=0.0)
+        x175 = F.pad(x174, [0, 0, 0, 0, 0, 0, 0, 0], mode="constant", value=0.0)
         x176 = self.avgpool2d4(x175)
         x177 = x170 + x176
         x178 = torch.tensor(x177.shape, dtype=torch.int64, device=x177.device)
@@ -513,13 +513,13 @@ class Cgan2023CganImgsz32Nch3SmallTransformer(nn.Module):
         x252 = self.c197 @ x251
         x253 = self.c198 / x252
         x254 = F.conv2d(x250, x253, self.c199, padding=1)
-        x255 = F.pad(x254, [0, 0, 0, 0, 0, 0, 0, 0], mode='constant', value=0.0)
+        x255 = F.pad(x254, [0, 0, 0, 0, 0, 0, 0, 0], mode="constant", value=0.0)
         x256 = self.avgpool2d5(x255)
         x257 = self.c202 @ self.c203
         x258 = self.c204 @ x257
         x259 = self.c205 / x258
         x260 = F.conv2d(x250, x259, self.c206)
-        x261 = F.pad(x260, [0, 0, 0, 0, 0, 0, 0, 0], mode='constant', value=0.0)
+        x261 = F.pad(x260, [0, 0, 0, 0, 0, 0, 0, 0], mode="constant", value=0.0)
         x262 = self.avgpool2d6(x261)
         x263 = x256 + x262
         x264 = self.relu10(x263)
@@ -527,13 +527,13 @@ class Cgan2023CganImgsz32Nch3SmallTransformer(nn.Module):
         x266 = self.c211 @ x265
         x267 = self.c212 / x266
         x268 = F.conv2d(x264, x267, self.c213, padding=1)
-        x269 = F.pad(x268, [0, 0, 0, 0, 0, 0, 0, 0], mode='constant', value=0.0)
+        x269 = F.pad(x268, [0, 0, 0, 0, 0, 0, 0, 0], mode="constant", value=0.0)
         x270 = self.avgpool2d7(x269)
         x271 = self.c216 @ self.c217
         x272 = self.c218 @ x271
         x273 = self.c219 / x272
         x274 = F.conv2d(x264, x273, self.c220)
-        x275 = F.pad(x274, [0, 0, 0, 0, 0, 0, 0, 0], mode='constant', value=0.0)
+        x275 = F.pad(x274, [0, 0, 0, 0, 0, 0, 0, 0], mode="constant", value=0.0)
         x276 = self.avgpool2d8(x275)
         x277 = x270 + x276
         x278 = self.relu11(x277)
@@ -541,13 +541,13 @@ class Cgan2023CganImgsz32Nch3SmallTransformer(nn.Module):
         x280 = self.c225 @ x279
         x281 = self.c226 / x280
         x282 = F.conv2d(x278, x281, self.c227, padding=1)
-        x283 = F.pad(x282, [0, 0, 0, 0, 0, 0, 0, 0], mode='constant', value=0.0)
+        x283 = F.pad(x282, [0, 0, 0, 0, 0, 0, 0, 0], mode="constant", value=0.0)
         x284 = self.avgpool2d9(x283)
         x285 = self.c230 @ self.c231
         x286 = self.c232 @ x285
         x287 = self.c233 / x286
         x288 = F.conv2d(x278, x287, self.c234)
-        x289 = F.pad(x288, [0, 0, 0, 0, 0, 0, 0, 0], mode='constant', value=0.0)
+        x289 = F.pad(x288, [0, 0, 0, 0, 0, 0, 0, 0], mode="constant", value=0.0)
         x290 = self.avgpool2d10(x289)
         x291 = x284 + x290
         x292 = self.relu12(x291)
@@ -565,4 +565,3 @@ class Cgan2023CganImgsz32Nch3SmallTransformer(nn.Module):
         x304 = self.sigmoid1(x303)
         x305 = x304.squeeze()
         return x305
-

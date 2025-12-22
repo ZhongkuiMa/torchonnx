@@ -194,4 +194,3 @@ class LsncQuadrotor2dOutput(nn.Module):
         x137 = -x136
         x138 = torch.cat([x137, x119, x121], dim=1)
         return x138
-

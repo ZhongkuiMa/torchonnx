@@ -29,7 +29,7 @@ def dynamic_expand(data, target_shape):
 
     # If data has more dimensions than target, squeeze leading dimensions
     if data.ndim > len(target_shape):
-        new_shape = tuple(int(s) for s in data.shape[data.ndim - len(target_shape):])
+        new_shape = tuple(int(s) for s in data.shape[data.ndim - len(target_shape) :])
         data = data.reshape(new_shape)
 
     # Convert ONNX semantics to PyTorch
@@ -114,8 +114,8 @@ class Ml4acopf2023118IeeeMl4acopf(nn.Module):
         x22 = x20 - x21
         x23 = x18.index_select(1, self.c34.reshape(-1).long())
         x24 = x18.index_select(1, self.c35.reshape(-1).long())
-        x25 = x23 ** 2
-        x26 = x24 ** 2
+        x25 = x23**2
+        x26 = x24**2
         x27 = x22.cos()
         x28 = x22.sin()
         x29 = x23 * x24
@@ -150,12 +150,12 @@ class Ml4acopf2023118IeeeMl4acopf(nn.Module):
         x58 = self.c54 == x57
         x59 = torch.where(x58, x56, self.c54)
         x60 = dynamic_expand(self.c51, x59)
-        x61 = x37 ** 2
-        x62 = x42 ** 2
+        x61 = x37**2
+        x62 = x42**2
         x63 = x61 + x62
         x64 = x63 - x55
-        x65 = x46 ** 2
-        x66 = x50 ** 2
+        x65 = x46**2
+        x66 = x50**2
         x67 = x65 + x66
         x68 = x67 - x60
         x69 = x14.permute((1, 0))
@@ -182,7 +182,7 @@ class Ml4acopf2023118IeeeMl4acopf(nn.Module):
         x90 = x50.permute((1, 0))
         x91 = self.c62 @ x90
         x92 = x91.permute((1, 0))
-        x93 = x18 ** 2
+        x93 = x18**2
         x94 = x77 - x71
         x95 = x94 - x86
         x96 = x95 - x83
@@ -195,4 +195,3 @@ class Ml4acopf2023118IeeeMl4acopf(nn.Module):
         x103 = x101 + x102
         x104 = torch.cat([x13, x37, x46, x42, x50, x64, x68, x98, x103], dim=1)
         return x104
-

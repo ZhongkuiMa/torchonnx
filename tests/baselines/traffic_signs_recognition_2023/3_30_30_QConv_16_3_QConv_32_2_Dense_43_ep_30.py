@@ -37,4 +37,3 @@ class TrafficSignsRecognition202333030Qconv163Qconv322Dense43Ep30(nn.Module):
         x14 = x13 @ self.c2
         x15 = self.softmax1(x14)
         return x15
-

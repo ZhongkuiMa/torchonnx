@@ -64,4 +64,3 @@ class CoraMnistTrades(nn.Module):
         x22 = x21 @ self.c14
         x23 = x22 + self.c15
         return x23
-

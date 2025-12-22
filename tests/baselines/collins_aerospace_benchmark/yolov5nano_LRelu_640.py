@@ -296,7 +296,7 @@ class CollinsAerospaceBenchmarkYolov5nanoLrelu640(nn.Module):
         x148 = x147 + self.c7
         x149 = x148 * 8
         x150 = x145 * 2
-        x151 = x150 ** 2
+        x151 = x150**2
         x152 = x151 * self.c11
         x153 = torch.cat([x149, x152, x146], dim=4)
         x154 = x153.reshape(-1, 19200, 11)
@@ -309,7 +309,7 @@ class CollinsAerospaceBenchmarkYolov5nanoLrelu640(nn.Module):
         x163 = x162 + self.c16
         x164 = x163 * 16
         x165 = x160 * 2
-        x166 = x165 ** 2
+        x166 = x165**2
         x167 = x166 * self.c20
         x168 = torch.cat([x164, x167, x161], dim=4)
         x169 = x168.reshape(-1, 4800, 11)
@@ -322,10 +322,9 @@ class CollinsAerospaceBenchmarkYolov5nanoLrelu640(nn.Module):
         x178 = x177 + self.c25
         x179 = x178 * 32
         x180 = x175 * 2
-        x181 = x180 ** 2
+        x181 = x180**2
         x182 = x181 * self.c29
         x183 = torch.cat([x179, x182, x176], dim=4)
         x184 = x183.reshape(-1, 1200, 11)
         x185 = torch.cat([x154, x169, x184], dim=1)
         return x185
-

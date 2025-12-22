@@ -6,13 +6,17 @@ Generated: 2025-12-22 03:36:23
 This module was automatically converted from an ONNX model.
 """
 
-__all__ = ["TrafficSignsRecognition202334848Qconv325Mp2BnQconv645Mp2BnQconv643BnDense256BnDense43Ep30"]
+__all__ = [
+    "TrafficSignsRecognition202334848Qconv325Mp2BnQconv645Mp2BnQconv643BnDense256BnDense43Ep30"
+]
 
 import torch
 import torch.nn as nn
 
 
-class TrafficSignsRecognition202334848Qconv325Mp2BnQconv645Mp2BnQconv643BnDense256BnDense43Ep30(nn.Module):
+class TrafficSignsRecognition202334848Qconv325Mp2BnQconv645Mp2BnQconv643BnDense256BnDense43Ep30(
+    nn.Module
+):
     def __init__(self):
         super().__init__()
         self.register_buffer("c2", torch.empty([3136, 256], dtype=torch.float32))
@@ -69,4 +73,3 @@ class TrafficSignsRecognition202334848Qconv325Mp2BnQconv645Mp2BnQconv643BnDense2
         x30 = x29 @ self.c5
         x31 = self.softmax1(x30)
         return x31
-

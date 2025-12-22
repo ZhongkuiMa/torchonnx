@@ -60,4 +60,3 @@ class Nn4sys2023PensieveMidSimple(nn.Module):
         x27 = self.relu6(x26)
         x28 = self.linear5(x27)
         return x28
-

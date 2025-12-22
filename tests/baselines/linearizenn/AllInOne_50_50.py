@@ -56,4 +56,3 @@ class LinearizennAllinone5050(nn.Module):
         x19 = torch.cat([x16, x18], dim=1)
         x20 = x19 @ self.c6
         return x20
-

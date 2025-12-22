@@ -73,7 +73,9 @@ def dynamic_slice(data, starts, ends, axes=None, steps=None, slice_lengths=None)
     # Track validity: 1.0 if all slices non-empty, 0.0 if any slice empty
     cumulative_valid = torch.ones((), dtype=data.dtype, device=data.device)
 
-    for i, (axis, step, slice_len) in enumerate(zip(axes_list, steps_list, lengths_list)):
+    for i, (axis, step, slice_len) in enumerate(
+        zip(axes_list, steps_list, lengths_list, strict=False)
+    ):
         axis = int(axis)
         step = int(step)
         slice_len = int(slice_len)
@@ -198,7 +200,7 @@ def dynamic_expand(data, target_shape):
 
     # If data has more dimensions than target, squeeze leading dimensions
     if data.ndim > len(target_shape):
-        new_shape = tuple(int(s) for s in data.shape[data.ndim - len(target_shape):])
+        new_shape = tuple(int(s) for s in data.shape[data.ndim - len(target_shape) :])
         data = data.reshape(new_shape)
 
     # Convert ONNX semantics to PyTorch
@@ -298,20 +300,24 @@ class CctsdbYolo2023Patch3(nn.Module):
         x11 = x6 + 3
         x12 = x4.unsqueeze(0)
         x13 = x10.unsqueeze(0)
-        x14, x14_valid = dynamic_slice(self.c20, x12, x13, [1], [1], [3]); _slice_valid = _slice_valid * x14_valid
+        x14, x14_valid = dynamic_slice(self.c20, x12, x13, [1], [1], [3])
+        _slice_valid = _slice_valid * x14_valid
         x15 = x6.unsqueeze(0)
         x16 = x11.unsqueeze(0)
-        x17, x17_valid = dynamic_slice(x14, x15, x16, [2], [1], [3]); _slice_valid = _slice_valid * x17_valid
+        x17, x17_valid = dynamic_slice(x14, x15, x16, [2], [1], [3])
+        _slice_valid = _slice_valid * x17_valid
         x18 = torch.tensor(x17.shape, dtype=torch.int64, device=x17.device)
         x19 = torch.full(x18.tolist(), 0.0, dtype=torch.float32, device=x0.device)
         x20 = torch.tensor(x17.shape, dtype=torch.int64, device=x17.device)
         x21 = dynamic_expand(x19, x20)
         x22 = x4.unsqueeze(0)
         x23 = x10.unsqueeze(0)
-        x24, x24_valid = dynamic_slice(self.c29, x22, x23, [0], [1], [3]); _slice_valid = _slice_valid * x24_valid
+        x24, x24_valid = dynamic_slice(self.c29, x22, x23, [0], [1], [3])
+        _slice_valid = _slice_valid * x24_valid
         x25 = x6.unsqueeze(0)
         x26 = x11.unsqueeze(0)
-        x27, x27_valid = dynamic_slice(self.c34, x25, x26, [0], [1], [3]); _slice_valid = _slice_valid * x27_valid
+        x27, x27_valid = dynamic_slice(self.c34, x25, x26, [0], [1], [3])
+        _slice_valid = _slice_valid * x27_valid
         x28 = x24.reshape(-1, 1, 1)
         x29 = x27.reshape(-1, 1)
         x30 = 0 + x28
@@ -454,4 +460,3 @@ class CctsdbYolo2023Patch3(nn.Module):
         x167 = x166.to(torch.float32)
         x168 = x167 * x165
         return x168
-

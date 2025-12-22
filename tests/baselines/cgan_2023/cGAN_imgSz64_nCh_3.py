@@ -8,7 +8,6 @@ This module was automatically converted from an ONNX model.
 
 __all__ = ["Cgan2023CganImgsz64Nch3"]
 
-import torch
 import torch.nn as nn
 
 
@@ -116,4 +115,3 @@ class Cgan2023CganImgsz64Nch3(nn.Module):
         x31 = x30.flatten(1)
         x32 = self.linear2(x31)
         return x32
-

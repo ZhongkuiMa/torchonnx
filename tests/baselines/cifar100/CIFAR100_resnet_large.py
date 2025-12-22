@@ -8,7 +8,6 @@ This module was automatically converted from an ONNX model.
 
 __all__ = ["Cifar100Cifar100ResnetLarge"]
 
-import torch
 import torch.nn as nn
 
 
@@ -212,4 +211,3 @@ class Cifar100Cifar100ResnetLarge(nn.Module):
         x60 = self.relu10(x59)
         x61 = self.linear2(x60)
         return x61
-

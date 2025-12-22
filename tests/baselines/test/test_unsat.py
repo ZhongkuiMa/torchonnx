@@ -62,4 +62,3 @@ class TestTestUnsat(nn.Module):
         x21 = x20 @ self.c13
         x22 = x21 + self.c14
         return x22
-

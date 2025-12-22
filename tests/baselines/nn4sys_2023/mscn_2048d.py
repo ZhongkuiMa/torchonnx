@@ -90,4 +90,3 @@ class Nn4sys2023Mscn2048d(nn.Module):
         x46 = self.linear2(x45)
         x47 = self.sigmoid1(x46)
         return x47
-

@@ -294,4 +294,3 @@ class Vit2023Ibp338(nn.Module):
         x154 = self.batchnorm2d7(x153.unsqueeze(2).unsqueeze(3)).squeeze(2).squeeze(2)
         x155 = self.linear1(x154)
         return x155
-

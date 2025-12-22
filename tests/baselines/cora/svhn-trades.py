@@ -66,4 +66,3 @@ class CoraSvhnTrades(nn.Module):
         x24 = x23 @ self.c16
         x25 = x24 + self.c17
         return x25
-

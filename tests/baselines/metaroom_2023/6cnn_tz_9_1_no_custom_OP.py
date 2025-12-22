@@ -8,7 +8,6 @@ This module was automatically converted from an ONNX model.
 
 __all__ = ["Metaroom20236cnnTz91NoCustomOp"]
 
-import torch
 import torch.nn as nn
 
 
@@ -41,4 +40,3 @@ class Metaroom20236cnnTz91NoCustomOp(nn.Module):
         x11 = self.relu5(x10)
         x12 = self.linear2(x11)
         return x12
-

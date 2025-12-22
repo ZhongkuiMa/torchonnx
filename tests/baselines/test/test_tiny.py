@@ -26,4 +26,3 @@ class TestTestTiny(nn.Module):
         x4 = self.c2 @ x3
         x5 = x4 + 0
         return x5
-

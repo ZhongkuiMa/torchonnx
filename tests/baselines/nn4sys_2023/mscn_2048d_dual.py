@@ -159,4 +159,3 @@ class Nn4sys2023Mscn2048dDual(nn.Module):
         x96 = self.sigmoid2(x95)
         x97 = x49 - x96
         return x97
-

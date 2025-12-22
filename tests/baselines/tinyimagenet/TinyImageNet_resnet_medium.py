@@ -8,7 +8,6 @@ This module was automatically converted from an ONNX model.
 
 __all__ = ["TinyimagenetTinyimagenetResnetMedium"]
 
-import torch
 import torch.nn as nn
 
 
@@ -204,4 +203,3 @@ class TinyimagenetTinyimagenetResnetMedium(nn.Module):
         x58 = self.relu10(x57)
         x59 = self.linear2(x58)
         return x59
-

@@ -8,7 +8,6 @@ This module was automatically converted from an ONNX model.
 
 __all__ = ["CollinsRulCnn2023NnRulFullWindow40"]
 
-import torch
 import torch.nn as nn
 
 
@@ -44,4 +43,3 @@ class CollinsRulCnn2023NnRulFullWindow40(nn.Module):
         x12 = self.conv2d6(x11)
         x13 = self.flatten1(x12)
         return x13
-

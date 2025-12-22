@@ -20,7 +20,6 @@ __all__ = [
 ]
 
 import importlib.util
-import shutil
 import time
 from pathlib import Path
 from typing import Any
@@ -144,7 +143,7 @@ def _check_tolerance(max_abs: float, max_rel: float) -> str:
     # - float32 vs float64 precision differences
     # - Rounding error accumulation from different operation orderings
     borderline_abs = 1e-2  # Absolute difference threshold (1%)
-    borderline_rel = 1.0   # Relative difference threshold (100%)
+    borderline_rel = 1.0  # Relative difference threshold (100%)
 
     if max_abs < borderline_abs or max_rel < borderline_rel:
         return "TOLERANCE_MISMATCH"
@@ -426,9 +425,12 @@ def test_verify_model_against_original(
     status_line += f" | dtype={dtype}, device={device}"
     status_line += f" | Status: {status}"
 
-    if status != "OK" and status != "SKIP":
-        status_line += f" | max_abs={max_abs_str}, max_rel={max_rel_str}"
-    elif status == "OK" and (isinstance(max_abs, float) or isinstance(max_rel, float)):
+    if (
+        status != "OK"
+        and status != "SKIP"
+        or status == "OK"
+        and (isinstance(max_abs, float) or isinstance(max_rel, float))
+    ):
         status_line += f" | max_abs={max_abs_str}, max_rel={max_rel_str}"
 
     if error_msg and error_msg != "N/A":
@@ -445,7 +447,7 @@ def test_verify_model_against_original(
         pytest.xfail(f"Numerical precision deviation: {error_msg}")
     elif status == "NUMERICAL_MISMATCH":
         # Actual computation error - this is a real failure
-        assert False, f"Verification failed: {status} - {error_msg}"
+        raise AssertionError(f"Verification failed: {status} - {error_msg}")
     elif status == "SKIP":
         pytest.skip(error_msg or "Test skipped")
 
@@ -624,7 +626,7 @@ def _verify_one_benchmark(
                     tolerance_status = _check_tolerance(max_abs, max_rel)
                     if tolerance_status == "PASS":
                         continue
-                    elif tolerance_status == "TOLERANCE_MISMATCH":
+                    if tolerance_status == "TOLERANCE_MISMATCH":
                         tolerance_issues.append(
                             f"{key1}: max diff {max_abs:.2e}, rel {max_rel:.2e}"
                         )
@@ -652,7 +654,7 @@ def _verify_one_benchmark(
 
     if all_match and worst_status == "OK":
         return "OK", None, combined_stats
-    elif all_match and worst_status == "TOLERANCE_MISMATCH":
+    if all_match and worst_status == "TOLERANCE_MISMATCH":
         return "TOLERANCE_MISMATCH", ", ".join(tolerance_issues), combined_stats
     return "NUMERICAL_MISMATCH", ", ".join(computation_errors or tolerance_issues), combined_stats
 

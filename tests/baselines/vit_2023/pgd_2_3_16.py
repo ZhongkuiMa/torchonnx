@@ -212,4 +212,3 @@ class Vit2023Pgd2316(nn.Module):
         x108 = self.batchnorm2d5(x107.unsqueeze(2).unsqueeze(3)).squeeze(2).squeeze(2)
         x109 = self.linear1(x108)
         return x109
-

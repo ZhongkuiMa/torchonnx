@@ -8,7 +8,6 @@ This module was automatically converted from an ONNX model.
 
 __all__ = ["Vggnet162023Vgg167"]
 
-import torch
 import torch.nn as nn
 
 
@@ -100,4 +99,3 @@ class Vggnet162023Vgg167(nn.Module):
         x40 = self.flatten3(x39)
         x41 = self.linear3(x40)
         return x41
-

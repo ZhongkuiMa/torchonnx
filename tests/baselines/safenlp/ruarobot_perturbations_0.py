@@ -28,4 +28,3 @@ class SafenlpRuarobotPerturbations0(nn.Module):
         x4 = x3 @ self.c2
         x5 = x4 + self.c3
         return x5
-

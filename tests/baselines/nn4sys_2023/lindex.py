@@ -8,7 +8,6 @@ This module was automatically converted from an ONNX model.
 
 __all__ = ["Nn4sys2023Lindex"]
 
-import torch
 import torch.nn as nn
 
 
@@ -32,4 +31,3 @@ class Nn4sys2023Lindex(nn.Module):
         x6 = self.relu3(x5)
         x7 = self.linear4(x6)
         return x7
-

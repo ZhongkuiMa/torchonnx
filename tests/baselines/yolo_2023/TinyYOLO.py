@@ -8,7 +8,6 @@ This module was automatically converted from an ONNX model.
 
 __all__ = ["Yolo2023Tinyyolo"]
 
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -52,14 +51,14 @@ class Yolo2023Tinyyolo(nn.Module):
         x8 = self.conv2d5(x7)
         x9 = x5 + x8
         x10 = self.relu3(x9)
-        x11 = F.pad(x10, [0, 0, 0, 0, 0, 0, 0, 0], mode='constant', value=0.0)
+        x11 = F.pad(x10, [0, 0, 0, 0, 0, 0, 0, 0], mode="constant", value=0.0)
         x12 = self.avgpool2d1(x11)
         x13 = self.conv2d6(x12)
         x14 = self.relu4(x13)
         x15 = self.conv2d7(x14)
         x16 = x12 + x15
         x17 = self.relu5(x16)
-        x18 = F.pad(x17, [0, 0, 0, 0, 0, 0, 0, 0], mode='constant', value=0.0)
+        x18 = F.pad(x17, [0, 0, 0, 0, 0, 0, 0, 0], mode="constant", value=0.0)
         x19 = self.avgpool2d2(x18)
         x20 = self.conv2d8(x19)
         x21 = self.conv2d9(x19)
@@ -74,4 +73,3 @@ class Yolo2023Tinyyolo(nn.Module):
         x30 = self.conv2d14(x29)
         x31 = self.flatten1(x30)
         return x31
-

@@ -105,4 +105,3 @@ class LsncQuadrotor2dState(nn.Module):
         x62 = -x61
         x63 = torch.cat([x62, x46, x40], dim=1)
         return x63
-

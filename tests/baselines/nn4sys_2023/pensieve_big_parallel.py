@@ -86,7 +86,7 @@ class Nn4sys2023PensieveBigParallel(nn.Module):
         x29 = self.relu6(x28)
         x30 = self.linear5(x29)
         x31 = self.relu7(x30)
-        x32 = x31 ** 3
+        x32 = x31**3
         x33 = torch.sum(x32, self.c28.tolist(), keepdim=True)
         x34 = x32 / x33
         x35 = x34 @ self.c29
@@ -118,10 +118,9 @@ class Nn4sys2023PensieveBigParallel(nn.Module):
         x61 = self.relu13(x60)
         x62 = self.linear10(x61)
         x63 = self.relu14(x62)
-        x64 = x63 ** 3
+        x64 = x63**3
         x65 = torch.sum(x64, self.c55.tolist(), keepdim=True)
         x66 = x64 / x65
         x67 = x66 @ self.c29
         x68 = x35 - x67
         return x68
-

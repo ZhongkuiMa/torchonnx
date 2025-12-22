@@ -8,7 +8,6 @@ This module was automatically converted from an ONNX model.
 
 __all__ = ["DistShift2023MnistConcat"]
 
-import torch
 import torch.nn as nn
 
 
@@ -38,4 +37,3 @@ class DistShift2023MnistConcat(nn.Module):
         x10 = self.relu3(x9)
         x11 = self.linear5(x10)
         return x11
-

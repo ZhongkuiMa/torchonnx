@@ -87,7 +87,7 @@ class Nn4sys2023PensieveSmallParallel(nn.Module):
         x30 = self.relu6(x29)
         x31 = self.linear8(x30)
         x32 = self.relu7(x31)
-        x33 = x32 ** 3
+        x33 = x32**3
         x34 = torch.sum(x33, self.c23.tolist(), keepdim=True)
         x35 = x33 / x34
         x36 = x35 @ self.c24
@@ -120,10 +120,9 @@ class Nn4sys2023PensieveSmallParallel(nn.Module):
         x63 = self.relu13(x62)
         x64 = self.linear16(x63)
         x65 = self.relu14(x64)
-        x66 = x65 ** 3
+        x66 = x65**3
         x67 = torch.sum(x66, self.c42.tolist(), keepdim=True)
         x68 = x66 / x67
         x69 = x68 @ self.c24
         x70 = x36 - x69
         return x70
-
