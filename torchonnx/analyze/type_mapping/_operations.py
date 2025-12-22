@@ -16,8 +16,8 @@ __all__ = [
 ]
 
 from typing import Any
-import numpy as np
 
+import numpy as np
 from onnx import NodeProto, TensorProto, numpy_helper
 
 from torchonnx.torchonnx.analyze.attr_extractor import extract_onnx_attrs
@@ -165,7 +165,9 @@ def _extract_constant_of_shape_args(
     return {"value": np.array([0.0])}
 
 
-def _simplify_homogeneous_values(values: list[int], skip_default: int | None = None) -> int | tuple[int, ...]:
+def _simplify_homogeneous_values(
+    values: list[int], skip_default: int | None = None
+) -> int | tuple[int, ...]:
     """Simplify homogeneous values into scalar or tuple.
 
     :param values: List of values
@@ -200,9 +202,7 @@ def _process_conv_padding(pads: list[int], operation: str) -> int | tuple[int, .
     return _simplify_homogeneous_values(pad_values)
 
 
-def _extract_conv_args(
-    node: NodeProto, initializers: dict[str, TensorProto]
-) -> dict[str, Any]:
+def _extract_conv_args(node: NodeProto, initializers: dict[str, TensorProto]) -> dict[str, Any]:
     """Extract arguments for Conv operation."""
     attrs = extract_onnx_attrs(node, initializers)
     strides = attrs.get("strides")
@@ -277,17 +277,15 @@ _OPERATION_ARGS_EXTRACTORS: dict[str, Any] = {
     "Gather": lambda node, initializers: {
         "axis": extract_onnx_attrs(node, initializers).get("axis", 0)
     },
-    "Cast": lambda node, initializers: {
-        "to": extract_onnx_attrs(node, initializers).get("to", 1)
-    },
+    "Cast": lambda node, initializers: {"to": extract_onnx_attrs(node, initializers).get("to", 1)},
     "Concat": lambda node, initializers: {
         "axis": extract_onnx_attrs(node, initializers).get("axis", 0)
     },
     "Gemm": lambda node, initializers: {
-        **{"alpha": extract_onnx_attrs(node, initializers).get("alpha", 1.0)},
-        **{"beta": extract_onnx_attrs(node, initializers).get("beta", 1.0)},
-        **{"transA": extract_onnx_attrs(node, initializers).get("transA", 0)},
-        **{"transB": extract_onnx_attrs(node, initializers).get("transB", 0)},
+        "alpha": extract_onnx_attrs(node, initializers).get("alpha", 1.0),
+        "beta": extract_onnx_attrs(node, initializers).get("beta", 1.0),
+        "transA": extract_onnx_attrs(node, initializers).get("transA", 0),
+        "transB": extract_onnx_attrs(node, initializers).get("transB", 0),
     },
     "Slice": lambda node, initializers: {
         "starts": extract_onnx_attrs(node, initializers).get("starts", []),
