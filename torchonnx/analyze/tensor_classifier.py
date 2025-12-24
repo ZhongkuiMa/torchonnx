@@ -51,6 +51,29 @@ def _onnx_dtype_to_torch(onnx_dtype: int) -> torch.dtype:
     return _ONNX_TO_TORCH_DTYPE.get(onnx_dtype, torch.float32)
 
 
+def _get_conv_or_linear_role(idx: int) -> str | None:
+    """Get parameter role for Conv/ConvTranspose/Linear layers.
+
+    :param idx: Input position index
+    :return: Parameter role or None
+    """
+    if idx == 1:
+        return "weight"
+    if idx == 2:
+        return "bias"
+    return None
+
+
+def _get_batchnorm_role(idx: int) -> str | None:
+    """Get parameter role for BatchNorm2d layers.
+
+    :param idx: Input position index
+    :return: Parameter role or None
+    """
+    roles = {1: "weight", 2: "bias", 3: "running_mean", 4: "running_var"}
+    return roles.get(idx)
+
+
 def _get_parameter_role(
     onnx_name: str,
     input_names: list[str],
@@ -70,39 +93,106 @@ def _get_parameter_role(
         return None
 
     # Strip nn. prefix if present for comparison
-    layer_type = pytorch_type
-    layer_type = layer_type.removeprefix("nn.")
+    layer_type = pytorch_type.removeprefix("nn.")
 
     # Determine role based on layer type and position
     # First input (idx=0) is always the data input, not a parameter
+    conv_types = ("Conv2d", "Conv1d", "ConvTranspose2d", "ConvTranspose1d")
+    if layer_type in conv_types or layer_type == "Linear":
+        return _get_conv_or_linear_role(idx)
 
-    if (
-        layer_type in ("Conv2d", "Conv1d")
-        or layer_type in ("ConvTranspose2d", "ConvTranspose1d")
-        or layer_type == "Linear"
-    ):
-        if idx == 1:
-            return "weight"
-        if idx == 2:
-            return "bias"
-
-    elif layer_type == "BatchNorm2d":
-        if idx == 1:
-            return "weight"  # scale (gamma)
-        if idx == 2:
-            return "bias"  # bias (beta)
-        if idx == 3:
-            return "running_mean"
-        if idx == 4:
-            return "running_var"
-
-    elif layer_type == "Upsample":
-        # Note: Upsample scales/sizes are constructor args, not parameters
-        # They should become constants, not parameters
-        pass
+    if layer_type == "BatchNorm2d":
+        return _get_batchnorm_role(idx)
 
     # Not a parameter for this layer
     return None
+
+
+def _process_parameter_input(
+    onnx_name: str,
+    tensor: TensorProto,
+    param_role: str,
+    pytorch_type: str,
+    code_name_counters: dict[str, int],
+    initializers: dict[str, TensorProto],
+    node: "NodeProto | None",
+) -> ParameterInfo:
+    """Process and create a parameter input.
+
+    :param onnx_name: ONNX tensor name
+    :param tensor: TensorProto object
+    :param param_role: Parameter role (weight, bias, etc.)
+    :param pytorch_type: PyTorch layer type
+    :param code_name_counters: Mutable counter dict
+    :param initializers: All initializers for attribute extraction
+    :param node: Optional NodeProto for attributes
+    :return: ParameterInfo object
+    """
+    code_name = f"p{code_name_counters['param']}"
+    code_name_counters["param"] += 1
+
+    torch_tensor = _tensor_proto_to_torch(tensor)
+
+    # Transpose Linear layer weights from ONNX format to PyTorch format
+    if (
+        pytorch_type in ["Linear", "nn.Linear"]
+        and param_role == "weight"
+        and torch_tensor.ndim == 2
+    ):
+        trans_b = 0  # Default value
+        if node is not None:
+            from torchonnx.torchonnx.analyze.attr_extractor import extract_onnx_attrs
+
+            attrs = extract_onnx_attrs(node, initializers)
+            trans_b = attrs.get("transB", 0)
+
+        if trans_b == 0:
+            torch_tensor = torch_tensor.T
+
+    return ParameterInfo(
+        onnx_name=onnx_name,
+        pytorch_name=param_role,
+        code_name=code_name,
+        shape=tuple(tensor.dims),
+        dtype=_onnx_dtype_to_torch(tensor.data_type),
+        data=torch_tensor,
+    )
+
+
+def _process_constant_input(
+    onnx_name: str,
+    tensor: TensorProto,
+    code_name_counters: dict[str, int],
+    constant_mapping: dict[str, ConstantInfo] | None,
+) -> ConstantInfo:
+    """Process and create or reuse a constant input.
+
+    :param onnx_name: ONNX tensor name
+    :param tensor: TensorProto object
+    :param code_name_counters: Mutable counter dict
+    :param constant_mapping: Optional constant mapping dict
+    :return: ConstantInfo object
+    """
+    if constant_mapping is not None and onnx_name in constant_mapping:
+        return constant_mapping[onnx_name]
+
+    code_name = f"c{code_name_counters['const']}"
+    code_name_counters["const"] += 1
+
+    torch_tensor = _tensor_proto_to_torch(tensor)
+
+    const_info = ConstantInfo(
+        onnx_name=onnx_name,
+        code_name=code_name,
+        shape=tuple(tensor.dims),
+        dtype=_onnx_dtype_to_torch(tensor.data_type),
+        data=torch_tensor,
+    )
+
+    if constant_mapping is not None:
+        constant_mapping[onnx_name] = const_info
+
+    return const_info
 
 
 def classify_inputs(
@@ -137,82 +227,30 @@ def classify_inputs(
         if not onnx_name:
             continue
         if onnx_name in initializers:
-            # Static tensor - is it Parameter or Constant?
             tensor = initializers[onnx_name]
-
-            # Determine if this is a parameter for this layer
             param_role = _get_parameter_role(onnx_name, input_names, pytorch_type)
 
             if param_role:
-                # It's a trainable parameter
-                code_name = f"p{code_name_counters['param']}"
-                code_name_counters["param"] += 1
-
-                torch_tensor = _tensor_proto_to_torch(tensor)
-
-                # Transpose Linear layer weights from ONNX format to PyTorch format
-                # ONNX Gemm behavior depends on transB attribute:
-                #   - transB=0 (default): weight = (in_features, out_features) → needs transpose
-                #   - transB=1: weight = (out_features, in_features) → already correct
-                # PyTorch nn.Linear expects: (out_features, in_features)
-                if (
-                    pytorch_type in ["Linear", "nn.Linear"]
-                    and param_role == "weight"
-                    and torch_tensor.ndim == 2
-                ):
-                    # Check transB attribute from ONNX node
-                    trans_b = 0  # Default value
-                    if node is not None:
-                        from torchonnx.torchonnx.analyze.attr_extractor import extract_onnx_attrs
-
-                        attrs = extract_onnx_attrs(node, initializers)
-                        trans_b = attrs.get("transB", 0)
-
-                    # Only transpose if transB=0 (ONNX weight is in_features × out_features)
-                    if trans_b == 0:
-                        torch_tensor = torch_tensor.T
-
-                results.append(
-                    ParameterInfo(
-                        onnx_name=onnx_name,
-                        pytorch_name=param_role,
-                        code_name=code_name,
-                        shape=tuple(tensor.dims),
-                        dtype=_onnx_dtype_to_torch(tensor.data_type),
-                        data=torch_tensor,
-                    )
+                param_info = _process_parameter_input(
+                    onnx_name,
+                    tensor,
+                    param_role,
+                    pytorch_type,
+                    code_name_counters,
+                    initializers,
+                    node,
                 )
+                results.append(param_info)
             else:
-                # It's a constant - check if already exists
-                if constant_mapping is not None and onnx_name in constant_mapping:
-                    # Reuse existing ConstantInfo
-                    results.append(constant_mapping[onnx_name])
-                else:
-                    # Create new constant
-                    code_name = f"c{code_name_counters['const']}"
-                    code_name_counters["const"] += 1
-
-                    torch_tensor = _tensor_proto_to_torch(tensor)
-
-                    const_info = ConstantInfo(
-                        onnx_name=onnx_name,
-                        code_name=code_name,
-                        shape=tuple(tensor.dims),
-                        dtype=_onnx_dtype_to_torch(tensor.data_type),
-                        data=torch_tensor,
-                    )
-                    results.append(const_info)
-
-                    # Cache for reuse
-                    if constant_mapping is not None:
-                        constant_mapping[onnx_name] = const_info
+                const_info = _process_constant_input(
+                    onnx_name, tensor, code_name_counters, constant_mapping
+                )
+                results.append(const_info)
         else:
             # Runtime variable - check if it already exists
             if variable_mapping is not None and onnx_name in variable_mapping:
-                # Reuse existing code_name
                 code_name = variable_mapping[onnx_name]
             else:
-                # Create new code_name
                 code_name = f"x{code_name_counters['var']}"
                 code_name_counters["var"] += 1
                 if variable_mapping is not None:
@@ -225,8 +263,6 @@ def classify_inputs(
                     shape=shapes.get(onnx_name),
                 )
             )
-
-    return results
 
 
 def classify_outputs(

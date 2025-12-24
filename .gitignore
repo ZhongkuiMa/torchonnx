@@ -86,3 +86,6 @@ tests/temp/
 
 # === Test baselines - commit .py files (golden references), ignore .pth files (large) ===
 tests/baselines/**/*.pth
+
+# === Claude Code / Serena tool cache ===
+.serena/

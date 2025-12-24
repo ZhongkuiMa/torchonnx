@@ -480,6 +480,77 @@ def convert_models_without_batch_dim(
     }
 
 
+def _check_model_files_exist(
+    vmap_py: Path,
+    vmap_pth: Path,
+    standard_py: Path,
+    standard_pth: Path,
+    data_file: Path,
+) -> str | None:
+    """Check if all required model files exist.
+
+    :return: Error message if missing files, None if all exist
+    """
+    if not vmap_py.exists() or not vmap_pth.exists():
+        return "vmap model not found"
+    if not standard_py.exists() or not standard_pth.exists():
+        return "standard model not found"
+    if not data_file.exists():
+        return "no test data"
+    return None
+
+
+def _compare_vmap_vs_standard(
+    vmap_py: Path,
+    vmap_pth: Path,
+    standard_py: Path,
+    standard_pth: Path,
+    test_inputs: list,
+    is_verification_limited: bool,
+    dtype: str,
+    device: str,
+) -> tuple[str, str | None, dict]:
+    """Compare vmap vs standard model outputs.
+
+    :return: (status, message, all_results_dict)
+    """
+    matched_count = 0
+    expected_mismatch_count = 0
+    unexpected_mismatch_count = 0
+    max_diff = 0.0
+    msg = None
+
+    for inputs in test_inputs[:5]:
+        vmap_out = _run_pytorch_module(str(vmap_py), str(vmap_pth), inputs, dtype, device)
+        standard_out = _run_pytorch_module(
+            str(standard_py), str(standard_pth), inputs, dtype, device
+        )
+
+        match, msg, stats = _compare_outputs(vmap_out, standard_out)
+        if match:
+            matched_count += 1
+            if stats.get("max_abs_diff", 0) > max_diff:
+                max_diff = stats["max_abs_diff"]
+        elif is_verification_limited:
+            expected_mismatch_count += 1
+        else:
+            unexpected_mismatch_count += 1
+
+    if unexpected_mismatch_count > 0:
+        return "MISMATCH", msg, {"error": msg}
+    if expected_mismatch_count > 0:
+        return (
+            "PARTIAL",
+            None,
+            {
+                "matched": matched_count,
+                "expected_mismatch": expected_mismatch_count,
+                "reason": "out-of-bounds indices cause empty slices in standard mode",
+            },
+        )
+    return "OK", None, {"max_diff": max_diff}
+
+
 def verify_vmap_vs_standard(
     benchmark_dir: str = "vnncomp2024_benchmarks",
     vmap_dir: str = "results/vmap",
@@ -525,16 +596,11 @@ def verify_vmap_vs_standard(
         data_file = get_model_data_path(model_path, benchmarks_root)
 
         # Check files exist
-        if not vmap_py.exists() or not vmap_pth.exists():
-            print("SKIP - vmap model not found")
-            counts["skipped"] += 1
-            continue
-        if not standard_py.exists() or not standard_pth.exists():
-            print("SKIP - standard model not found")
-            counts["skipped"] += 1
-            continue
-        if not data_file.exists():
-            print("SKIP - no test data")
+        file_error = _check_model_files_exist(
+            vmap_py, vmap_pth, standard_py, standard_pth, data_file
+        )
+        if file_error:
+            print(f"SKIP - {file_error}")
             counts["skipped"] += 1
             continue
 
@@ -552,44 +618,32 @@ def verify_vmap_vs_standard(
 
         # Compare outputs
         try:
-            matched_count = 0
-            expected_mismatch_count = 0
-            unexpected_mismatch_count = 0
-            max_diff = 0.0
+            status, msg, result_dict = _compare_vmap_vs_standard(
+                vmap_py,
+                vmap_pth,
+                standard_py,
+                standard_pth,
+                test_inputs,
+                is_verification_limited,
+                dtype,
+                device,
+            )
 
-            for inputs in test_inputs[:5]:  # Test first 5 inputs
-                vmap_out = _run_pytorch_module(str(vmap_py), str(vmap_pth), inputs, dtype, device)
-                standard_out = _run_pytorch_module(
-                    str(standard_py), str(standard_pth), inputs, dtype, device
-                )
-
-                match, msg, stats = _compare_outputs(vmap_out, standard_out)
-                if match:
-                    matched_count += 1
-                    if stats.get("max_abs_diff", 0) > max_diff:
-                        max_diff = stats["max_abs_diff"]
-                elif is_verification_limited:
-                    # For limited benchmarks, some mismatches are expected
-                    expected_mismatch_count += 1
-                else:
-                    unexpected_mismatch_count += 1
-
-            if unexpected_mismatch_count > 0:
-                print(f"MISMATCH ({unexpected_mismatch_count} unexpected)")
+            if status == "MISMATCH":
+                print("MISMATCH (1 unexpected)")
                 counts["failed"] += 1
                 all_results[str(rel_path)] = {"status": "MISMATCH", "error": msg}
-            elif expected_mismatch_count > 0:
-                print(
-                    f"PARTIAL ({matched_count} match, {expected_mismatch_count} expected_mismatch)"
-                )
+            elif status == "PARTIAL":
+                matched = result_dict["matched"]
+                expected = result_dict["expected_mismatch"]
+                print(f"PARTIAL ({matched} match, {expected} expected_mismatch)")
                 counts["partial"] = counts.get("partial", 0) + 1
                 all_results[str(rel_path)] = {
                     "status": "PARTIAL",
-                    "matched": matched_count,
-                    "expected_mismatch": expected_mismatch_count,
-                    "reason": "out-of-bounds indices cause empty slices in standard mode",
+                    **result_dict,
                 }
-            else:
+            else:  # OK
+                max_diff = result_dict["max_diff"]
                 print(f"OK (max_diff={max_diff:.2e})")
                 counts["passed"] += 1
                 all_results[str(rel_path)] = {"status": "OK", "max_diff": max_diff}
@@ -616,6 +670,52 @@ def verify_vmap_vs_standard(
     }
 
 
+def _test_vmap_on_model(
+    model,
+    inputs: np.ndarray,
+    rel_path: str,
+) -> tuple[str, str | None]:
+    """Test vmap compatibility on a single model.
+
+    :return: (status, error_message)
+    """
+    from torch.func import vmap
+
+    try:
+        input_tensor = torch.from_numpy(inputs).float()
+
+        # Test direct forward
+        with torch.no_grad():
+            direct_output = model(input_tensor)
+
+        # Test vmap on batched inputs
+        batch_size = 4
+        batched_input = input_tensor.unsqueeze(0).expand(batch_size, *input_tensor.shape)
+
+        def single_forward(x, model=model):
+            return model(x)
+
+        vmapped_fn = vmap(single_forward)
+        with torch.no_grad():
+            vmap_output = vmapped_fn(batched_input)
+
+        # Check all batch outputs are same
+        for b in range(1, batch_size):
+            diff = torch.max(torch.abs(vmap_output[0] - vmap_output[b])).item()
+            if diff > 1e-5:
+                raise ValueError(f"Vmap outputs differ across batch: {diff}")
+
+        # Check vmap output matches direct output
+        diff = torch.max(torch.abs(vmap_output[0] - direct_output)).item()
+        if diff > 1e-5:
+            raise ValueError(f"Vmap output differs from direct: {diff}")
+
+        return "OK", None
+
+    except (RuntimeError, ValueError, TypeError) as e:
+        return "VMAP_ERROR", str(e)
+
+
 def test_vmap_compatibility(benchmarks_root, output_dir_vmap, max_per_benchmark: int) -> None:
     """Test that vmap mode models work with torch.vmap.
 
@@ -625,8 +725,6 @@ def test_vmap_compatibility(benchmarks_root, output_dir_vmap, max_per_benchmark:
     """
     if importlib.util.find_spec("torch.func") is None:
         pytest.skip("torch.func.vmap not available (requires PyTorch >= 2.0)")
-
-    from torch.func import vmap
 
     vmap_root = output_dir_vmap
     models = find_models_without_batch_dim(str(benchmarks_root), max_per_benchmark)
@@ -664,56 +762,37 @@ def test_vmap_compatibility(benchmarks_root, output_dir_vmap, max_per_benchmark:
         try:
             model = _load_pytorch_module(str(vmap_py), str(vmap_pth))
 
-            # Get one test input
+            # Get one test input and test vmap
             inputs = test_inputs[0]
-            input_tensor = torch.from_numpy(inputs).float()
+            status, error = _test_vmap_on_model(model, inputs, str(rel_path))
 
-            # Test direct forward
-            with torch.no_grad():
-                direct_output = model(input_tensor)
-
-            # Test vmap on batched inputs (stack same input)
-            batch_size = 4
-            batched_input = input_tensor.unsqueeze(0).expand(batch_size, *input_tensor.shape)
-
-            def single_forward(x, model=model):
-                return model(x)
-
-            try:
-                vmapped_fn = vmap(single_forward)
-                with torch.no_grad():
-                    vmap_output = vmapped_fn(batched_input)
-
-                # Check all batch outputs are same (since input is same)
-                for b in range(1, batch_size):
-                    diff = torch.max(torch.abs(vmap_output[0] - vmap_output[b])).item()
-                    if diff > 1e-5:
-                        raise ValueError(f"Vmap outputs differ across batch: {diff}")
-
-                # Check vmap output matches direct output
-                diff = torch.max(torch.abs(vmap_output[0] - direct_output)).item()
-                if diff > 1e-5:
-                    raise ValueError(f"Vmap output differs from direct: {diff}")
-
-                print("OK (vmap works)")
-                counts["passed"] += 1
-                all_results[str(rel_path)] = {"status": "OK", "vmap": True}
-
-            except (RuntimeError, ValueError, TypeError) as vmap_error:
+            if status == "OK":
+                # Check if this is an expected failure
+                is_expected = any(b in str(rel_path) for b in VMAP_INCOMPATIBLE_BENCHMARKS)
+                if not is_expected:
+                    print("OK (vmap works)")
+                    counts["passed"] += 1
+                    all_results[str(rel_path)] = {"status": "OK", "vmap": True}
+                else:
+                    # Unexpectedly passed
+                    print("OK (vmap works) - NOT EXPECTED")
+                    counts["passed"] += 1
+                    all_results[str(rel_path)] = {"status": "OK", "vmap": True}
+            else:
                 # Check if this is an expected failure
                 is_expected = any(b in str(rel_path) for b in VMAP_INCOMPATIBLE_BENCHMARKS)
                 if is_expected:
-                    print(f"EXPECTED_FAIL - {vmap_error}")
+                    print(f"EXPECTED_FAIL - {error}")
                     counts["expected_fail"] = counts.get("expected_fail", 0) + 1
                     all_results[str(rel_path)] = {
                         "status": "EXPECTED_FAIL",
-                        "error": str(vmap_error),
+                        "error": error,
                         "reason": "input-dependent dynamic slicing",
                     }
                 else:
-                    print(f"VMAP_FAIL - {vmap_error}")
+                    print(f"VMAP_FAIL - {error}")
                     counts["failed"] += 1
-                    all_results[str(rel_path)] = {"status": "VMAP_FAIL", "error": str(vmap_error)}
+                    all_results[str(rel_path)] = {"status": "VMAP_FAIL", "error": error}
 
         except (RuntimeError, ValueError, TypeError, OSError) as e:
             print(f"ERROR - {e}")

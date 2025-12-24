@@ -78,6 +78,37 @@ def _convert_version(
     return model
 
 
+def _apply_shapeonnx_inference(model: ModelProto, shapes: dict) -> None:
+    """Apply inferred shapes from shapeonnx to model value_info.
+
+    :param model: ONNX model to update
+    :param shapes: Dictionary of inferred shapes from shapeonnx
+    """
+    for node in model.graph.node:
+        for output in node.output:
+            if output in shapes:
+                found = False
+                for value_info in model.graph.value_info:
+                    if value_info.name == output:
+                        shape_val = shapes[output]
+                        shape_list = [shape_val] if isinstance(shape_val, int) else shape_val
+                        value_info.type.tensor_type.shape.ClearField("dim")
+                        for dim_value in shape_list:
+                            dim = value_info.type.tensor_type.shape.dim.add()
+                            dim.dim_value = dim_value
+                        found = True
+                        break
+
+                if not found:
+                    value_info = model.graph.value_info.add()
+                    value_info.name = output
+                    shape_val = shapes[output]
+                    shape_list = [shape_val] if isinstance(shape_val, int) else shape_val
+                    for dim_value in shape_list:
+                        dim = value_info.type.tensor_type.shape.dim.add()
+                        dim.dim_value = dim_value
+
+
 def _infer_shapes(model: ModelProto, use_shapeonnx: bool = False) -> ModelProto:
     """Run shape inference with error handling.
 
@@ -89,13 +120,11 @@ def _infer_shapes(model: ModelProto, use_shapeonnx: bool = False) -> ModelProto:
         try:
             from shapeonnx import infer_onnx_shape
 
-            # Prepare inputs for shapeonnx
             input_nodes = list(model.graph.input)
             output_nodes = list(model.graph.output)
             nodes = list(model.graph.node)
             initializers = {init.name: init for init in model.graph.initializer}
 
-            # Run shapeonnx inference
             shapes = infer_onnx_shape(
                 input_nodes=input_nodes,
                 output_nodes=output_nodes,
@@ -104,36 +133,7 @@ def _infer_shapes(model: ModelProto, use_shapeonnx: bool = False) -> ModelProto:
                 has_batch_dim=True,
                 verbose=False,
             )
-
-            # Apply inferred shapes to value_info
-            for node in model.graph.node:
-                for output in node.output:
-                    if output in shapes:
-                        # Find or create value_info for this output
-                        found = False
-                        for value_info in model.graph.value_info:
-                            if value_info.name == output:
-                                # Update existing value_info
-                                shape_val = shapes[output]
-                                shape_list = (
-                                    [shape_val] if isinstance(shape_val, int) else shape_val
-                                )
-                                value_info.type.tensor_type.shape.ClearField("dim")
-                                for dim_value in shape_list:
-                                    dim = value_info.type.tensor_type.shape.dim.add()
-                                    dim.dim_value = dim_value
-                                found = True
-                                break
-
-                        if not found:
-                            # Create new value_info
-                            value_info = model.graph.value_info.add()
-                            value_info.name = output
-                            shape_val = shapes[output]
-                            shape_list = [shape_val] if isinstance(shape_val, int) else shape_val
-                            for dim_value in shape_list:
-                                dim = value_info.type.tensor_type.shape.dim.add()
-                                dim.dim_value = dim_value
+            _apply_shapeonnx_inference(model, shapes)
         except (ValueError, RuntimeError, AttributeError, ImportError) as error:
             warnings.warn(
                 f"ShapeONNX inference failed: {error}. Falling back to ONNX inference.",

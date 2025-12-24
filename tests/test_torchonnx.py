@@ -370,9 +370,59 @@ def test_convert_model(model_path, output_dir_baselines, benchmarks_root):
 @pytest.mark.parametrize("model_path", get_benchmark_models())
 @pytest.mark.parametrize("dtype", ["float32", "float64"])
 @pytest.mark.parametrize("device", ["cpu", "cuda"])
+def _format_status_line(
+    rel_path: Path,
+    dtype: str,
+    device: str,
+    status: str,
+    max_abs_str: str,
+    max_rel_str: str,
+    error_msg: str | None,
+) -> str:
+    """Format a status line for test output.
+
+    :return: Formatted status line
+    """
+    status_line = f"\n{rel_path}"
+    status_line += f" | dtype={dtype}, device={device}"
+    status_line += f" | Status: {status}"
+
+    # Only show error details for non-OK statuses or OK with numerical data
+    should_show_errors = (status != "OK" and status != "SKIP") or (
+        status == "OK" and isinstance(max_abs_str, str) and max_abs_str != "N/A"
+    )
+    if should_show_errors:
+        status_line += f" | max_abs={max_abs_str}, max_rel={max_rel_str}"
+
+    if error_msg and error_msg != "N/A":
+        status_line += f" | {error_msg}"
+
+    return status_line
+
+
+def _handle_verification_status(status: str, error_msg: str | None) -> None:
+    """Handle verification status and assert/skip as appropriate.
+
+    :param status: Verification status
+    :param error_msg: Error message if any
+    """
+    if status == "OK":
+        pass  # Test passes
+    elif status == "TOLERANCE_MISMATCH":
+        pytest.xfail(f"Numerical precision deviation: {error_msg}")
+    elif status == "NUMERICAL_MISMATCH":
+        raise AssertionError(f"Verification failed: {status} - {error_msg}")
+    elif status == "SKIP":
+        pytest.skip(error_msg or "Test skipped")
+
+
 def test_verify_model_against_original(
-    model_path, dtype, device, output_dir_baselines, benchmarks_root
-):
+    model_path,
+    dtype,
+    device,
+    output_dir_baselines,
+    benchmarks_root,
+) -> None:
     """Verify converted PyTorch module against original ONNX model.
 
     Parametrized test that verifies each model across dtypes and devices.
@@ -407,7 +457,7 @@ def test_verify_model_against_original(
         result_py, result_pth, model_path_obj, data_file, rel_path, dtype, device
     )
 
-    # Print detailed status with numerical information
+    # Format status output
     max_abs = stats.get("max_abs_diff", "N/A")
     max_rel = stats.get("max_rel_diff", "N/A")
 
@@ -421,35 +471,13 @@ def test_verify_model_against_original(
     else:
         max_rel_str = str(max_rel)
 
-    status_line = f"\n{rel_path}"
-    status_line += f" | dtype={dtype}, device={device}"
-    status_line += f" | Status: {status}"
-
-    if (
-        status != "OK"
-        and status != "SKIP"
-        or status == "OK"
-        and (isinstance(max_abs, float) or isinstance(max_rel, float))
-    ):
-        status_line += f" | max_abs={max_abs_str}, max_rel={max_rel_str}"
-
-    if error_msg and error_msg != "N/A":
-        status_line += f" | {error_msg}"
-
+    status_line = _format_status_line(
+        rel_path, dtype, device, status, max_abs_str, max_rel_str, error_msg
+    )
     print(status_line)
 
     # Assert based on status category
-    if status == "OK":
-        pass  # Test passes
-    elif status == "TOLERANCE_MISMATCH":
-        # Numerical precision differences are expected (CPU/CUDA, float32/float64)
-        # Mark as xfail (expected to fail due to precision, not computation error)
-        pytest.xfail(f"Numerical precision deviation: {error_msg}")
-    elif status == "NUMERICAL_MISMATCH":
-        # Actual computation error - this is a real failure
-        raise AssertionError(f"Verification failed: {status} - {error_msg}")
-    elif status == "SKIP":
-        pytest.skip(error_msg or "Test skipped")
+    _handle_verification_status(status, error_msg)
 
 
 def convert_all_models(
@@ -551,6 +579,88 @@ def _load_test_data_from_npz(data_file: Path) -> list[np.ndarray]:
     return test_inputs
 
 
+def _check_verification_prerequisites(
+    result_file: Path,
+    result_state_dict: Path,
+    benchmark_onnx_file: Path,
+    data_file: Path,
+) -> tuple[bool, str | None, str | None]:
+    """Check if all prerequisite files exist for verification.
+
+    :return: (all_exist, skip_message, error_message)
+    """
+    if not result_file.exists():
+        return False, f"Result file not found: {result_file.name}", None
+    if not result_state_dict.exists():
+        return False, f"State dict not found: {result_state_dict.name}", None
+    if not benchmark_onnx_file.exists():
+        return False, f"Benchmark ONNX not found: {benchmark_onnx_file.name}", None
+    if not data_file.exists():
+        return False, f"No test data file: {data_file.name}", None
+    return True, None, None
+
+
+def _process_test_input(
+    inputs: np.ndarray,
+    result_file: Path,
+    result_state_dict: Path,
+    benchmark_onnx_file: Path,
+    dtype: str,
+    device: str,
+) -> tuple[bool, list[str], list[str], dict, str]:
+    """Process a single test input and check outputs.
+
+    :return: (all_match, tolerance_issues, computation_errors, combined_stats, worst_status)
+    """
+    tolerance_issues = []
+    computation_errors = []
+    combined_stats = {}
+    worst_status = "OK"
+    all_match = True
+
+    try:
+        result_outputs = _run_pytorch_module(
+            str(result_file), str(result_state_dict), inputs, dtype, device
+        )
+        benchmark_outputs = _run_onnx_model(str(benchmark_onnx_file), inputs)
+
+        # Check tolerance for each output
+        for key1, key2 in zip(result_outputs.keys(), benchmark_outputs.keys(), strict=False):
+            out1 = result_outputs[key1]
+            out2 = benchmark_outputs[key2]
+
+            if out1.shape == out2.shape:
+                diff, rel_diff, max_abs, max_rel = _compute_errors(out1, out2)
+                combined_stats = {
+                    "max_abs_diff": float(max_abs),
+                    "max_rel_diff": float(max_rel),
+                }
+
+                tolerance_status = _check_tolerance(max_abs, max_rel)
+                if tolerance_status == "PASS":
+                    continue
+                if tolerance_status == "TOLERANCE_MISMATCH":
+                    tolerance_issues.append(f"{key1}: max diff {max_abs:.2e}, rel {max_rel:.2e}")
+                    worst_status = "TOLERANCE_MISMATCH"
+                else:  # "FAIL"
+                    computation_errors.append(f"{key1}: max diff {max_abs:.2e}, rel {max_rel:.2e}")
+                    worst_status = "NUMERICAL_MISMATCH"
+                    all_match = False
+
+    except (
+        RuntimeError,
+        ValueError,
+        AttributeError,
+        ImportError,
+        IndexError,
+        TypeError,
+        KeyError,
+    ):
+        return False, [], [], {}, "ERROR"
+
+    return all_match, tolerance_issues, computation_errors, combined_stats, worst_status
+
+
 def _verify_one_benchmark(
     result_file: Path,
     result_state_dict: Path,
@@ -579,18 +689,14 @@ def _verify_one_benchmark(
     :return: Tuple of (status, error_message, statistics) where status is "OK",
         "TOLERANCE_MISMATCH", "NUMERICAL_MISMATCH", "SKIP", or "ERROR"
     """
-    if not result_file.exists():
-        return "SKIP", f"Result file not found: {result_file.name}", {}
+    # Check prerequisites
+    prereq_ok, skip_msg, error_msg = _check_verification_prerequisites(
+        result_file, result_state_dict, benchmark_onnx_file, data_file
+    )
+    if not prereq_ok:
+        return "SKIP", skip_msg, {}
 
-    if not result_state_dict.exists():
-        return "SKIP", f"State dict not found: {result_state_dict.name}", {}
-
-    if not benchmark_onnx_file.exists():
-        return "SKIP", f"Benchmark ONNX not found: {benchmark_onnx_file.name}", {}
-
-    if not data_file.exists():
-        return "SKIP", f"No test data file: {data_file.name}", {}
-
+    # Load test data
     try:
         test_inputs = _load_test_data_from_npz(data_file)
         if not test_inputs:
@@ -598,65 +704,38 @@ def _verify_one_benchmark(
     except (OSError, KeyError, ValueError, IndexError) as error:
         return "SKIP", f"Error loading data: {error}", {}
 
-    all_match = True
-    tolerance_issues = []
-    computation_errors = []
-    combined_stats = {}
+    # Process each test input
     worst_status = "OK"
+    all_tolerance_issues = []
+    all_computation_errors = []
+    combined_stats = {}
 
     for _i, inputs in enumerate(test_inputs):
-        try:
-            result_outputs = _run_pytorch_module(
-                str(result_file), str(result_state_dict), inputs, dtype, device
-            )
-            benchmark_outputs = _run_onnx_model(str(benchmark_onnx_file), inputs)
+        all_match, tolerance_issues, computation_errors, stats, status = _process_test_input(
+            inputs, result_file, result_state_dict, benchmark_onnx_file, dtype, device
+        )
 
-            # Check tolerance for each output
-            for key1, key2 in zip(result_outputs.keys(), benchmark_outputs.keys(), strict=False):
-                out1 = result_outputs[key1]
-                out2 = benchmark_outputs[key2]
+        if status == "ERROR":
+            return "ERROR", str(status), {}
 
-                if out1.shape == out2.shape:
-                    diff, rel_diff, max_abs, max_rel = _compute_errors(out1, out2)
-                    combined_stats = {
-                        "max_abs_diff": float(max_abs),
-                        "max_rel_diff": float(max_rel),
-                    }
+        combined_stats.update(stats)
+        all_tolerance_issues.extend(tolerance_issues)
+        all_computation_errors.extend(computation_errors)
 
-                    tolerance_status = _check_tolerance(max_abs, max_rel)
-                    if tolerance_status == "PASS":
-                        continue
-                    if tolerance_status == "TOLERANCE_MISMATCH":
-                        tolerance_issues.append(
-                            f"{key1}: max diff {max_abs:.2e}, rel {max_rel:.2e}"
-                        )
-                        worst_status = "TOLERANCE_MISMATCH"
-                    else:  # "FAIL"
-                        computation_errors.append(
-                            f"{key1}: max diff {max_abs:.2e}, rel {max_rel:.2e}"
-                        )
-                        worst_status = "NUMERICAL_MISMATCH"
-                        all_match = False
+        if status == "NUMERICAL_MISMATCH":
+            worst_status = "NUMERICAL_MISMATCH"
+            break
 
-            if not all_match:
-                break
+        if status == "TOLERANCE_MISMATCH" and worst_status == "OK":
+            worst_status = "TOLERANCE_MISMATCH"
 
-        except (
-            RuntimeError,
-            ValueError,
-            AttributeError,
-            ImportError,
-            IndexError,
-            TypeError,
-            KeyError,
-        ) as error:
-            return "ERROR", str(error), {}
-
-    if all_match and worst_status == "OK":
+    # Determine final status
+    if worst_status == "OK":
         return "OK", None, combined_stats
-    if all_match and worst_status == "TOLERANCE_MISMATCH":
-        return "TOLERANCE_MISMATCH", ", ".join(tolerance_issues), combined_stats
-    return "NUMERICAL_MISMATCH", ", ".join(computation_errors or tolerance_issues), combined_stats
+    if worst_status == "TOLERANCE_MISMATCH":
+        return "TOLERANCE_MISMATCH", ", ".join(all_tolerance_issues), combined_stats
+    error_list = all_computation_errors or all_tolerance_issues
+    return "NUMERICAL_MISMATCH", ", ".join(error_list), combined_stats
 
 
 def _print_verification_status(

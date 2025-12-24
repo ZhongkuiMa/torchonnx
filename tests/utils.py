@@ -26,7 +26,6 @@ def load_onnx_model(onnx_path: str) -> ModelProto:
     :return: ONNX ModelProto converted to version 21
     """
     import onnx
-
     from slimonnx.slimonnx.preprocess.version_converter import convert_model_version
 
     model = onnx.load(onnx_path)

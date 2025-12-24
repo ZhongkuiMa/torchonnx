@@ -103,8 +103,11 @@ def update_benchmark(
     return success, total
 
 
-def main():
-    """Main entry point."""
+def _parse_arguments() -> argparse.Namespace:
+    """Parse command line arguments.
+
+    :return: Parsed arguments
+    """
     parser = argparse.ArgumentParser(
         description="Update baselines by copying results/baselines/ to baselines/",
         epilog="Example: python update_baselines.py --benchmark acasxu_2023",
@@ -119,7 +122,34 @@ def main():
         action="store_true",
         help="Show what would be copied without making changes",
     )
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def _get_benchmarks_to_update(args: argparse.Namespace, results_dir: Path) -> list[str] | None:
+    """Determine which benchmarks to update.
+
+    :param args: Parsed arguments
+    :param results_dir: Path to results directory
+    :return: List of benchmark names or None if error
+    """
+    if args.benchmark:
+        benchmark_path = results_dir / args.benchmark
+        if not benchmark_path.exists():
+            print(f"Error: Benchmark '{args.benchmark}' not found in results/baselines/")
+            print(f"\nAvailable benchmarks in {results_dir}:")
+            for bench in sorted(results_dir.iterdir()):
+                if bench.is_dir():
+                    print(f"  - {bench.name}")
+            return None
+        return [args.benchmark]
+
+    benchmarks = [bench.name for bench in sorted(results_dir.iterdir()) if bench.is_dir()]
+    return benchmarks if benchmarks else None
+
+
+def main() -> int:
+    """Main entry point."""
+    args = _parse_arguments()
 
     # Setup paths
     test_dir = Path(__file__).parent
@@ -137,21 +167,7 @@ def main():
         baselines_dir.mkdir(exist_ok=True)
 
     # Find benchmarks to update
-    if args.benchmark:
-        benchmark_path = results_dir / args.benchmark
-        if not benchmark_path.exists():
-            print(f"Error: Benchmark '{args.benchmark}' not found in results/baselines/")
-            print(f"\nAvailable benchmarks in {results_dir}:")
-            for bench in sorted(results_dir.iterdir()):
-                if bench.is_dir():
-                    print(f"  - {bench.name}")
-            return 1
-        benchmarks_to_update = [args.benchmark]
-    else:
-        benchmarks_to_update = [
-            bench.name for bench in sorted(results_dir.iterdir()) if bench.is_dir()
-        ]
-
+    benchmarks_to_update = _get_benchmarks_to_update(args, results_dir)
     if not benchmarks_to_update:
         print("No benchmarks found in results/baselines/")
         return 1

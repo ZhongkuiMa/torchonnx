@@ -108,6 +108,149 @@ def create_intermediate_onnx_model(onnx_model_path: str, output_names: list):
     return onnx_model
 
 
+def _analyze_pytorch_model(pytorch_module_path: str, state_dict_path: str, input_data: np.ndarray):
+    """Load and run PyTorch model.
+
+    :return: (pytorch_model, pytorch_output) or (None, None) on error
+    """
+    print("Loading PyTorch model...")
+    try:
+        pytorch_model = load_pytorch_module(pytorch_module_path, state_dict_path)
+        print("[OK] PyTorch model loaded successfully\n")
+    except (FileNotFoundError, RuntimeError, ImportError) as e:
+        print(f"[FAIL] Failed to load PyTorch model: {e}\n")
+        return None, None
+
+    print("Running PyTorch model...")
+    try:
+        with torch.no_grad():
+            pytorch_input = torch.from_numpy(input_data)
+            pytorch_output = pytorch_model(pytorch_input)
+
+        if isinstance(pytorch_output, torch.Tensor):
+            pytorch_output = pytorch_output.numpy()
+        print(f"[OK] PyTorch output shape: {pytorch_output.shape}\n")
+        return pytorch_model, pytorch_output
+    except (RuntimeError, ValueError, TypeError, AttributeError) as e:
+        print(f"[FAIL] PyTorch model failed: {e}\n")
+        import traceback
+
+        traceback.print_exc()
+        return None, None
+
+
+def _run_onnx_with_intermediates(
+    onnx_model_path: str,
+    onnx_model,
+    intermediate_names: list,
+    input_data: np.ndarray,
+):
+    """Run ONNX model and capture intermediate outputs.
+
+    :return: (onnx_results dict) or empty dict on error
+    """
+    try:
+        modified_model = create_intermediate_onnx_model(onnx_model_path, intermediate_names)
+        temp_model_path = Path(onnx_model_path).parent / "temp_intermediate.onnx"
+        onnx.save(modified_model, str(temp_model_path))
+
+        session = ort.InferenceSession(str(temp_model_path), providers=["CPUExecutionProvider"])
+        input_name = session.get_inputs()[0].name
+
+        onnx_outputs = session.run(None, {input_name: input_data})
+        output_names = [out.name for out in session.get_outputs()]
+        onnx_results = dict(zip(output_names, onnx_outputs, strict=False))
+
+        temp_model_path.unlink()
+        print(f"[OK] ONNX model executed, captured {len(onnx_results)} outputs\n")
+        return onnx_results
+    except (RuntimeError, ValueError, OSError) as e:
+        print(f"[FAIL] Failed to run ONNX with intermediate outputs: {e}\n")
+        # Fall back to just final output
+        session = ort.InferenceSession(onnx_model_path, providers=["CPUExecutionProvider"])
+        input_name = session.get_inputs()[0].name
+        onnx_outputs = session.run(None, {input_name: input_data})
+        output_names = [out.name for out in session.get_outputs()]
+        onnx_results = dict(zip(output_names, onnx_outputs, strict=False))
+        print(f"Using final outputs only: {len(onnx_results)} outputs\n")
+        return onnx_results
+
+
+def _print_node_analysis(onnx_model, onnx_results: dict, max_nodes: int | None):
+    """Print analysis of ONNX model nodes.
+
+    :param onnx_model: ONNX model
+    :param onnx_results: Dictionary of captured outputs
+    :param max_nodes: Maximum nodes to analyze
+    """
+    print(f"\n{'=' * 80}")
+    print("Node Analysis")
+    print(f"{'=' * 80}\n")
+
+    nodes_to_analyze = onnx_model.graph.node[:max_nodes] if max_nodes else onnx_model.graph.node
+
+    for idx, node in enumerate(nodes_to_analyze):
+        print(f"Node {idx + 1}/{len(nodes_to_analyze)}: {node.op_type}")
+        print(f"  Name: {node.name}")
+        print(f"  Inputs: {list(node.input)}")
+        print(f"  Outputs: {list(node.output)}")
+
+        for output_name in node.output:
+            if output_name in onnx_results:
+                output_val = onnx_results[output_name]
+                print(
+                    f"  Output '{output_name}': shape={output_val.shape}, "
+                    f"dtype={output_val.dtype}, "
+                    f"range=[{output_val.min():.6f}, {output_val.max():.6f}]"
+                )
+            else:
+                print(f"  Output '{output_name}': not captured")
+
+        print()
+
+
+def _print_final_output_comparison(onnx_model, onnx_results: dict, pytorch_output: np.ndarray):
+    """Print comparison of final outputs.
+
+    :param onnx_model: ONNX model
+    :param onnx_results: Dictionary of captured outputs
+    :param pytorch_output: PyTorch output
+    """
+    print(f"\n{'=' * 80}")
+    print("Final Output Comparison")
+    print(f"{'=' * 80}\n")
+
+    final_output_name = onnx_model.graph.output[0].name
+    if final_output_name not in onnx_results:
+        print(f"[FAIL] Final output '{final_output_name}' not found in ONNX results")
+        return
+
+    onnx_final = onnx_results[final_output_name]
+    print(f"ONNX output shape: {onnx_final.shape}")
+    print(f"PyTorch output shape: {pytorch_output.shape}")
+
+    if onnx_final.shape != pytorch_output.shape:
+        print("\n[FAIL] Shape mismatch!")
+        return
+
+    diff = np.abs(onnx_final - pytorch_output)
+    max_diff = np.max(diff)
+    mean_diff = np.mean(diff)
+
+    print("\n[OK] Shapes match!")
+    print(f"Max absolute difference: {max_diff:.6e}")
+    print(f"Mean absolute difference: {mean_diff:.6e}")
+
+    if max_diff < 1e-5:
+        print("[OK] Outputs match within tolerance!")
+    else:
+        print("[WARN] Outputs differ significantly")
+        onnx_min, onnx_max = onnx_final.min(), onnx_final.max()
+        print(f"ONNX output range: [{onnx_min:.6f}, {onnx_max:.6f}]")
+        pt_min, pt_max = pytorch_output.min(), pytorch_output.max()
+        print(f"PyTorch output range: [{pt_min:.6f}, {pt_max:.6f}]")
+
+
 def analyze_model_nodes(
     onnx_model_path: str,
     pytorch_module_path: str,
@@ -146,30 +289,11 @@ def analyze_model_nodes(
     rng = np.random.default_rng()
     input_data = rng.standard_normal(input_shape).astype(np.float32)
 
-    # Load PyTorch model
-    print("Loading PyTorch model...")
-    try:
-        pytorch_model = load_pytorch_module(pytorch_module_path, state_dict_path)
-        print("[OK] PyTorch model loaded successfully\n")
-    except (FileNotFoundError, RuntimeError, ImportError) as e:
-        print(f"[FAIL] Failed to load PyTorch model: {e}\n")
-        return
-
-    # Run PyTorch model
-    print("Running PyTorch model...")
-    try:
-        with torch.no_grad():
-            pytorch_input = torch.from_numpy(input_data)
-            pytorch_output = pytorch_model(pytorch_input)
-
-        if isinstance(pytorch_output, torch.Tensor):
-            pytorch_output = pytorch_output.numpy()
-        print(f"[OK] PyTorch output shape: {pytorch_output.shape}\n")
-    except (RuntimeError, ValueError, TypeError, AttributeError) as e:
-        print(f"[FAIL] PyTorch model failed: {e}\n")
-        import traceback
-
-        traceback.print_exc()
+    # Load and run PyTorch model
+    pytorch_model, pytorch_output = _analyze_pytorch_model(
+        pytorch_module_path, state_dict_path, input_data
+    )
+    if pytorch_output is None:
         return
 
     # Run ONNX model with all intermediate outputs
@@ -177,105 +301,23 @@ def analyze_model_nodes(
 
     # Collect all intermediate tensor names
     intermediate_names = []
-    for node in onnx_model.graph.node[:max_nodes] if max_nodes else onnx_model.graph.node:
+    nodes = onnx_model.graph.node[:max_nodes] if max_nodes else onnx_model.graph.node
+    for node in nodes:
         for output in node.output:
             if output not in intermediate_names:
                 intermediate_names.append(output)
 
     print(f"Found {len(intermediate_names)} intermediate tensors\n")
 
-    # Create modified ONNX model with intermediate outputs
-    try:
-        modified_model = create_intermediate_onnx_model(onnx_model_path, intermediate_names)
-
-        # Save temporary model
-        temp_model_path = Path(onnx_model_path).parent / "temp_intermediate.onnx"
-        onnx.save(modified_model, str(temp_model_path))
-
-        # Run with intermediate outputs
-        session = ort.InferenceSession(str(temp_model_path), providers=["CPUExecutionProvider"])
-        input_name = session.get_inputs()[0].name
-
-        onnx_outputs = session.run(None, {input_name: input_data})
-        output_names = [out.name for out in session.get_outputs()]
-
-        onnx_results = dict(zip(output_names, onnx_outputs, strict=False))
-
-        # Clean up temp file
-        temp_model_path.unlink()
-
-        print(f"[OK] ONNX model executed, captured {len(onnx_results)} outputs\n")
-
-    except (RuntimeError, ValueError, OSError) as e:
-        print(f"[FAIL] Failed to run ONNX with intermediate outputs: {e}\n")
-        # Fall back to just final output
-        session = ort.InferenceSession(onnx_model_path, providers=["CPUExecutionProvider"])
-        input_name = session.get_inputs()[0].name
-        onnx_outputs = session.run(None, {input_name: input_data})
-        output_names = [out.name for out in session.get_outputs()]
-        onnx_results = dict(zip(output_names, onnx_outputs, strict=False))
-        print(f"Using final outputs only: {len(onnx_results)} outputs\n")
+    onnx_results = _run_onnx_with_intermediates(
+        onnx_model_path, onnx_model, intermediate_names, input_data
+    )
 
     # Analyze nodes
-    print(f"\n{'=' * 80}")
-    print("Node Analysis")
-    print(f"{'=' * 80}\n")
-
-    nodes_to_analyze = onnx_model.graph.node[:max_nodes] if max_nodes else onnx_model.graph.node
-
-    for idx, node in enumerate(nodes_to_analyze):
-        print(f"Node {idx + 1}/{len(nodes_to_analyze)}: {node.op_type}")
-        print(f"  Name: {node.name}")
-        print(f"  Inputs: {list(node.input)}")
-        print(f"  Outputs: {list(node.output)}")
-
-        # Check if output is in captured results
-        for output_name in node.output:
-            if output_name in onnx_results:
-                output_val = onnx_results[output_name]
-                print(
-                    f"  Output '{output_name}': shape={output_val.shape}, "
-                    f"dtype={output_val.dtype}, "
-                    f"range=[{output_val.min():.6f}, {output_val.max():.6f}]"
-                )
-            else:
-                print(f"  Output '{output_name}': not captured")
-
-        print()
+    _print_node_analysis(onnx_model, onnx_results, max_nodes)
 
     # Compare final outputs
-    print(f"\n{'=' * 80}")
-    print("Final Output Comparison")
-    print(f"{'=' * 80}\n")
-
-    final_output_name = onnx_model.graph.output[0].name
-    if final_output_name in onnx_results:
-        onnx_final = onnx_results[final_output_name]
-
-        print(f"ONNX output shape: {onnx_final.shape}")
-        print(f"PyTorch output shape: {pytorch_output.shape}")
-
-        if onnx_final.shape == pytorch_output.shape:
-            diff = np.abs(onnx_final - pytorch_output)
-            max_diff = np.max(diff)
-            mean_diff = np.mean(diff)
-
-            print("\n[OK] Shapes match!")
-            print(f"Max absolute difference: {max_diff:.6e}")
-            print(f"Mean absolute difference: {mean_diff:.6e}")
-
-            if max_diff < 1e-5:
-                print("[OK] Outputs match within tolerance!")
-            else:
-                print("[WARN] Outputs differ significantly")
-                onnx_min, onnx_max = onnx_final.min(), onnx_final.max()
-                print(f"ONNX output range: [{onnx_min:.6f}, {onnx_max:.6f}]")
-                pt_min, pt_max = pytorch_output.min(), pytorch_output.max()
-                print(f"PyTorch output range: [{pt_min:.6f}, {pt_max:.6f}]")
-        else:
-            print("\n[FAIL] Shape mismatch!")
-    else:
-        print(f"[FAIL] Final output '{final_output_name}' not found in ONNX results")
+    _print_final_output_comparison(onnx_model, onnx_results, pytorch_output)
 
     print(f"\n{'=' * 80}\n")
 

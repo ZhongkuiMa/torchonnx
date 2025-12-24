@@ -58,6 +58,34 @@ def convert_to_operation_function(onnx_op_type: str) -> str:
     return ONNX_TO_PYTORCH_OPERATIONS.get(onnx_op_type, onnx_op_type)
 
 
+def _get_conv_pytorch_type(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
+    """Get PyTorch Conv type from weight shape."""
+    if len(node.input) >= 2 and node.input[1] in initializers:
+        weight_tensor = initializers[node.input[1]]
+        weight_array = numpy_helper.to_array(weight_tensor)
+        weight_ndim = len(weight_array.shape)
+        if weight_ndim == 3:
+            return "nn.Conv1d"
+        if weight_ndim == 4:
+            return "nn.Conv2d"
+        raise NotImplementedError(f"Unsupported Conv: {weight_ndim}D")
+    return "nn.Conv2d"
+
+
+def _get_convtranspose_pytorch_type(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
+    """Get PyTorch ConvTranspose type from weight shape."""
+    if len(node.input) >= 2 and node.input[1] in initializers:
+        weight_tensor = initializers[node.input[1]]
+        weight_array = numpy_helper.to_array(weight_tensor)
+        weight_ndim = len(weight_array.shape)
+        if weight_ndim == 3:
+            return "nn.ConvTranspose1d"
+        if weight_ndim == 4:
+            return "nn.ConvTranspose2d"
+        raise NotImplementedError(f"Unsupported ConvTranspose: {weight_ndim}D")
+    return "nn.ConvTranspose2d"
+
+
 def convert_to_pytorch_type(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
     """Infer PyTorch layer type from ONNX node.
 
@@ -65,47 +93,22 @@ def convert_to_pytorch_type(node: NodeProto, initializers: dict[str, TensorProto
     :param initializers: Optional ONNX initializers for weight shape inspection
     :return: PyTorch layer type (e.g., "Conv2d", "Linear") or operation type
     """
-    # Handle Conv and ConvTranspose specially - need weight shape to determine 1D/2D
-    if node.op_type == "Conv" and len(node.input) >= 2 and node.input[1] in initializers:
-        weight_tensor = initializers[node.input[1]]
-        weight_array = numpy_helper.to_array(weight_tensor)
-        weight_ndim = len(weight_array.shape)
-        # Conv1d: (out_channels, in_channels, kernel_size) = 3D
-        # Conv2d: (out_channels, in_channels, kernel_h, kernel_w) = 4D
-        if weight_ndim == 3:
-            return "nn.Conv1d"
-        if weight_ndim == 4:
-            return "nn.Conv2d"
-        raise NotImplementedError(f"Unsupported Conv: {weight_ndim}D")
-
-    if node.op_type == "ConvTranspose" and len(node.input) >= 2 and node.input[1] in initializers:
-        weight_tensor = initializers[node.input[1]]
-        weight_array = numpy_helper.to_array(weight_tensor)
-        weight_ndim = len(weight_array.shape)
-        # ConvTranspose1d: (in_channels, out_channels, kernel_size) = 3D
-        # ConvTranspose2d: (in_channels, out_channels, kernel_h, kernel_w) = 4D
-        if weight_ndim == 3:
-            return "nn.ConvTranspose1d"
-        if weight_ndim == 4:
-            return "nn.ConvTranspose2d"
-        raise NotImplementedError(f"Unsupported ConvTranspose: {weight_ndim}D")
-
+    if node.op_type == "Conv":
+        return _get_conv_pytorch_type(node, initializers)
+    if node.op_type == "ConvTranspose":
+        return _get_convtranspose_pytorch_type(node, initializers)
     if (
         node.op_type == "Gemm"
         and node.op_type in ONNX_TO_PYTORCH_LAYERS
         and len(node.input) >= 2
         and node.input[1] not in initializers
     ):
-        # Dynamic weights - fall back to F.linear operation
         return "F.linear"
     if node.op_type in ONNX_TO_PYTORCH_LAYERS:
-        # Add nn. prefix for layer types
         layer_type = ONNX_TO_PYTORCH_LAYERS[node.op_type]
         return f"nn.{layer_type}"
     if is_operator(node.op_type):
-        # Convert operator to torch.* function
         return convert_to_operator_function(node.op_type)
     if is_operation(node.op_type):
-        # Convert operation to appropriate PyTorch function
         return convert_to_operation_function(node.op_type)
     raise ValueError(f"Unsupported ONNX operator: {node.op_type}. ")

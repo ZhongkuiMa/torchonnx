@@ -58,7 +58,7 @@ exclude = [
 [tool.ruff.lint]
 select = ["E", "F", "I", "C90", "UP", "PT", "PIE"]
 ignore = []
-per-file-ignores = {"__init__.py" = ["F401"]}
+per-file-ignores = {"tests/baselines/*" = ["E501", "C901"]}
 
 [tool.mypy]
 python_version = "3.11"
