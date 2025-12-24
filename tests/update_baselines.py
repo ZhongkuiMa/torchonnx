@@ -148,7 +148,7 @@ def _get_benchmarks_to_update(args: argparse.Namespace, results_dir: Path) -> li
 
 
 def main() -> int:
-    """Main entry point."""
+    """Update baselines from results directory."""
     args = _parse_arguments()
 
     # Setup paths

@@ -102,9 +102,9 @@ def test_conversion_results_match_baseline(model_path, baselines_dir, results_di
     )
 
     # Compare file contents for deterministic checks
-    with open(baseline_pth, "rb") as f:
+    with Path(baseline_pth).open("rb") as f:
         baseline_content = f.read()
-    with open(results_pth, "rb") as f:
+    with Path(results_pth).open("rb") as f:
         results_content = f.read()
 
     assert baseline_content == results_content, (
