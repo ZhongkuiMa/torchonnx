@@ -8,7 +8,7 @@ __all__ = ["optimize_line"]
 
 import re
 
-from torchonnx.torchonnx.simplify._rules import (
+from torchonnx.simplify._rules import (
     FUNCTION_DEFAULTS,
     LAYER_DEFAULTS,
     POSITIONAL_ONLY_ARGS,

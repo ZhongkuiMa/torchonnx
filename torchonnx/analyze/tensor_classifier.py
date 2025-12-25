@@ -10,7 +10,7 @@ __all__ = ["classify_inputs", "classify_outputs"]
 import torch
 from onnx import NodeProto, TensorProto, numpy_helper
 
-from torchonnx.torchonnx.analyze.types import ConstantInfo, ParameterInfo, VariableInfo
+from torchonnx.analyze.types import ConstantInfo, ParameterInfo, VariableInfo
 
 # ONNX dtype to PyTorch dtype mapping
 _ONNX_TO_TORCH_DTYPE = {
@@ -141,7 +141,7 @@ def _process_parameter_input(
     ):
         trans_b = 0  # Default value
         if node is not None:
-            from torchonnx.torchonnx.analyze.attr_extractor import extract_onnx_attrs
+            from torchonnx.analyze.attr_extractor import extract_onnx_attrs
 
             attrs = extract_onnx_attrs(node, initializers)
             trans_b = attrs.get("transB", 0)

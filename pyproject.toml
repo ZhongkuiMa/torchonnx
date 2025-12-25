@@ -22,10 +22,10 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "torch>=2.0",
-    "onnx==1.17.0",
-    "onnxruntime==1.20.0",
-    "numpy==2.2.4",
+    "torch==2.3.1",
+    "onnx==1.16.0",
+    "onnxruntime==1.22.0",
+    "numpy==1.26.4",
 ]
 
 [project.optional-dependencies]
@@ -37,8 +37,10 @@ dev = [
     "pyright>=1.1.0",
 ]
 
-[tool.setuptools]
-packages = ["torchonnx"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["torchonnx*"]
+exclude = ["tests*", "docs*"]
 
 [tool.setuptools.package-data]
 torchonnx = ["py.typed"]

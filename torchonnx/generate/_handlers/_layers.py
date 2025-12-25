@@ -7,8 +7,8 @@ Generate code like: x1 = self.conv1(x0)
 __docformat__ = "restructuredtext"
 __all__ = ["register_layer_handlers"]
 
-from torchonnx.torchonnx.analyze import SemanticLayerIR, VariableInfo
-from torchonnx.torchonnx.generate._handlers._registry import register_handler
+from torchonnx.analyze import SemanticLayerIR, VariableInfo
+from torchonnx.generate._handlers._registry import register_handler
 
 
 def _handle_generic_layer(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:

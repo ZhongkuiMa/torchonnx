@@ -10,7 +10,7 @@ import re
 
 import torch
 
-from torchonnx.torchonnx.simplify._line_optimizer import optimize_line
+from torchonnx.simplify._line_optimizer import optimize_line
 
 
 def optimize_generated_code(

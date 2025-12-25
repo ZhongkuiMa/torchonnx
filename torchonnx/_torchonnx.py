@@ -31,7 +31,7 @@ class TorchONNX:
             compatibility with torch.vmap and functorch transforms.
         """
         # Stage 1: Normalize ONNX model
-        from torchonnx.torchonnx.normalize import load_and_preprocess_onnx_model
+        from torchonnx.normalize import load_and_preprocess_onnx_model
 
         model = load_and_preprocess_onnx_model(
             onnx_path,
@@ -42,22 +42,22 @@ class TorchONNX:
         )
 
         # Stage 2: Build structural IR
-        from torchonnx.torchonnx.build import build_model_ir
+        from torchonnx.build import build_model_ir
 
         raw_ir = build_model_ir(model)
 
         # Stage 3: Build semantic IR
-        from torchonnx.torchonnx.analyze import build_semantic_ir
+        from torchonnx.analyze import build_semantic_ir
 
         semantic_ir = build_semantic_ir(raw_ir)
 
         # Stage 4: Optimize IR
-        from torchonnx.torchonnx.optimize import optimize_semantic_ir
+        from torchonnx.optimize import optimize_semantic_ir
 
         optimized_ir = optimize_semantic_ir(semantic_ir)
 
         # Stage 5: Generate PyTorch code
-        from torchonnx.torchonnx.generate import generate_pytorch_module, to_camel_case
+        from torchonnx.generate import generate_pytorch_module, to_camel_case
 
         model_name = Path(onnx_path).stem
         if benchmark_name:
@@ -73,7 +73,7 @@ class TorchONNX:
         )
 
         # Stage 6: Optimize generated code and filter state_dict
-        from torchonnx.torchonnx.simplify import (
+        from torchonnx.simplify import (
             add_file_header,
             format_code,
             optimize_generated_code,
@@ -130,7 +130,7 @@ class TorchONNX:
         :param clear_docstrings: Clear node docstrings (default: True)
         :return: Preprocessed model
         """
-        from torchonnx.torchonnx.normalize import load_and_preprocess_onnx_model
+        from torchonnx.normalize import load_and_preprocess_onnx_model
 
         return load_and_preprocess_onnx_model(
             onnx_path,

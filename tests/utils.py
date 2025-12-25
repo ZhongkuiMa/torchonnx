@@ -26,7 +26,7 @@ def load_onnx_model(onnx_path: str) -> ModelProto:
     :return: ONNX ModelProto converted to version 21
     """
     import onnx
-    from slimonnx.slimonnx.preprocess.version_converter import convert_model_version
+    from slimonnx.preprocess.version_converter import convert_model_version
 
     model = onnx.load(onnx_path)
     model = convert_model_version(model, target_opset=21, warn_on_diff=False)
@@ -81,7 +81,7 @@ def infer_shape(
     :raises ValueError: If inferred shapes don't match expected shapes
     """
     from shapeonnx import extract_io_shapes, infer_onnx_shape
-    from shapeonnx.shapeonnx.utils import (
+    from shapeonnx.utils import (
         convert_constant_to_initializer,
         get_initializers,
         get_input_nodes,

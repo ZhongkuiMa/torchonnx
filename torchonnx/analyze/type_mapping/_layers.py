@@ -11,7 +11,7 @@ from typing import Any
 
 from onnx import NodeProto, TensorProto
 
-from torchonnx.torchonnx.analyze.attr_extractor import extract_onnx_attrs
+from torchonnx.analyze.attr_extractor import extract_onnx_attrs
 
 ONNX_TO_PYTORCH_LAYERS: dict[str, str] = {
     # Convolution - Note: Conv/ConvTranspose require weight shape inspection

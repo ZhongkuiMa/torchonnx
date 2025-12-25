@@ -8,16 +8,16 @@ __all__ = ["generate_pytorch_module"]
 
 import torch
 
-from torchonnx.torchonnx.analyze import SemanticModelIR
-from torchonnx.torchonnx.generate._forward_gen import (
+from torchonnx.analyze import SemanticModelIR
+from torchonnx.generate._forward_gen import (
     ForwardGenContext,
     generate_forward_method,
     set_forward_gen_context,
 )
-from torchonnx.torchonnx.generate._init_gen import build_layer_name_mapping, generate_init_method
-from torchonnx.torchonnx.generate._state_dict_gen import build_state_dict
-from torchonnx.torchonnx.generate._templates import MODULE_TEMPLATE
-from torchonnx.torchonnx.generate._utils import sanitize_identifier
+from torchonnx.generate._init_gen import build_layer_name_mapping, generate_init_method
+from torchonnx.generate._state_dict_gen import build_state_dict
+from torchonnx.generate._templates import MODULE_TEMPLATE
+from torchonnx.generate._utils import sanitize_identifier
 
 
 def generate_pytorch_module(
@@ -112,7 +112,7 @@ def _check_slice_needs_helper(
     :param ctx: Context to update with helper needs
     :return: True if helper is needed, False otherwise
     """
-    from torchonnx.torchonnx.analyze import ConstantInfo
+    from torchonnx.analyze import ConstantInfo
 
     if len(layer.inputs) < 3:
         return False
@@ -165,7 +165,7 @@ def _extract_axes_list(axes_input) -> list:
     """Extract axes list from axes input."""
     if axes_input is None:
         return [0]
-    from torchonnx.torchonnx.analyze import ConstantInfo
+    from torchonnx.analyze import ConstantInfo
 
     assert isinstance(axes_input, ConstantInfo)
     axes_data = axes_input.data.tolist()
@@ -176,7 +176,7 @@ def _extract_steps_list(steps_input, axes_len: int) -> list:
     """Extract steps list from steps input."""
     if steps_input is None:
         return [1] * axes_len
-    from torchonnx.torchonnx.analyze import ConstantInfo
+    from torchonnx.analyze import ConstantInfo
 
     assert isinstance(steps_input, ConstantInfo)
     steps_data = steps_input.data.tolist()
@@ -189,7 +189,7 @@ def _check_expand_needs_helper(layer) -> bool:
     :param layer: Expand layer
     :return: True if helper is needed
     """
-    from torchonnx.torchonnx.analyze import ConstantInfo
+    from torchonnx.analyze import ConstantInfo
 
     if len(layer.inputs) < 2:
         return False
@@ -226,7 +226,7 @@ def _get_helper_needs_from_ir(
     :param vmap_mode: If True, detect static slice lengths for vmap compatibility
     :return: Context with helper needs flags
     """
-    from torchonnx.torchonnx.generate._forward_gen import ForwardGenContext
+    from torchonnx.generate._forward_gen import ForwardGenContext
 
     ctx = ForwardGenContext()
     ctx.vmap_mode = vmap_mode
@@ -267,7 +267,7 @@ def _detect_static_slice_lengths(
     :param producer_map: Maps onnx_name -> (producer_layer, output_index)
     :return: List of static slice lengths, or None if can't determine
     """
-    from torchonnx.torchonnx.analyze import ConstantInfo
+    from torchonnx.analyze import ConstantInfo
 
     # Get axes list
     if axes_input is None:
@@ -328,7 +328,7 @@ def _try_constant_case(starts_input, ends_input, axis_idx: int, step: int) -> in
     :param step: Step size
     :return: Slice length or None
     """
-    from torchonnx.torchonnx.analyze import ConstantInfo
+    from torchonnx.analyze import ConstantInfo
 
     if not (isinstance(starts_input, ConstantInfo) and isinstance(ends_input, ConstantInfo)):
         return None
@@ -354,7 +354,7 @@ def _try_add_pattern_case(
     :param producer_map: Producer mapping
     :return: Slice length or None
     """
-    from torchonnx.torchonnx.analyze import ConstantInfo, VariableInfo
+    from torchonnx.analyze import ConstantInfo, VariableInfo
 
     if not (isinstance(ends_input, VariableInfo) and ends_input.onnx_name in producer_map):
         return None
@@ -428,7 +428,7 @@ def _find_producer_through_shape_ops(onnx_name: str, producer_map, depth: int = 
     :param depth: Max depth to trace
     :return: Producer layer, or None if can't find
     """
-    from torchonnx.torchonnx.analyze import VariableInfo
+    from torchonnx.analyze import VariableInfo
 
     shape_ops = {"Unsqueeze", "Squeeze", "Reshape", "Flatten"}
     current = onnx_name
@@ -463,7 +463,7 @@ def _are_from_same_source(var1, var2, producer_map) -> bool:
 
     Here x14 and x15 are from the same source (x4) with a constant offset.
     """
-    from torchonnx.torchonnx.analyze import VariableInfo
+    from torchonnx.analyze import VariableInfo
 
     if not isinstance(var1, VariableInfo) or not isinstance(var2, VariableInfo):
         return False
@@ -484,7 +484,7 @@ def _trace_to_source(var, producer_map, depth: int = 5) -> str | None:
     :param depth: Max depth to trace
     :return: Source onnx_name, or None if can't trace
     """
-    from torchonnx.torchonnx.analyze import VariableInfo
+    from torchonnx.analyze import VariableInfo
 
     if not isinstance(var, VariableInfo):
         return None
@@ -502,7 +502,7 @@ def _trace_to_source(var, producer_map, depth: int = 5) -> str | None:
         if producer.onnx_op_type not in shape_ops:
             # For Add, trace through the non-constant input
             if producer.onnx_op_type == "Add" and len(producer.inputs) == 2:
-                from torchonnx.torchonnx.analyze import ConstantInfo
+                from torchonnx.analyze import ConstantInfo
 
                 for inp in producer.inputs:
                     if not isinstance(inp, ConstantInfo) and isinstance(inp, VariableInfo):

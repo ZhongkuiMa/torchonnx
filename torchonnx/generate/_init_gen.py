@@ -8,15 +8,15 @@ __all__ = ["generate_init_method", "build_layer_name_mapping"]
 
 import torch
 
-from torchonnx.torchonnx.analyze import (
+from torchonnx.analyze import (
     ConstantInfo,
     OperatorClass,
     ParameterInfo,
     SemanticLayerIR,
     SemanticModelIR,
 )
-from torchonnx.torchonnx.generate._templates import INDENT, INIT_TEMPLATE
-from torchonnx.torchonnx.generate._utils import format_argument
+from torchonnx.generate._templates import INDENT, INIT_TEMPLATE
+from torchonnx.generate._utils import format_argument
 
 # PyTorch dtype to string representation
 _DTYPE_TO_STR = {

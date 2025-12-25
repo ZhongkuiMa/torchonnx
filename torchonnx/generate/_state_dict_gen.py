@@ -8,7 +8,7 @@ __all__ = ["build_state_dict"]
 
 import torch
 
-from torchonnx.torchonnx.analyze import ConstantInfo, OperatorClass, ParameterInfo, SemanticModelIR
+from torchonnx.analyze import ConstantInfo, OperatorClass, ParameterInfo, SemanticModelIR
 
 # PyTorch layers that don't have buffers - their constants are constructor args only
 _LAYERS_WITHOUT_BUFFERS = {

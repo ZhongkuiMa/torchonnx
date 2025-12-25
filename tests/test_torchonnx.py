@@ -297,7 +297,7 @@ def convert_model(
         start_time = time.perf_counter()
 
         # Use TorchONNX to convert ONNX model to PyTorch model
-        from torchonnx.torchonnx import TorchONNX
+        from torchonnx import TorchONNX
 
         converter = TorchONNX(verbose=False)
         converter.convert(

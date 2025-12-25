@@ -1,3 +1,3 @@
-from torchonnx.torchonnx import TorchONNX
+from torchonnx import TorchONNX
 
 __all__ = ["TorchONNX"]

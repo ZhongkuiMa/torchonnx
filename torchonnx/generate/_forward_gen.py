@@ -6,15 +6,15 @@ Main forward generation logic with handler dispatch.
 __docformat__ = "restructuredtext"
 __all__ = ["generate_forward_method", "ForwardGenContext", "set_forward_gen_context"]
 
-from torchonnx.torchonnx.analyze import SemanticLayerIR, SemanticModelIR
-from torchonnx.torchonnx.generate._handlers import (
+from torchonnx.analyze import SemanticLayerIR, SemanticModelIR
+from torchonnx.generate._handlers import (
     HANDLERS,
     get_handler,
     register_layer_handlers,
     register_operation_handlers,
     register_operator_handlers,
 )
-from torchonnx.torchonnx.generate._templates import FORWARD_TEMPLATE, INDENT
+from torchonnx.generate._templates import FORWARD_TEMPLATE, INDENT
 
 
 # Global context for tracking used constants during forward generation

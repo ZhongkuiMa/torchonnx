@@ -7,8 +7,8 @@ to PyTorch-style typed containers with resolved tensor data.
 __docformat__ = "restructuredtext"
 __all__ = ["build_semantic_ir"]
 
-from torchonnx.torchonnx.analyze.tensor_classifier import classify_inputs, classify_outputs
-from torchonnx.torchonnx.analyze.type_mapping import (
+from torchonnx.analyze.tensor_classifier import classify_inputs, classify_outputs
+from torchonnx.analyze.type_mapping import (
     convert_to_pytorch_type,
     extract_layer_args,
     extract_operation_args,
@@ -16,7 +16,7 @@ from torchonnx.torchonnx.analyze.type_mapping import (
     is_operation,
     is_operator,
 )
-from torchonnx.torchonnx.analyze.types import (
+from torchonnx.analyze.types import (
     ArgumentInfo,
     ConstantInfo,
     OperatorClass,
@@ -25,7 +25,7 @@ from torchonnx.torchonnx.analyze.types import (
     SemanticModelIR,
     VariableInfo,
 )
-from torchonnx.torchonnx.build import ModelIR, NodeIR
+from torchonnx.build import ModelIR, NodeIR
 
 
 def _classify_operator_class(pytorch_type: str) -> OperatorClass:

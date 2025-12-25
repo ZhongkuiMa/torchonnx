@@ -266,7 +266,7 @@ def convert_model_vmap(
     try:
         start_time = time.perf_counter()
 
-        from torchonnx.torchonnx import TorchONNX
+        from torchonnx import TorchONNX
 
         converter = TorchONNX(verbose=False)
         converter.convert(

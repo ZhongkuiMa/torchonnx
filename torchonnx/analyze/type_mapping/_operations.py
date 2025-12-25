@@ -20,7 +20,7 @@ from typing import Any
 import numpy as np
 from onnx import NodeProto, TensorProto, numpy_helper
 
-from torchonnx.torchonnx.analyze.attr_extractor import extract_onnx_attrs
+from torchonnx.analyze.attr_extractor import extract_onnx_attrs
 
 ONNX_TO_PYTORCH_OPERATORS: dict[str, str] = {
     # Unary operators

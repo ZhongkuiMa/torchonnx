@@ -7,9 +7,9 @@ Generate code like: x2 = x0.reshape(...), x3 = F.pad(x1, ...), etc.
 __docformat__ = "restructuredtext"
 __all__ = ["register_operation_handlers"]
 
-from torchonnx.torchonnx.analyze import ConstantInfo, ParameterInfo, SemanticLayerIR, VariableInfo
-from torchonnx.torchonnx.generate._handlers._registry import register_handler
-from torchonnx.torchonnx.generate._utils import format_argument
+from torchonnx.analyze import ConstantInfo, ParameterInfo, SemanticLayerIR, VariableInfo
+from torchonnx.generate._handlers._registry import register_handler
+from torchonnx.generate._utils import format_argument
 
 
 def _get_input_code_names(layer: SemanticLayerIR) -> list[str]:
@@ -21,7 +21,7 @@ def _get_input_code_names(layer: SemanticLayerIR) -> list[str]:
     :param layer: Semantic layer IR
     :return: List of code names
     """
-    from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
+    from torchonnx.generate._forward_gen import get_forward_gen_context
 
     names = []
     ctx = get_forward_gen_context()
@@ -50,7 +50,7 @@ def _get_input_code_name_selective(
     :param use_literal: If True, use literal for constant values (don't mark as used)
     :return: Code name string or None if use_literal is True for a constant
     """
-    from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
+    from torchonnx.generate._forward_gen import get_forward_gen_context
 
     if isinstance(inp, ConstantInfo):
         if use_literal:
@@ -268,7 +268,7 @@ def _handle_concat(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
     :param layer: Semantic layer IR
     :return: Generated code line
     """
-    from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
+    from torchonnx.generate._forward_gen import get_forward_gen_context
 
     ctx = get_forward_gen_context()
 
@@ -431,7 +431,7 @@ def _handle_clip(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> 
     # Process data input
     data_input = layer.inputs[0]
     if isinstance(data_input, (ParameterInfo, ConstantInfo)):
-        from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
+        from torchonnx.generate._forward_gen import get_forward_gen_context
 
         ctx = get_forward_gen_context()
         if ctx:
@@ -564,7 +564,7 @@ def _handle_constant_of_shape(layer: SemanticLayerIR, layer_name_mapping: dict[s
     shape_input = layer.inputs[0]
 
     # Get device from first forward input
-    from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
+    from torchonnx.generate._forward_gen import get_forward_gen_context
 
     ctx = get_forward_gen_context()
     device_expr = f"{ctx.first_input_name}.device" if ctx and ctx.first_input_name else "'cpu'"
@@ -616,7 +616,7 @@ def _handle_arange(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
             has_runtime_value = True
 
     # Add device parameter: use runtime value's device if available, else first input's device
-    from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
+    from torchonnx.generate._forward_gen import get_forward_gen_context
 
     if has_runtime_value and runtime_arg:
         device_expr = f", device={runtime_arg}.device"
@@ -761,7 +761,7 @@ def _handle_slice(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) ->
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
     :return: Generated code line
     """
-    from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
+    from torchonnx.generate._forward_gen import get_forward_gen_context
 
     output = layer.outputs[0].code_name
 
@@ -930,7 +930,7 @@ def _handle_expand_constant_shape(
     :param output: Output variable name
     :return: Generated code or None to defer to runtime helper
     """
-    from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
+    from torchonnx.generate._forward_gen import get_forward_gen_context
 
     target_shape = shape_input.data.tolist()
     if not isinstance(target_shape, list):
@@ -963,7 +963,7 @@ def _handle_expand_runtime_shape(
     :param output: Output variable name
     :return: Generated code
     """
-    from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
+    from torchonnx.generate._forward_gen import get_forward_gen_context
 
     ctx = get_forward_gen_context()
     if ctx:
@@ -1069,7 +1069,7 @@ def _handle_scatter_nd(layer: SemanticLayerIR, layer_name_mapping: dict[str, str
     :param layer: Semantic layer IR
     :return: Generated code line
     """
-    from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
+    from torchonnx.generate._forward_gen import get_forward_gen_context
 
     inputs = _get_input_code_names(layer)
     output = layer.outputs[0].code_name

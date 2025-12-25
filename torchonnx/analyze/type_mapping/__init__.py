@@ -13,12 +13,12 @@ __all__ = [
 ]
 from onnx import NodeProto, TensorProto, numpy_helper
 
-from torchonnx.torchonnx.analyze.type_mapping._layers import (
+from torchonnx.analyze.type_mapping._layers import (
     ONNX_TO_PYTORCH_LAYERS,
     extract_layer_args,
     is_layer_with_args,
 )
-from torchonnx.torchonnx.analyze.type_mapping._operations import (
+from torchonnx.analyze.type_mapping._operations import (
     ONNX_TO_PYTORCH_OPERATIONS,
     convert_to_operation,
     convert_to_operator,

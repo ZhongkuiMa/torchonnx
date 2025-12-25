@@ -17,9 +17,9 @@ __all__ = [
     "classify_outputs",
 ]
 
-from torchonnx.torchonnx.analyze.builder import build_semantic_ir
-from torchonnx.torchonnx.analyze.tensor_classifier import classify_inputs, classify_outputs
-from torchonnx.torchonnx.analyze.types import (
+from torchonnx.analyze.builder import build_semantic_ir
+from torchonnx.analyze.tensor_classifier import classify_inputs, classify_outputs
+from torchonnx.analyze.types import (
     ArgumentInfo,
     ConstantInfo,
     OperatorClass,

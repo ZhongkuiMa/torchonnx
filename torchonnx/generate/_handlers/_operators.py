@@ -7,8 +7,8 @@ Generate code like: x2 = x0 + x1, x3 = x1 @ x2, etc.
 __docformat__ = "restructuredtext"
 __all__ = ["register_operator_handlers"]
 
-from torchonnx.torchonnx.analyze import ConstantInfo, ParameterInfo, SemanticLayerIR, VariableInfo
-from torchonnx.torchonnx.generate._handlers._registry import register_handler
+from torchonnx.analyze import ConstantInfo, ParameterInfo, SemanticLayerIR, VariableInfo
+from torchonnx.generate._handlers._registry import register_handler
 
 
 def _get_input_code_name(
@@ -47,7 +47,7 @@ def _get_input_code_name(
             values = inp.data.tolist()
             return f"torch.tensor({values})"
         # Non-literal constant - mark as used
-        from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
+        from torchonnx.generate._forward_gen import get_forward_gen_context
 
         ctx = get_forward_gen_context()
         if ctx:
@@ -55,7 +55,7 @@ def _get_input_code_name(
         return f"self.{inp.code_name}"
     if isinstance(inp, ParameterInfo):
         # Import here to avoid circular dependency
-        from torchonnx.torchonnx.generate._forward_gen import get_forward_gen_context
+        from torchonnx.generate._forward_gen import get_forward_gen_context
 
         ctx = get_forward_gen_context()
         if ctx:

@@ -7,7 +7,7 @@ Future optimizations can be added here without changing the pipeline structure.
 __docformat__ = "restructuredtext"
 __all__ = ["optimize_semantic_ir"]
 
-from torchonnx.torchonnx.analyze import SemanticModelIR
+from torchonnx.analyze import SemanticModelIR
 
 
 def optimize_semantic_ir(semantic_ir: SemanticModelIR) -> SemanticModelIR:

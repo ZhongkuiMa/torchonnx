@@ -11,6 +11,6 @@ Post-processes generated PyTorch code to:
 __docformat__ = "restructuredtext"
 __all__ = ["optimize_generated_code", "add_file_header", "format_code"]
 
-from torchonnx.torchonnx.simplify._decorations import add_file_header
-from torchonnx.torchonnx.simplify._formatter import format_code
-from torchonnx.torchonnx.simplify._optimizer import optimize_generated_code
+from torchonnx.simplify._decorations import add_file_header
+from torchonnx.simplify._formatter import format_code
+from torchonnx.simplify._optimizer import optimize_generated_code

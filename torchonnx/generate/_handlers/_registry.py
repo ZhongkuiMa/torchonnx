@@ -13,7 +13,7 @@ __all__ = [
 
 from collections.abc import Callable
 
-from torchonnx.torchonnx.analyze import SemanticLayerIR
+from torchonnx.analyze import SemanticLayerIR
 
 # Handler type: takes SemanticLayerIR and layer_name_mapping, returns code string
 Handler = Callable[[SemanticLayerIR, dict[str, str]], str]
