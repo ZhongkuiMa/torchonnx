@@ -144,7 +144,7 @@ def _get_benchmarks_to_update(args: argparse.Namespace, results_dir: Path) -> li
         return [args.benchmark]
 
     benchmarks = [bench.name for bench in sorted(results_dir.iterdir()) if bench.is_dir()]
-    return benchmarks if benchmarks else None
+    return benchmarks or None
 
 
 def main() -> int:
