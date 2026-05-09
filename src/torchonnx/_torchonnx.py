@@ -1,3 +1,5 @@
+"""High-level ONNX-to-PyTorch conversion pipeline."""
+
 __docformat__ = "restructuredtext"
 __all__ = ["TorchONNX"]
 
@@ -8,7 +10,19 @@ import torch
 
 
 class TorchONNX:
+    """ONNX-to-PyTorch converter using a 6-stage pipeline.
+
+    Converts ONNX models to standalone PyTorch nn.Module code by:
+    normalize → build IR → analyze semantics → generate code → simplify → export.
+    """
+
     def __init__(self, verbose: bool = False, use_shapeonnx: bool = False):
+        """
+        Initialize the converter.
+
+        :param verbose: Print stage-by-stage progress.
+        :param use_shapeonnx: Use shapeonnx for shape inference instead of onnxruntime.
+        """
         self.verbose = verbose
         self.use_shapeonnx = use_shapeonnx
 

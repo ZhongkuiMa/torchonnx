@@ -166,12 +166,11 @@ def _extract_constant_of_shape_args(
 
 
 def _simplify_homogeneous_values(
-    values: list[int], skip_default: int | None = None
+    values: list[int],
 ) -> int | tuple[int, ...]:
     """Simplify homogeneous values into scalar or tuple.
 
     :param values: List of values
-    :param skip_default: Default value to skip if not needed
     :return: Scalar if all same, tuple otherwise
     """
     if not values:

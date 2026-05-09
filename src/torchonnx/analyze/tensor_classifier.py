@@ -9,6 +9,7 @@ __all__ = ["classify_inputs", "classify_outputs"]
 
 import torch
 from onnx import NodeProto, TensorProto, numpy_helper
+from torch import Tensor
 
 from torchonnx.analyze.types import ConstantInfo, ParameterInfo, VariableInfo
 
@@ -29,7 +30,7 @@ _ONNX_TO_TORCH_DTYPE = {
 }
 
 
-def _tensor_proto_to_torch(tensor: TensorProto) -> torch.Tensor:
+def _tensor_proto_to_torch(tensor: TensorProto) -> Tensor:
     """Convert ONNX TensorProto to PyTorch tensor.
 
     :param tensor: ONNX TensorProto

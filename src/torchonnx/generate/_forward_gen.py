@@ -22,6 +22,7 @@ class ForwardGenContext:
     """Context for tracking constants and helpers used during forward generation."""
 
     def __init__(self):
+        """Initialize empty tracking sets for constants, parameters, and helper usage."""
         self.used_constants: set[str] = set()
         self.used_parameters: set[str] = set()
         # Track which helper functions are actually needed in the generated code

@@ -25,7 +25,6 @@ class TestBuildBasics:
         """Test building structural IR from Identity model."""
         model = load_and_preprocess_onnx_model(identity_model)
         ir = build_model_ir(model)
-        assert ir is not None
         assert len(ir.layers) == 1
         assert ir.layers[0].onnx_op_type == "Identity"
 
@@ -33,7 +32,6 @@ class TestBuildBasics:
         """Test building structural IR from Linear model."""
         model = load_and_preprocess_onnx_model(linear_model)
         ir = build_model_ir(model)
-        assert ir is not None
         assert len(ir.layers) == 1
         assert ir.layers[0].onnx_op_type == "Gemm"
         assert len(ir.layers[0].input_names) == 3
@@ -42,7 +40,6 @@ class TestBuildBasics:
         """Test building structural IR from MLP model."""
         model = load_and_preprocess_onnx_model(mlp_model)
         ir = build_model_ir(model)
-        assert ir is not None
         assert len(ir.layers) == 3
         assert ir.layers[0].onnx_op_type == "Gemm"
         assert ir.layers[1].onnx_op_type == "Relu"
@@ -59,7 +56,7 @@ class TestBuildBasics:
         """Test that IR correctly captures model parameters."""
         model = load_and_preprocess_onnx_model(linear_model)
         ir = build_model_ir(model)
-        assert ir.initializers is not None
+        assert isinstance(ir.initializers, dict)
         assert len(ir.initializers) == 2
 
 
@@ -70,7 +67,6 @@ class TestBuildComplexGraphs:
         """Test building structural IR from Conv2d model."""
         model = load_and_preprocess_onnx_model(conv2d_model)
         ir = build_model_ir(model)
-        assert ir is not None
         # Should have Conv node
         assert any(layer.onnx_op_type == "Conv" for layer in ir.layers)
         # Should have input and output
@@ -81,7 +77,6 @@ class TestBuildComplexGraphs:
         """Test building structural IR from multi-input model."""
         model = load_and_preprocess_onnx_model(multi_input_model)
         ir = build_model_ir(model)
-        assert ir is not None
         # Should have multiple inputs
         assert len(ir.input_names) >= 2
 
@@ -89,7 +84,6 @@ class TestBuildComplexGraphs:
         """Test building structural IR from multi-output model."""
         model = load_and_preprocess_onnx_model(multi_output_model)
         ir = build_model_ir(model)
-        assert ir is not None
         # Should have multiple outputs
         assert len(ir.output_names) >= 2
 
@@ -107,7 +101,8 @@ class TestBuildAttributes:
         assert hasattr(layer, "onnx_op_type")
         assert hasattr(layer, "input_names")
         assert hasattr(layer, "output_names")
-        assert layer.onnx_op_type is not None
+        assert isinstance(layer.onnx_op_type, str)
+        assert len(layer.onnx_op_type) > 0
 
     def test_ir_preserves_layer_inputs_outputs(self, add_model):
         """Test that IR preserves input/output names for each layer."""
@@ -127,7 +122,6 @@ class TestBuildEdgeCases:
         """Test building structural IR from BatchNorm model."""
         model = load_and_preprocess_onnx_model(batchnorm_model)
         ir = build_model_ir(model)
-        assert ir is not None
         # Should have BatchNormalization node
         assert any(layer.onnx_op_type == "BatchNormalization" for layer in ir.layers)
 
@@ -135,9 +129,10 @@ class TestBuildEdgeCases:
         """Test building structural IR from ResNet block (skip connection)."""
         model = load_and_preprocess_onnx_model(resnet_block_model)
         ir = build_model_ir(model)
-        assert ir is not None
         # Should have multiple layers for skip connection
         assert len(ir.layers) >= 2
         # Should preserve input/output mapping
-        assert ir.input_names is not None
-        assert ir.output_names is not None
+        assert isinstance(ir.input_names, list)
+        assert len(ir.input_names) > 0
+        assert isinstance(ir.output_names, list)
+        assert len(ir.output_names) > 0

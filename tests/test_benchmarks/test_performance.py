@@ -4,6 +4,8 @@ Slow performance tests marked as benchmarks.
 Run with: pytest tests/test_benchmarks/ -v or pytest -m benchmark
 """
 
+import onnx
+import onnx.helper as onnx_helper
 import pytest
 
 from torchonnx.build import build_model_ir
@@ -22,9 +24,6 @@ class TestSynthesisONNXModels:
         :param output_shape: Output tensor shape
         :return: ONNX ModelProto
         """
-        import onnx
-        import onnx.helper as onnx_helper
-
         X = onnx_helper.make_tensor_value_info(  # noqa: N806
             "X", onnx.TensorProto.FLOAT, input_shape
         )
@@ -52,24 +51,24 @@ class TestPerformance:
         """Benchmark model loading."""
         for _ in range(3):
             model = load_and_preprocess_onnx_model(identity_model)
-            assert model is not None
+            assert model
 
     def test_build_performance(self, linear_model):
         """Benchmark IR building."""
         model = load_and_preprocess_onnx_model(linear_model)
         for _ in range(3):
             ir = build_model_ir(model)
-            assert ir is not None
+            assert len(ir.layers) >= 1
 
     def test_format_code_performance(self):
         """Benchmark code formatting."""
         code = "x=1\ny=2\nz=x+y\n" * 10
         for _ in range(3):
             formatted = format_code(code)
-            assert formatted is not None
+            assert isinstance(formatted, str)
 
     def test_model_creation_performance(self):
         """Benchmark synthetic model creation."""
         for _ in range(5):
             model = TestSynthesisONNXModels.create_identity_model()
-            assert model is not None
+            assert model

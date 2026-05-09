@@ -15,6 +15,8 @@ Test Coverage:
 - TestOptimizePreservation: 4 tests - Property preservation checks
 """
 
+import pytest
+
 from torchonnx.analyze.builder import build_semantic_ir
 from torchonnx.build import build_model_ir
 from torchonnx.normalize import load_and_preprocess_onnx_model
@@ -32,7 +34,6 @@ class TestOptimizeBasics:
 
         result = optimize_semantic_ir(semantic_ir)
 
-        assert result is not None
         assert hasattr(result, "layers")
         assert hasattr(result, "variables")
         assert hasattr(result, "parameters")
@@ -64,7 +65,6 @@ class TestOptimizeBasics:
 
         result = optimize_semantic_ir(semantic_ir)
 
-        assert result is not None
         assert len(result.layers) >= 1
         assert len(result.input_names) == 1
         assert len(result.output_names) == 1
@@ -77,7 +77,6 @@ class TestOptimizeBasics:
 
         result = optimize_semantic_ir(semantic_ir)
 
-        assert result is not None
         assert len(result.layers) >= 2
         assert len(result.parameters) >= 2
 
@@ -85,38 +84,28 @@ class TestOptimizeBasics:
 class TestOptimizePreservation:
     """Test that optimization preserves semantic IR properties."""
 
-    def test_optimize_semantic_ir_preserves_layers(self, linear_model):
-        """Verify optimization preserves all layers."""
+    # [REVIEW] Parametrized: test_optimize_semantic_ir_preserves_layers,
+    # test_optimize_semantic_ir_preserves_variables,
+    # test_optimize_semantic_ir_preserves_parameters
+
+    @pytest.mark.parametrize(
+        "attr_name",
+        [
+            pytest.param("layers", id="layers"),
+            pytest.param("variables", id="variables"),
+            pytest.param("parameters", id="parameters"),
+        ],
+    )
+    def test_optimize_semantic_ir_preserves(self, attr_name, linear_model):
+        """Verify optimization preserves semantic IR attributes."""
         normalized = load_and_preprocess_onnx_model(linear_model)
         model_ir = build_model_ir(normalized)
         semantic_ir = build_semantic_ir(model_ir)
 
-        original_layer_count = len(semantic_ir.layers)
+        original_count = len(getattr(semantic_ir, attr_name))
         result = optimize_semantic_ir(semantic_ir)
 
-        assert len(result.layers) == original_layer_count
-
-    def test_optimize_semantic_ir_preserves_variables(self, linear_model):
-        """Verify optimization preserves all variables."""
-        normalized = load_and_preprocess_onnx_model(linear_model)
-        model_ir = build_model_ir(normalized)
-        semantic_ir = build_semantic_ir(model_ir)
-
-        original_var_count = len(semantic_ir.variables)
-        result = optimize_semantic_ir(semantic_ir)
-
-        assert len(result.variables) == original_var_count
-
-    def test_optimize_semantic_ir_preserves_parameters(self, linear_model):
-        """Verify optimization preserves all parameters."""
-        normalized = load_and_preprocess_onnx_model(linear_model)
-        model_ir = build_model_ir(normalized)
-        semantic_ir = build_semantic_ir(model_ir)
-
-        original_param_count = len(semantic_ir.parameters)
-        result = optimize_semantic_ir(semantic_ir)
-
-        assert len(result.parameters) == original_param_count
+        assert len(getattr(result, attr_name)) == original_count
 
     def test_optimize_semantic_ir_preserves_input_output_mappings(self, mlp_model):
         """Verify optimization preserves input/output names and mappings."""

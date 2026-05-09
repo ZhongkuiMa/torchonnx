@@ -17,11 +17,13 @@ the classify_inputs() bug in tensor_classifier.py. Tests handle this gracefully
 with pytest.skip().
 """
 
+import ast
 import importlib.util
 import tempfile
 from pathlib import Path
 
 import numpy as np
+import onnx
 import onnxruntime as ort
 import pytest
 import torch
@@ -157,10 +159,10 @@ class TestExecutableCodeGeneration:
             pytest.skip("classify_inputs() bug prevents semantic IR generation")
 
         # Try to parse the code
-        import ast
 
         ast.parse(code)
-        assert code is not None
+        assert isinstance(code, str)
+        assert len(code) > 0
 
     def test_generated_code_imports_succeed(self, linear_model):
         """Verify generated code can be imported without errors."""
@@ -175,8 +177,8 @@ class TestExecutableCodeGeneration:
         try:
             # This will raise ImportError if imports fail
             model, module = IntegrationTestHelper.load_generated_model(code, state_dict, temp_dir)
-            assert model is not None
-            assert module is not None
+            assert isinstance(model, torch.nn.Module)
+            assert hasattr(module, "ONNXModel")
         finally:
             import shutil
 
@@ -195,7 +197,6 @@ class TestExecutableCodeGeneration:
         try:
             model, _ = IntegrationTestHelper.load_generated_model(code, state_dict, temp_dir)
             assert isinstance(model, torch.nn.Module)
-            assert model is not None
         finally:
             import shutil
 
@@ -215,7 +216,7 @@ class TestExecutableCodeGeneration:
             # load_generated_model already loads the state dict
             # If we get here without exception, loading succeeded
             model, _ = IntegrationTestHelper.load_generated_model(code, state_dict, temp_dir)
-            assert len(model.state_dict()) >= 0
+            assert isinstance(model.state_dict(), dict)
         finally:
             import shutil
 
@@ -342,28 +343,40 @@ class TestNumericalValidation:
 
             shutil.rmtree(temp_dir, ignore_errors=True)
 
-    def test_reshape_model_output_matches_onnx(self, reshape_model):
-        """Verify Reshape model PyTorch output matches ONNX."""
+    # [REVIEW] Parametrized: test_reshape_model_output_matches_onnx,
+    # test_maxpool_model_output_matches_onnx, test_avgpool_model_output_matches_onnx
+
+    @pytest.mark.parametrize(
+        ("model_fixture_name", "rtol", "atol"),
+        [
+            pytest.param("reshape_model", 1e-5, 1e-6, id="reshape"),
+            pytest.param("maxpool_model", 1e-5, 1e-6, id="maxpool"),
+            pytest.param("avgpool_model", 1e-5, 1e-6, id="avgpool"),
+        ],
+    )
+    def test_model_output_matches_onnx(self, model_fixture_name, rtol, atol, request):
+        """Verify model PyTorch output matches ONNX output."""
+        model = request.getfixturevalue(model_fixture_name)
         try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                reshape_model
-            )
+            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(model)
         except TypeError:
             pytest.skip("classify_inputs() bug prevents semantic IR generation")
 
-        inputs = IntegrationTestHelper.get_onnx_inputs(reshape_model, num_inputs=1)[0]
+        inputs = IntegrationTestHelper.get_onnx_inputs(model, num_inputs=1)[0]
 
         temp_dir = tempfile.mkdtemp()
         try:
-            onnx_output = IntegrationTestHelper.run_onnx_model(reshape_model, inputs)
+            onnx_output = IntegrationTestHelper.run_onnx_model(model, inputs)
 
-            model, _ = IntegrationTestHelper.load_generated_model(code, state_dict, temp_dir)
+            pytorch_model, _ = IntegrationTestHelper.load_generated_model(
+                code, state_dict, temp_dir
+            )
             torch_input = torch.from_numpy(inputs[next(iter(inputs.keys()))])
             with torch.no_grad():
-                torch_output = model(torch_input)
+                torch_output = pytorch_model(torch_input)
 
             assert IntegrationTestHelper.compare_outputs(
-                onnx_output[0], torch_output, rtol=1e-5, atol=1e-6
+                onnx_output[0], torch_output, rtol=rtol, atol=atol
             )
         finally:
             import shutil
@@ -390,62 +403,6 @@ class TestNumericalValidation:
             torch_inputs = [torch.from_numpy(inputs[k]) for k in sorted(inputs.keys())]
             with torch.no_grad():
                 torch_output = model(*torch_inputs)
-
-            assert IntegrationTestHelper.compare_outputs(
-                onnx_output[0], torch_output, rtol=1e-5, atol=1e-6
-            )
-        finally:
-            import shutil
-
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
-    def test_maxpool_model_output_matches_onnx(self, maxpool_model):
-        """Verify MaxPool model PyTorch output matches ONNX."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                maxpool_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
-
-        inputs = IntegrationTestHelper.get_onnx_inputs(maxpool_model, num_inputs=1)[0]
-
-        temp_dir = tempfile.mkdtemp()
-        try:
-            onnx_output = IntegrationTestHelper.run_onnx_model(maxpool_model, inputs)
-
-            model, _ = IntegrationTestHelper.load_generated_model(code, state_dict, temp_dir)
-            torch_input = torch.from_numpy(inputs[next(iter(inputs.keys()))])
-            with torch.no_grad():
-                torch_output = model(torch_input)
-
-            assert IntegrationTestHelper.compare_outputs(
-                onnx_output[0], torch_output, rtol=1e-5, atol=1e-6
-            )
-        finally:
-            import shutil
-
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
-    def test_avgpool_model_output_matches_onnx(self, avgpool_model):
-        """Verify AvgPool model PyTorch output matches ONNX."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                avgpool_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
-
-        inputs = IntegrationTestHelper.get_onnx_inputs(avgpool_model, num_inputs=1)[0]
-
-        temp_dir = tempfile.mkdtemp()
-        try:
-            onnx_output = IntegrationTestHelper.run_onnx_model(avgpool_model, inputs)
-
-            model, _ = IntegrationTestHelper.load_generated_model(code, state_dict, temp_dir)
-            torch_input = torch.from_numpy(inputs[next(iter(inputs.keys()))])
-            with torch.no_grad():
-                torch_output = model(torch_input)
 
             assert IntegrationTestHelper.compare_outputs(
                 onnx_output[0], torch_output, rtol=1e-5, atol=1e-6
@@ -591,8 +548,8 @@ class TestModelExecution:
             with torch.no_grad():
                 output = model(torch_input)
 
-            assert output is not None
             assert isinstance(output, torch.Tensor)
+            assert output.numel() > 0
         finally:
             import shutil
 
@@ -629,7 +586,7 @@ class TestMultiOutputModels:
         except TypeError:
             pytest.skip("classify_inputs() bug prevents semantic IR generation")
 
-        assert code is not None
+        assert isinstance(code, str)
         assert len(code) > 0
         assert "class ONNXModel" in code
         assert "def forward" in code
@@ -688,8 +645,6 @@ class TestMultiOutputModels:
 
     def test_multi_output_numerical_validation(self, multi_output_model):
         """Compare multi-output model ONNX and PyTorch outputs numerically."""
-        import onnxruntime as ort
-
         try:
             code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
                 multi_output_model
@@ -773,7 +728,7 @@ class TestMultiOutputModels:
                 with torch.no_grad():
                     outputs = model(*inputs) if isinstance(inputs, (list, tuple)) else model(inputs)
                 # Should produce outputs (type doesn't matter)
-                assert outputs is not None
+                assert isinstance(outputs, (torch.Tensor, tuple, list))
             except AttributeError:
                 pytest.skip("Multi-output model not fully supported in code generation")
         finally:
@@ -846,10 +801,6 @@ class TestStateDictEdgeCases:
 
     def test_state_dict_with_no_parameters(self):
         """Test model with no learnable parameters (e.g., pure activations)."""
-        from pathlib import Path
-
-        import onnx
-
         # Create a model with only activation function (no weights)
         X = onnx.helper.make_tensor_value_info("X", onnx.TensorProto.FLOAT, [1, 10])  # noqa: N806
         Y = onnx.helper.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, [1, 10])  # noqa: N806
@@ -963,11 +914,12 @@ class TestStateDictEdgeCases:
 
             # Loading should fail with shape mismatch
             if len(corrupted_dict) > 0:
-                import contextlib
-
-                # Either the model accepts the wrong shape (not ideal) or raises RuntimeError (expected)
-                with contextlib.suppress(RuntimeError):
+                shape_mismatch_detected = False
+                try:
                     model.load_state_dict(corrupted_dict, strict=True)
+                except RuntimeError:
+                    shape_mismatch_detected = True
+                assert shape_mismatch_detected, "Expected RuntimeError for shape mismatch"
         finally:
             import shutil
 

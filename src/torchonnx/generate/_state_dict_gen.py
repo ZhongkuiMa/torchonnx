@@ -6,7 +6,7 @@ Builds PyTorch state_dict directly from ParameterInfo and ConstantInfo.
 __docformat__ = "restructuredtext"
 __all__ = ["build_state_dict"]
 
-import torch
+from torch import Tensor
 
 from torchonnx.analyze import ConstantInfo, OperatorClass, ParameterInfo, SemanticModelIR
 
@@ -76,7 +76,7 @@ def _find_layer_for_constant(
 
 
 def _add_parameters_to_dict(
-    state_dict: dict[str, torch.Tensor],
+    state_dict: dict[str, Tensor],
     semantic_ir: SemanticModelIR,
     layer_name_mapping: dict[str, str],
     onnx_to_layers: dict[str, list[str]],
@@ -104,7 +104,7 @@ def _add_parameters_to_dict(
 
 
 def _add_constants_to_dict(
-    state_dict: dict[str, torch.Tensor],
+    state_dict: dict[str, Tensor],
     semantic_ir: SemanticModelIR,
     layer_name_mapping: dict[str, str],
     used_constant_onnx_names: set[str],
@@ -138,7 +138,7 @@ def build_state_dict(
     semantic_ir: SemanticModelIR,
     layer_name_mapping: dict[str, str] | None = None,
     used_constant_onnx_names: set[str] | None = None,
-) -> dict[str, torch.Tensor]:
+) -> dict[str, Tensor]:
     """Build PyTorch state_dict from semantic IR.
 
     Maps parameters and constants to their state_dict keys:
@@ -155,7 +155,7 @@ def build_state_dict(
     :param used_constant_onnx_names: Set of constant ONNX names actually used in forward
     :return: PyTorch state_dict mapping
     """
-    state_dict: dict[str, torch.Tensor] = {}
+    state_dict: dict[str, Tensor] = {}
 
     if layer_name_mapping is None:
         layer_name_mapping = {}

@@ -12,6 +12,8 @@ Tests cover:
 Target: _line_optimizer.py coverage improvement from 74.3% to 88%+
 """
 
+import pytest
+
 from torchonnx.simplify._line_optimizer import (
     _convert_to_positional,
     _optimize_function_call,
@@ -157,40 +159,27 @@ class TestDefaultRemoval:
 class TestFunctionCallOptimization:
     """Test function call optimization."""
 
-    def test_optimize_function_call_f_relu(self):
-        """Test optimizing F.relu call."""
-        line = "x = F.relu(x, inplace=False)"
-        result = _optimize_function_call(line)
-        # Should optimize F.relu
-        assert "F.relu" in result
+    # [REVIEW] Parametrized: test_optimize_function_call_f_relu,
+    # test_optimize_function_call_torch_cat, test_optimize_function_call_nested_args,
+    # test_optimize_function_call_unknown_function
 
-    def test_optimize_function_call_torch_cat(self):
-        """Test optimizing torch.cat call."""
-        line = "x = torch.cat([x1, x2], dim=0)"
+    @pytest.mark.parametrize(
+        ("line", "expected_pattern"),
+        [
+            pytest.param("x = F.relu(x, inplace=False)", "F.relu", id="f_relu"),
+            pytest.param("x = torch.cat([x1, x2], dim=0)", "torch.cat", id="torch_cat"),
+            pytest.param("x = F.relu(F.conv2d(x, w))", "F.relu", id="nested_args"),
+            pytest.param(
+                "x = torch.unknown_func(arg1=1, arg2=2)",
+                "torch.unknown_func",
+                id="unknown_function",
+            ),
+        ],
+    )
+    def test_optimize_function_call(self, line, expected_pattern):
+        """Test optimizing various function call patterns."""
         result = _optimize_function_call(line)
-        # Should optimize torch.cat
-        assert "torch.cat" in result
-
-    def test_optimize_function_call_no_match(self):
-        """Test with non-matching pattern."""
-        line = "result = some_regular_function(arg)"
-        result = _optimize_function_call(line)
-        # Should return unchanged
-        assert result == line
-
-    def test_optimize_function_call_nested_args(self):
-        """Test with nested argument calls."""
-        line = "x = F.relu(F.conv2d(x, w))"
-        result = _optimize_function_call(line)
-        # Should handle nested function calls
-        assert "F.relu" in result
-
-    def test_optimize_function_call_unknown_function(self):
-        """Test with unknown function."""
-        line = "x = torch.unknown_func(arg1=1, arg2=2)"
-        result = _optimize_function_call(line)
-        # Should return mostly unchanged if function not in FUNCTION_DEFAULTS
-        assert "torch.unknown_func" in result
+        assert expected_pattern in result
 
 
 class TestRemoveFunctionDefaults:
@@ -221,50 +210,25 @@ class TestRemoveFunctionDefaults:
 class TestLineOptimization:
     """Test main optimize_line function."""
 
-    def test_optimize_line_empty(self):
-        """Test with empty line."""
-        result = optimize_line("")
-        assert result == ""
+    # [REVIEW] Parametrized: test_optimize_line_comment, test_optimize_line_class_definition,
+    # test_optimize_line_def_declaration, test_optimize_line_super_call,
+    # test_optimize_line_import_statement, test_optimize_line_from_import_statement,
+    # test_optimize_line_return_statement
 
-    def test_optimize_line_comment(self):
-        """Test with comment line."""
-        line = "# This is a comment"
-        result = optimize_line(line)
-        assert result == line
-
-    def test_optimize_line_class_definition(self):
-        """Test with class definition."""
-        line = "class MyClass:"
-        result = optimize_line(line)
-        assert result == line
-
-    def test_optimize_line_def_declaration(self):
-        """Test with def declaration."""
-        line = "def my_function():"
-        result = optimize_line(line)
-        assert result == line
-
-    def test_optimize_line_super_call(self):
-        """Test with super() call."""
-        line = "super().__init__()"
-        result = optimize_line(line)
-        assert result == line
-
-    def test_optimize_line_import_statement(self):
-        """Test with import statement."""
-        line = "import torch"
-        result = optimize_line(line)
-        assert result == line
-
-    def test_optimize_line_from_import_statement(self):
-        """Test with from-import statement."""
-        line = "from torch import nn"
-        result = optimize_line(line)
-        assert result == line
-
-    def test_optimize_line_return_statement(self):
-        """Test with return statement."""
-        line = "return output"
+    @pytest.mark.parametrize(
+        "line",
+        [
+            pytest.param("# This is a comment", id="comment"),
+            pytest.param("class MyClass:", id="class_definition"),
+            pytest.param("def my_function():", id="def_declaration"),
+            pytest.param("super().__init__()", id="super_call"),
+            pytest.param("import torch", id="import_statement"),
+            pytest.param("from torch import nn", id="from_import_statement"),
+            pytest.param("return output", id="return_statement"),
+        ],
+    )
+    def test_optimize_line_unchanged(self, line):
+        """Test that various code structures pass through unchanged."""
         result = optimize_line(line)
         assert result == line
 

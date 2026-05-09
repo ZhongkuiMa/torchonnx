@@ -14,6 +14,8 @@ Test Coverage:
 - TestCodeQuality: 2 tests - Code quality checks
 """
 
+import torch
+
 from torchonnx.simplify import add_file_header, format_code, optimize_generated_code
 
 
@@ -24,20 +26,20 @@ class TestFormatCode:
         """Test Python code formatting preserves logic."""
         unformatted = "x=1\ny = 2\nz=x+y"
         formatted = format_code(unformatted)
-        assert formatted is not None
         assert isinstance(formatted, str)
+        assert len(formatted) > 0
 
     def test_format_empty_code(self):
         """Test formatting empty code."""
         formatted = format_code("")
-        assert formatted is not None
+        assert isinstance(formatted, str)
         assert formatted == ""
 
     def test_format_multiline_code(self):
         """Test formatting multiline code."""
         code = "def foo():\n    x = 1\n    return x"
         formatted = format_code(code)
-        assert formatted is not None
+        assert isinstance(formatted, str)
         assert "def foo()" in formatted
 
     def test_format_long_line_wrapping(self):
@@ -45,7 +47,7 @@ class TestFormatCode:
         # Create a line longer than 88 characters
         long_line = "self.conv1 = nn.Conv2d(in_channels=3, out_channels=64, kernel_size=7, stride=2, padding=3)"
         formatted = format_code(long_line)
-        assert formatted is not None
+        assert isinstance(formatted, str)
         # Should either wrap or leave as-is if it can't be wrapped
         assert len(formatted) > 0
 
@@ -53,7 +55,7 @@ class TestFormatCode:
         """Test formatting class definitions with proper blank lines."""
         code = "class Model:\n    def __init__(self):\n        pass\n    def forward(self):\n        pass"
         formatted = format_code(code)
-        assert formatted is not None
+        assert isinstance(formatted, str)
         assert "class Model" in formatted
         assert "def __init__" in formatted
 
@@ -61,14 +63,14 @@ class TestFormatCode:
         """Test formatting assignment statements with function calls."""
         code = "x = some_function(arg1, arg2, arg3, arg4, arg5)"
         formatted = format_code(code)
-        assert formatted is not None
+        assert isinstance(formatted, str)
         assert "x" in formatted
 
     def test_format_preserves_indentation(self):
         """Test that formatting preserves indentation."""
         code = "class A:\n    def foo(self):\n        x = 1"
         formatted = format_code(code)
-        assert formatted is not None
+        assert isinstance(formatted, str)
         # Check that indentation is preserved
         lines = formatted.split("\n")
         assert any(line.startswith("    ") for line in lines)
@@ -85,8 +87,6 @@ class TestOptimizeCode:
 
     def test_optimize_with_state_dict_returns_tuple(self):
         """Test that optimize with state_dict returns (code, state_dict)."""
-        import torch
-
         code = "x = 1"
         state_dict = {"param": torch.tensor([1.0])}
         result = optimize_generated_code(code, state_dict)
@@ -127,7 +127,8 @@ class TestFileHeaders:
         """Test adding file header to code."""
         code = "print('hello')"
         header = add_file_header(code, "TestModel", "model.onnx")
-        assert header is not None
+        assert isinstance(header, str)
+        assert len(header) > 0
         assert "TestModel" in header
         assert "model.onnx" in header
 
@@ -161,4 +162,5 @@ class TestCodeQuality:
         """Test formatting code with imports."""
         code = "import torch\nimport torch.nn as nn\nx = 1"
         result = format_code(code)
-        assert "import torch" in result or result is not None
+        assert isinstance(result, str)
+        assert len(result) > 0

@@ -66,7 +66,7 @@ class TestConvFunctionalOperations:
 
         args = _extract_conv_args(node, initializers)
 
-        assert args is not None
+        assert isinstance(args, dict)
         # Default strides without explicit specification are added
         assert isinstance(args, dict)
 
@@ -78,7 +78,7 @@ class TestConvFunctionalOperations:
 
         args = _extract_conv_args(node, initializers)
 
-        assert args is not None
+        assert isinstance(args, dict)
         assert "padding" in args
         # Symmetric padding [1,1,1,1] should simplify to 1
         assert args["padding"] == 1 or args["padding"] == (1, 1)
@@ -101,7 +101,7 @@ class TestConvFunctionalOperations:
 
         args = _extract_conv_args(node, initializers)
 
-        assert args is not None
+        assert isinstance(args, dict)
         assert "dilation" in args
         # Dilation should be included
         assert args["dilation"] == 2 or args["dilation"] == (2, 2)
@@ -114,7 +114,7 @@ class TestConvFunctionalOperations:
 
         args = _extract_conv_args(node, initializers)
 
-        assert args is not None
+        assert isinstance(args, dict)
         assert "groups" in args
         assert args["groups"] == 2
 
@@ -145,7 +145,7 @@ class TestConvFunctionalOperations:
 
         args = _extract_conv_transpose_args(node, initializers)
 
-        assert args is not None
+        assert isinstance(args, dict)
         assert isinstance(args, dict)
 
     def test_extract_conv_transpose_args_with_output_padding(self):
@@ -156,7 +156,7 @@ class TestConvFunctionalOperations:
 
         args = _extract_conv_transpose_args(node, initializers)
 
-        assert args is not None
+        assert isinstance(args, dict)
         # output_padding should be included if non-zero
         if "output_padding" in args:
             assert args["output_padding"] != 0
@@ -179,7 +179,7 @@ class TestConvFunctionalOperations:
 
         args = _extract_conv_transpose_args(node, initializers)
 
-        assert args is not None
+        assert isinstance(args, dict)
         # output_padding with default value should be omitted
         if "output_padding" in args:
             assert args["output_padding"] != 0

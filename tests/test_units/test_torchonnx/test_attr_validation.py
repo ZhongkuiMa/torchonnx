@@ -33,8 +33,9 @@ class TestUnsupportedAttributeTypes:
         node.attribute.append(attr)
 
         attrs = extract_onnx_attrs(node, {})
-        # STRINGS type returns None
-        assert attrs.get("unsupported_strings") is None
+        # STRINGS type should not be extracted into attrs
+        assert isinstance(attrs, dict)
+        assert "unsupported_strings" not in attrs or attrs["unsupported_strings"] is None
 
     def test_attribute_type_tensors_returns_none(self):
         """Test that TENSORS attribute type is handled (returns None)."""
@@ -46,8 +47,9 @@ class TestUnsupportedAttributeTypes:
         node.attribute.append(attr)
 
         attrs = extract_onnx_attrs(node, {})
-        # TENSORS type returns None
-        assert attrs.get("unsupported_tensors") is None
+        # TENSORS type should not be extracted into attrs
+        assert isinstance(attrs, dict)
+        assert "unsupported_tensors" not in attrs or attrs["unsupported_tensors"] is None
 
     def test_attribute_type_sparse_tensor_returns_none(self):
         """Test that SPARSE_TENSOR attribute type is handled (returns None)."""
@@ -59,8 +61,9 @@ class TestUnsupportedAttributeTypes:
         node.attribute.append(attr)
 
         attrs = extract_onnx_attrs(node, {})
-        # SPARSE_TENSOR type returns None
-        assert attrs.get("unsupported_sparse") is None
+        # SPARSE_TENSOR type should not be extracted into attrs
+        assert isinstance(attrs, dict)
+        assert "unsupported_sparse" not in attrs or attrs["unsupported_sparse"] is None
 
 
 class TestValidationErrors:
@@ -128,20 +131,28 @@ class TestValidationErrors:
         with pytest.raises(ValueError, match="kernel_shape"):
             extract_onnx_attrs(node, {})
 
-    def test_maxpool_storage_order_not_zero_raises(self):
-        """Test MaxPool with storage_order != 0 raises error."""
-        node = onnx_helper.make_node(
-            "MaxPool", inputs=["X"], outputs=["Y"], kernel_shape=[3, 3], storage_order=1
-        )
-        with pytest.raises(ValueError, match="storage_order"):
-            extract_onnx_attrs(node, {})
+    # [REVIEW] Parametrized: test_maxpool_storage_order_not_zero_raises,
+    # test_maxpool_multiple_outputs_raises
 
-    def test_maxpool_multiple_outputs_raises(self):
-        """Test MaxPool with multiple outputs raises error."""
-        node = onnx_helper.make_node(
-            "MaxPool", inputs=["X"], outputs=["Y", "indices"], kernel_shape=[3, 3]
-        )
-        with pytest.raises(ValueError, match="outputs"):
+    @pytest.mark.parametrize(
+        ("make_kwargs", "match_str"),
+        [
+            pytest.param(
+                {"outputs": ["Y"], "kernel_shape": [3, 3], "storage_order": 1},
+                "storage_order",
+                id="storage_order_not_zero",
+            ),
+            pytest.param(
+                {"outputs": ["Y", "indices"], "kernel_shape": [3, 3]},
+                "outputs",
+                id="multiple_outputs",
+            ),
+        ],
+    )
+    def test_maxpool_validation_raises(self, make_kwargs, match_str):
+        """Test MaxPool validation raises for invalid configurations."""
+        node = onnx_helper.make_node("MaxPool", inputs=["X"], **make_kwargs)
+        with pytest.raises(ValueError, match=match_str):
             extract_onnx_attrs(node, {})
 
     def test_reshape_allowzero_not_zero_raises(self):
@@ -196,26 +207,22 @@ class TestRequiredAttributes:
 class TestAsymmetricPaddingValidation:
     """Test asymmetric padding validation."""
 
-    def test_conv_asymmetric_padding_raises(self):
-        """Test Conv with asymmetric padding raises error."""
-        node = onnx_helper.make_node(
-            "Conv", inputs=["X", "W"], outputs=["Y"], kernel_shape=[3, 3], pads=[1, 2, 2, 1]
-        )
-        with pytest.raises(ValueError, match="Asymmetric"):
-            extract_onnx_attrs(node, {})
+    # [REVIEW] Parametrized: test_conv_asymmetric_padding_raises,
+    # test_avgpool_asymmetric_padding_raises, test_maxpool_asymmetric_padding_raises
 
-    def test_avgpool_asymmetric_padding_raises(self):
-        """Test AveragePool with asymmetric padding raises error."""
+    @pytest.mark.parametrize(
+        ("op_type", "extra_inputs"),
+        [
+            pytest.param("Conv", ["W"], id="conv"),
+            pytest.param("AveragePool", [], id="avgpool"),
+            pytest.param("MaxPool", [], id="maxpool"),
+        ],
+    )
+    def test_asymmetric_padding_raises(self, op_type, extra_inputs):
+        """Test with asymmetric padding raises error."""
+        inputs = ["X", *extra_inputs]
         node = onnx_helper.make_node(
-            "AveragePool", inputs=["X"], outputs=["Y"], kernel_shape=[3, 3], pads=[1, 2, 2, 1]
-        )
-        with pytest.raises(ValueError, match="Asymmetric"):
-            extract_onnx_attrs(node, {})
-
-    def test_maxpool_asymmetric_padding_raises(self):
-        """Test MaxPool with asymmetric padding raises error."""
-        node = onnx_helper.make_node(
-            "MaxPool", inputs=["X"], outputs=["Y"], kernel_shape=[3, 3], pads=[1, 2, 2, 1]
+            op_type, inputs=inputs, outputs=["Y"], kernel_shape=[3, 3], pads=[1, 2, 2, 1]
         )
         with pytest.raises(ValueError, match="Asymmetric"):
             extract_onnx_attrs(node, {})

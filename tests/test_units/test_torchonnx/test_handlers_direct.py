@@ -16,13 +16,61 @@ from torchonnx.analyze import (
     OperatorClass,
     ParameterInfo,
     SemanticLayerIR,
+    SemanticModelIR,
     VariableInfo,
 )
+from torchonnx.generate._forward_gen import ForwardGenContext, set_forward_gen_context
 from torchonnx.generate._handlers._operations import (
     _compute_inferred_dim,
+    _convert_expand_semantics,
+    _format_args_with_inputs,
     _generate_literal_slice,
+    _get_input_code_names,
+    _handle_arange,
+    _handle_cast,
+    _handle_clip,
+    _handle_concat,
+    _handle_constant_of_shape,
+    _handle_conv,
+    _handle_expand,
+    _handle_gather,
+    _handle_generic_method,
+    _handle_generic_torch_function,
+    _handle_linear,
+    _handle_pad,
+    _handle_reduce,
+    _handle_reshape,
+    _handle_scatter_nd,
+    _handle_shape,
     _handle_slice,
+    _handle_split,
+    _handle_squeeze,
+    _handle_transpose,
+    _handle_unsqueeze,
     _try_narrow_slice,
+)
+from torchonnx.generate._handlers._operators import (
+    _handle_add,
+    _handle_div,
+    _handle_equal,
+    _handle_matmul,
+    _handle_mul,
+    _handle_neg,
+    _handle_pow,
+    _handle_sub,
+)
+from torchonnx.generate.code_generator import (
+    _are_from_same_source,
+    _check_expand_needs_helper,
+    _check_slice_needs_helper,
+    _detect_static_slice_lengths,
+    _extract_axes_list,
+    _extract_steps_list,
+    _extract_value_at_index,
+    _generate_helpers_from_context,
+    _get_helper_needs_from_ir,
+    _trace_to_source,
+    _try_constant_case,
 )
 
 # ===== Helper Functions for SemanticLayerIR Creation =====
@@ -74,6 +122,27 @@ def make_parameter(
         shape=shape,
         dtype=dtype,
         data=torch.randn(shape, dtype=dtype),
+    )
+
+
+def make_layer(
+    name: str,
+    onnx_op_type: str,
+    pytorch_type: str,
+    operator_class: OperatorClass = OperatorClass.OPERATION,
+    inputs: list | None = None,
+    outputs: list | None = None,
+    arguments: list | None = None,
+) -> SemanticLayerIR:
+    """Create SemanticLayerIR for tests with sensible defaults."""
+    return SemanticLayerIR(
+        name=name,
+        onnx_op_type=onnx_op_type,
+        pytorch_type=pytorch_type,
+        operator_class=operator_class,
+        inputs=inputs or [],
+        outputs=outputs or [],
+        arguments=arguments or [],
     )
 
 
@@ -341,7 +410,8 @@ class TestSliceHelperFunctions:
         )
 
         # Should generate narrow since single axis and step=1
-        assert result is not None
+        assert isinstance(result, str)
+        assert len(result) > 0
         assert "y = x.narrow" in result
         assert "1" in result  # axis
         assert "2" in result  # start
@@ -399,7 +469,7 @@ class TestSliceHelperFunctions:
         # Let me recalculate: 2*3*inferred*2 = 24 -> inferred = 2
         # But actually we want [2, 3, 3, 2] which is 36 elements
         # This test checks the actual inferred dimension value
-        assert result is not None or result is None  # Function may return None if can't infer
+        assert isinstance(result, (int, type(None)))  # Returns int if inferred, None otherwise
 
 
 # ===== TestExpandHandlerDirect =====
@@ -410,8 +480,6 @@ class TestExpandHandlerDirect:
 
     def test_expand_constant_shape_all_integers(self):
         """Test expand with constant shape and all integer output dims."""
-        from torchonnx.generate._handlers._operations import _handle_expand
-
         layer = SemanticLayerIR(
             name="expand_0",
             onnx_op_type="Expand",
@@ -434,8 +502,6 @@ class TestExpandHandlerDirect:
 
     def test_expand_dynamic_shape_emits_code(self):
         """Test expand with dynamic shape generates code."""
-        from torchonnx.generate._handlers._operations import _handle_expand
-
         layer = SemanticLayerIR(
             name="expand_0",
             onnx_op_type="Expand",
@@ -464,8 +530,6 @@ class TestPadHandlerDirect:
 
     def test_pad_constant_pads(self):
         """Test pad with constant padding values."""
-        from torchonnx.generate._handlers._operations import _handle_pad
-
         layer = SemanticLayerIR(
             name="pad_0",
             onnx_op_type="Pad",
@@ -494,8 +558,6 @@ class TestOperatorHandlersDirect:
 
     def test_add_literal_optimization(self):
         """Test add operator with literal values."""
-        from torchonnx.generate._handlers._operators import _handle_add
-
         layer = SemanticLayerIR(
             name="add_0",
             onnx_op_type="Add",
@@ -517,8 +579,6 @@ class TestOperatorHandlersDirect:
 
     def test_sub_operator(self):
         """Test sub operator."""
-        from torchonnx.generate._handlers._operators import _handle_sub
-
         layer = SemanticLayerIR(
             name="sub_0",
             onnx_op_type="Sub",
@@ -539,8 +599,6 @@ class TestOperatorHandlersDirect:
 
     def test_mul_operator(self):
         """Test mul operator."""
-        from torchonnx.generate._handlers._operators import _handle_mul
-
         layer = SemanticLayerIR(
             name="mul_0",
             onnx_op_type="Mul",
@@ -561,8 +619,6 @@ class TestOperatorHandlersDirect:
 
     def test_div_operator(self):
         """Test div operator."""
-        from torchonnx.generate._handlers._operators import _handle_div
-
         layer = SemanticLayerIR(
             name="div_0",
             onnx_op_type="Div",
@@ -583,8 +639,6 @@ class TestOperatorHandlersDirect:
 
     def test_neg_unary_operator(self):
         """Test neg unary operator."""
-        from torchonnx.generate._handlers._operators import _handle_neg
-
         layer = SemanticLayerIR(
             name="neg_0",
             onnx_op_type="Neg",
@@ -602,8 +656,6 @@ class TestOperatorHandlersDirect:
 
     def test_pow_operator_literal_exponent(self):
         """Test pow operator with literal exponent."""
-        from torchonnx.generate._handlers._operators import _handle_pow
-
         layer = SemanticLayerIR(
             name="pow_0",
             onnx_op_type="Pow",
@@ -628,9 +680,6 @@ class TestGatherHandlerDirect:
 
     def test_gather_scalar_index(self):
         """Test gather with scalar index uses bracket notation."""
-        from torchonnx.analyze.types import ArgumentInfo
-        from torchonnx.generate._handlers._operations import _handle_gather
-
         layer = SemanticLayerIR(
             name="gather_0",
             onnx_op_type="Gather",
@@ -651,8 +700,6 @@ class TestGatherHandlerDirect:
 
     def test_gather_vector_indices(self):
         """Test gather with vector indices."""
-        from torchonnx.generate._handlers._operations import _handle_gather
-
         layer = SemanticLayerIR(
             name="gather_0",
             onnx_op_type="Gather",
@@ -677,8 +724,6 @@ class TestClipHandlerDirect:
 
     def test_clip_both_bounds_constant(self):
         """Test clip with constant min and max bounds."""
-        from torchonnx.generate._handlers._operations import _handle_clip
-
         layer = SemanticLayerIR(
             name="clip_0",
             onnx_op_type="Clip",
@@ -700,8 +745,6 @@ class TestClipHandlerDirect:
 
     def test_clip_only_min_bound(self):
         """Test clip with only min bound."""
-        from torchonnx.generate._handlers._operations import _handle_clip
-
         layer = SemanticLayerIR(
             name="clip_0",
             onnx_op_type="Clip",
@@ -725,8 +768,6 @@ class TestReshapeHandlerDirect:
 
     def test_reshape_constant_shape(self):
         """Test reshape with constant target shape."""
-        from torchonnx.generate._handlers._operations import _handle_reshape
-
         layer = SemanticLayerIR(
             name="reshape_0",
             onnx_op_type="Reshape",
@@ -747,8 +788,6 @@ class TestReshapeHandlerDirect:
 
     def test_reshape_flatten_pattern(self):
         """Test reshape that flattens tensor."""
-        from torchonnx.generate._handlers._operations import _handle_reshape
-
         layer = SemanticLayerIR(
             name="reshape_0",
             onnx_op_type="Reshape",
@@ -772,9 +811,6 @@ class TestCodeGeneratorAnalysisDirect:
 
     def test_check_slice_needs_helper_all_constant(self):
         """Test _check_slice_needs_helper returns False for all constants."""
-        from torchonnx.generate._forward_gen import ForwardGenContext
-        from torchonnx.generate.code_generator import _check_slice_needs_helper
-
         layer = SemanticLayerIR(
             name="slice_0",
             onnx_op_type="Slice",
@@ -797,9 +833,6 @@ class TestCodeGeneratorAnalysisDirect:
 
     def test_check_slice_needs_helper_dynamic_starts(self):
         """Test _check_slice_needs_helper returns True for dynamic starts."""
-        from torchonnx.generate._forward_gen import ForwardGenContext
-        from torchonnx.generate.code_generator import _check_slice_needs_helper
-
         layer = SemanticLayerIR(
             name="slice_0",
             onnx_op_type="Slice",
@@ -822,8 +855,6 @@ class TestCodeGeneratorAnalysisDirect:
 
     def test_check_expand_needs_helper_known_shape(self):
         """Test _check_expand_needs_helper returns False for known shape."""
-        from torchonnx.generate.code_generator import _check_expand_needs_helper
-
         layer = SemanticLayerIR(
             name="expand_0",
             onnx_op_type="Expand",
@@ -844,8 +875,6 @@ class TestCodeGeneratorAnalysisDirect:
 
     def test_check_expand_needs_helper_dynamic_shape(self):
         """Test _check_expand_needs_helper with symbolic dimensions."""
-        from torchonnx.generate.code_generator import _check_expand_needs_helper
-
         layer = SemanticLayerIR(
             name="expand_0",
             onnx_op_type="Expand",
@@ -871,8 +900,6 @@ class TestConcatHandlerDirect:
 
     def test_concat_multiple_inputs(self):
         """Test concat with multiple inputs."""
-        from torchonnx.generate._handlers._operations import _handle_concat
-
         layer = SemanticLayerIR(
             name="concat_0",
             onnx_op_type="Concat",
@@ -898,8 +925,6 @@ class TestMatMulHandlerDirect:
 
     def test_matmul_operator(self):
         """Test matmul operator."""
-        from torchonnx.generate._handlers._operators import _handle_matmul
-
         layer = SemanticLayerIR(
             name="matmul_0",
             onnx_op_type="MatMul",
@@ -927,9 +952,6 @@ class TestConvHandlerDirect:
 
     def test_conv1d_detection(self):
         """Test conv detects 1D from 3D input."""
-        from torchonnx.analyze.types import ArgumentInfo
-        from torchonnx.generate._handlers._operations import _handle_conv
-
         layer = SemanticLayerIR(
             name="conv_0",
             onnx_op_type="Conv",
@@ -953,9 +975,6 @@ class TestConvHandlerDirect:
 
     def test_conv2d_detection(self):
         """Test conv detects 2D from 4D input."""
-        from torchonnx.analyze.types import ArgumentInfo
-        from torchonnx.generate._handlers._operations import _handle_conv
-
         layer = SemanticLayerIR(
             name="conv_0",
             onnx_op_type="Conv",
@@ -979,9 +998,6 @@ class TestConvHandlerDirect:
 
     def test_conv3d_detection(self):
         """Test conv detects 3D from 5D input."""
-        from torchonnx.analyze.types import ArgumentInfo
-        from torchonnx.generate._handlers._operations import _handle_conv
-
         layer = SemanticLayerIR(
             name="conv_0",
             onnx_op_type="Conv",
@@ -1011,8 +1027,6 @@ class TestLinearHandlerDirect:
 
     def test_linear_normal_weight_ordering(self):
         """Test linear with normal weight ordering (transB=0)."""
-        from torchonnx.generate._handlers._operations import _handle_linear
-
         layer = SemanticLayerIR(
             name="linear_0",
             onnx_op_type="Gemm",
@@ -1038,9 +1052,6 @@ class TestSplitHandlerDirect:
 
     def test_split_equal_sizes(self):
         """Test split with equal split sizes."""
-        from torchonnx.analyze.types import ArgumentInfo
-        from torchonnx.generate._handlers._operations import _handle_split
-
         layer = SemanticLayerIR(
             name="split_0",
             onnx_op_type="Split",
@@ -1065,9 +1076,6 @@ class TestSplitHandlerDirect:
 
     def test_split_unequal_sizes(self):
         """Test split with unequal split sizes."""
-        from torchonnx.analyze.types import ArgumentInfo
-        from torchonnx.generate._handlers._operations import _handle_split
-
         layer = SemanticLayerIR(
             name="split_0",
             onnx_op_type="Split",
@@ -1095,8 +1103,6 @@ class TestScatterNDHandlerDirect:
 
     def test_scatter_nd_operation(self):
         """Test ScatterND operation code generation."""
-        from torchonnx.generate._handlers._operations import _handle_scatter_nd
-
         layer = SemanticLayerIR(
             name="scatter_nd_0",
             onnx_op_type="ScatterND",
@@ -1124,8 +1130,6 @@ class TestCodeGeneratorAnalysisAdvanced:
 
     def test_detect_static_slice_lengths(self):
         """Test _detect_static_slice_lengths pattern detection."""
-        from torchonnx.generate.code_generator import _detect_static_slice_lengths
-
         layer = SemanticLayerIR(
             name="slice_0",
             onnx_op_type="Slice",
@@ -1152,14 +1156,11 @@ class TestCodeGeneratorAnalysisAdvanced:
             producer_map,
         )
 
-        # Should handle the detection
-        assert result is None or isinstance(result, (list, type(None)))
+        # Should handle the detection — returns list of static lengths or None
+        assert result is None or isinstance(result, list)
 
     def test_get_helper_needs_from_ir(self):
         """Test _get_helper_needs_from_ir analysis."""
-        from torchonnx.analyze import SemanticModelIR
-        from torchonnx.generate.code_generator import _get_helper_needs_from_ir
-
         # Create a simple semantic IR
         semantic_ir = SemanticModelIR(
             layers=[
@@ -1188,7 +1189,6 @@ class TestCodeGeneratorAnalysisAdvanced:
         ctx = _get_helper_needs_from_ir(semantic_ir, vmap_mode=False)
 
         # Should determine helper needs
-        assert ctx is not None
         assert hasattr(ctx, "needs_dynamic_slice")
 
 
@@ -1202,8 +1202,9 @@ class TestReshapeHelperFunctions:
         # Inferred: 24 / (2*3*2) = 2
         result = _compute_inferred_dim([2, 3, 4], [2, 3, -1, 2])
 
-        # Should compute the inferred dimension
-        assert result is None or isinstance(result, int)
+        # Should compute the inferred dimension: 24 / (2*3*2) = 2
+        assert isinstance(result, int)
+        assert result == 2
 
     def test_compute_inferred_dim_single_minus_one(self):
         """Test _compute_inferred_dim with single -1."""
@@ -1212,7 +1213,9 @@ class TestReshapeHelperFunctions:
         # Inferred: 6
         result = _compute_inferred_dim([6], [-1])
 
-        assert result is None or isinstance(result, int)
+        # Single -1 with 6 elements → inferred dim = 6
+        assert isinstance(result, int)
+        assert result == 6
 
 
 class TestExpandHelperFunctions:
@@ -1220,8 +1223,6 @@ class TestExpandHelperFunctions:
 
     def test_convert_expand_semantics(self):
         """Test ONNX to PyTorch expand semantics conversion."""
-        from torchonnx.generate._handlers._operations import _convert_expand_semantics
-
         # ONNX expand can add new dimensions at the front
         # PyTorch expand only broadcasts existing dimensions
         onnx_shape = [5, 1, 10]
@@ -1229,8 +1230,9 @@ class TestExpandHelperFunctions:
 
         result = _convert_expand_semantics(onnx_shape, data_shape)
 
-        # Should convert ONNX semantics to PyTorch
-        assert result is None or isinstance(result, (list, tuple))
+        # Should convert ONNX semantics to PyTorch expand args
+        assert isinstance(result, list)
+        assert len(result) > 0
 
 
 class TestPadHelperFunctions:
@@ -1238,8 +1240,6 @@ class TestPadHelperFunctions:
 
     def test_pad_dynamic_pads(self):
         """Test pad with dynamic pads parameter."""
-        from torchonnx.generate._handlers._operations import _handle_pad
-
         layer = SemanticLayerIR(
             name="pad_0",
             onnx_op_type="Pad",
@@ -1259,9 +1259,6 @@ class TestPadHelperFunctions:
 
     def test_pad_with_value(self):
         """Test pad with pad value parameter."""
-        from torchonnx.analyze.types import ArgumentInfo
-        from torchonnx.generate._handlers._operations import _handle_pad
-
         layer = SemanticLayerIR(
             name="pad_0",
             onnx_op_type="Pad",
@@ -1285,9 +1282,6 @@ class TestGatherHelperFunctions:
 
     def test_gather_with_axis(self):
         """Test gather operation with axis parameter."""
-        from torchonnx.analyze.types import ArgumentInfo
-        from torchonnx.generate._handlers._operations import _handle_gather
-
         layer = SemanticLayerIR(
             name="gather_0",
             onnx_op_type="Gather",
@@ -1311,8 +1305,6 @@ class TestArangeHandlerDirect:
 
     def test_arange_all_literals(self):
         """Test arange with all literal parameters."""
-        from torchonnx.generate._handlers._operations import _handle_arange
-
         layer = SemanticLayerIR(
             name="arange_0",
             onnx_op_type="Range",
@@ -1334,8 +1326,6 @@ class TestArangeHandlerDirect:
 
     def test_arange_dynamic_parameters(self):
         """Test arange with dynamic parameters."""
-        from torchonnx.generate._handlers._operations import _handle_arange
-
         layer = SemanticLayerIR(
             name="arange_0",
             onnx_op_type="Range",
@@ -1363,9 +1353,6 @@ class TestReduceHandlerDirect:
 
     def test_reduce_sum_with_axes(self):
         """Test reduce sum with specific axes."""
-        from torchonnx.analyze.types import ArgumentInfo
-        from torchonnx.generate._handlers._operations import _handle_reduce
-
         layer = SemanticLayerIR(
             name="sum_0",
             onnx_op_type="ReduceSum",
@@ -1383,9 +1370,6 @@ class TestReduceHandlerDirect:
 
     def test_reduce_mean_with_keepdim(self):
         """Test reduce mean with keepdim."""
-        from torchonnx.analyze.types import ArgumentInfo
-        from torchonnx.generate._handlers._operations import _handle_reduce
-
         layer = SemanticLayerIR(
             name="mean_0",
             onnx_op_type="ReduceMean",
@@ -1406,9 +1390,6 @@ class TestReduceHandlerDirect:
 
     def test_reduce_max_operation(self):
         """Test reduce max operation."""
-        from torchonnx.analyze.types import ArgumentInfo
-        from torchonnx.generate._handlers._operations import _handle_reduce
-
         layer = SemanticLayerIR(
             name="max_0",
             onnx_op_type="ReduceMax",
@@ -1428,9 +1409,6 @@ class TestReduceHandlerDirect:
 
     def test_reduce_min_operation(self):
         """Test reduce min operation."""
-        from torchonnx.analyze.types import ArgumentInfo
-        from torchonnx.generate._handlers._operations import _handle_reduce
-
         layer = SemanticLayerIR(
             name="min_0",
             onnx_op_type="ReduceMin",
@@ -1450,9 +1428,6 @@ class TestReduceHandlerDirect:
 
     def test_reduce_prod_operation(self):
         """Test reduce product operation."""
-        from torchonnx.analyze.types import ArgumentInfo
-        from torchonnx.generate._handlers._operations import _handle_reduce
-
         layer = SemanticLayerIR(
             name="prod_0",
             onnx_op_type="ReduceProd",
@@ -1476,8 +1451,6 @@ class TestShapeHandlerDirect:
 
     def test_shape_operation(self):
         """Test shape operation extraction."""
-        from torchonnx.generate._handlers._operations import _handle_shape
-
         layer = SemanticLayerIR(
             name="shape_0",
             onnx_op_type="Shape",
@@ -1499,8 +1472,6 @@ class TestConstantOfShapeHandlerDirect:
 
     def test_constant_of_shape_with_literal(self):
         """Test constant_of_shape with literal value."""
-        from torchonnx.generate._handlers._operations import _handle_constant_of_shape
-
         layer = SemanticLayerIR(
             name="const_0",
             onnx_op_type="ConstantOfShape",
@@ -1524,9 +1495,6 @@ class TestSqueezeHandlerDirect:
 
     def test_squeeze_with_axis(self):
         """Test squeeze with specific axis."""
-        from torchonnx.analyze.types import ArgumentInfo
-        from torchonnx.generate._handlers._operations import _handle_squeeze
-
         layer = SemanticLayerIR(
             name="squeeze_0",
             onnx_op_type="Squeeze",
@@ -1546,8 +1514,6 @@ class TestSqueezeHandlerDirect:
 
     def test_squeeze_all_dimensions(self):
         """Test squeeze without axis (all 1 dimensions)."""
-        from torchonnx.generate._handlers._operations import _handle_squeeze
-
         layer = SemanticLayerIR(
             name="squeeze_0",
             onnx_op_type="Squeeze",
@@ -1569,9 +1535,6 @@ class TestUnsqueezeHandlerDirect:
 
     def test_unsqueeze_with_axis(self):
         """Test unsqueeze with specific axis."""
-        from torchonnx.analyze.types import ArgumentInfo
-        from torchonnx.generate._handlers._operations import _handle_unsqueeze
-
         layer = SemanticLayerIR(
             name="unsqueeze_0",
             onnx_op_type="Unsqueeze",
@@ -1591,9 +1554,6 @@ class TestUnsqueezeHandlerDirect:
 
     def test_unsqueeze_multiple_axes(self):
         """Test unsqueeze with multiple axes."""
-        from torchonnx.analyze.types import ArgumentInfo
-        from torchonnx.generate._handlers._operations import _handle_unsqueeze
-
         layer = SemanticLayerIR(
             name="unsqueeze_0",
             onnx_op_type="Unsqueeze",
@@ -1617,9 +1577,6 @@ class TestTransposeHandlerDirect:
 
     def test_transpose_with_perm(self):
         """Test transpose with permutation."""
-        from torchonnx.analyze.types import ArgumentInfo
-        from torchonnx.generate._handlers._operations import _handle_transpose
-
         layer = SemanticLayerIR(
             name="transpose_0",
             onnx_op_type="Transpose",
@@ -1643,9 +1600,6 @@ class TestCastHandlerDirect:
 
     def test_cast_to_float32(self):
         """Test cast to float32."""
-        from torchonnx.analyze.types import ArgumentInfo
-        from torchonnx.generate._handlers._operations import _handle_cast
-
         layer = SemanticLayerIR(
             name="cast_0",
             onnx_op_type="Cast",
@@ -1665,9 +1619,6 @@ class TestCastHandlerDirect:
 
     def test_cast_to_int64(self):
         """Test cast to int64."""
-        from torchonnx.analyze.types import ArgumentInfo
-        from torchonnx.generate._handlers._operations import _handle_cast
-
         layer = SemanticLayerIR(
             name="cast_0",
             onnx_op_type="Cast",
@@ -1694,8 +1645,6 @@ class TestPatternMatching:
 
     def test_try_constant_case_both_constants(self):
         """Test _try_constant_case with both constants."""
-        from torchonnx.generate.code_generator import _try_constant_case
-
         starts = make_constant("starts", [0, 1, 2], torch.int64)
         ends = make_constant("ends", [10, 11, 12], torch.int64)
 
@@ -1705,8 +1654,6 @@ class TestPatternMatching:
 
     def test_try_constant_case_not_both_constants(self):
         """Test _try_constant_case when not both are constants."""
-        from torchonnx.generate.code_generator import _try_constant_case
-
         starts = make_variable("starts", shape=(3,))
         ends = make_constant("ends", [10, 11, 12], torch.int64)
 
@@ -1716,8 +1663,6 @@ class TestPatternMatching:
 
     def test_try_constant_case_with_step(self):
         """Test _try_constant_case with step > 1."""
-        from torchonnx.generate.code_generator import _try_constant_case
-
         starts = make_constant("starts", [0], torch.int64)
         ends = make_constant("ends", [10], torch.int64)
 
@@ -1727,8 +1672,6 @@ class TestPatternMatching:
 
     def test_try_constant_case_zero_length(self):
         """Test _try_constant_case when start >= end."""
-        from torchonnx.generate.code_generator import _try_constant_case
-
         starts = make_constant("starts", [10], torch.int64)
         ends = make_constant("ends", [5], torch.int64)
 
@@ -1738,8 +1681,6 @@ class TestPatternMatching:
 
     def test_try_constant_case_multiple_axes(self):
         """Test _try_constant_case with multi-axis indexing."""
-        from torchonnx.generate.code_generator import _try_constant_case
-
         starts = make_constant("starts", [0, 5, 10], torch.int64)
         ends = make_constant("ends", [100, 15, 20], torch.int64)
 
@@ -1753,8 +1694,6 @@ class TestPatternMatching:
 
     def test_try_constant_case_scalar_values(self):
         """Test _try_constant_case when values are scalars."""
-        from torchonnx.generate.code_generator import _try_constant_case
-
         starts = make_constant("starts", 0, torch.int64)
         ends = make_constant("ends", 10, torch.int64)
 
@@ -1768,8 +1707,6 @@ class TestHelperExtractionFunctions:
 
     def test_extract_axes_list_from_constant(self):
         """Test extracting axes from constant input."""
-        from torchonnx.generate.code_generator import _extract_axes_list
-
         axes_const = make_constant("axes", [0, 1, 2], torch.int64)
 
         result = _extract_axes_list(axes_const)
@@ -1778,25 +1715,19 @@ class TestHelperExtractionFunctions:
 
     def test_extract_axes_list_none_input(self):
         """Test extracting axes when input is None defaults to [0]."""
-        from torchonnx.generate.code_generator import _extract_axes_list
-
         result = _extract_axes_list(None)
 
         assert result == [0]
 
     def test_extract_axes_list_from_variable(self):
         """Test extracting axes from variable (should raise AssertionError)."""
-        from torchonnx.generate.code_generator import _extract_axes_list
-
         axes_var = make_variable("axes", shape=(3,))
 
-        with pytest.raises(AssertionError):
+        with pytest.raises(AssertionError, match=r"^$"):
             _extract_axes_list(axes_var)
 
     def test_extract_steps_list_from_constant(self):
         """Test extracting steps from constant input."""
-        from torchonnx.generate.code_generator import _extract_steps_list
-
         steps_const = make_constant("steps", [1, 2, 1], torch.int64)
 
         result = _extract_steps_list(steps_const, axes_len=3)
@@ -1805,24 +1736,18 @@ class TestHelperExtractionFunctions:
 
     def test_extract_steps_list_none_input(self):
         """Test extracting steps when input is None returns default [1]*axes_len."""
-        from torchonnx.generate.code_generator import _extract_steps_list
-
         result = _extract_steps_list(None, axes_len=3)
 
         assert result == [1, 1, 1]
 
     def test_extract_value_at_index_scalar(self):
         """Test extracting scalar value at index."""
-        from torchonnx.generate.code_generator import _extract_value_at_index
-
         result = _extract_value_at_index(5, 0)
 
         assert result == 5
 
     def test_extract_value_at_index_list(self):
         """Test extracting value from list at index."""
-        from torchonnx.generate.code_generator import _extract_value_at_index
-
         data = [10, 20, 30]
 
         result = _extract_value_at_index(data, 1)
@@ -1831,8 +1756,6 @@ class TestHelperExtractionFunctions:
 
     def test_extract_value_at_index_out_of_bounds(self):
         """Test extracting value with out-of-bounds index returns first element."""
-        from torchonnx.generate.code_generator import _extract_value_at_index
-
         data = [10, 20]
 
         result = _extract_value_at_index(data, 5)
@@ -1845,9 +1768,6 @@ class TestConditionalPathCoverage:
 
     def test_generate_helpers_from_context_dynamic_slice(self):
         """Test helper generation for dynamic slice."""
-        from torchonnx.generate._forward_gen import ForwardGenContext
-        from torchonnx.generate.code_generator import _generate_helpers_from_context
-
         # Create context indicating dynamic slice is needed
         context = ForwardGenContext()
         context.needs_dynamic_slice = True
@@ -1861,9 +1781,6 @@ class TestConditionalPathCoverage:
 
     def test_generate_helpers_scatter_nd_standard(self):
         """Test helper generation for scatter_nd in standard mode."""
-        from torchonnx.generate._forward_gen import ForwardGenContext
-        from torchonnx.generate.code_generator import _generate_helpers_from_context
-
         context = ForwardGenContext()
         context.needs_scatter_nd = True
         context.vmap_mode = False
@@ -1875,9 +1792,6 @@ class TestConditionalPathCoverage:
 
     def test_generate_helpers_scatter_nd_vmap(self):
         """Test helper generation for scatter_nd in vmap mode."""
-        from torchonnx.generate._forward_gen import ForwardGenContext
-        from torchonnx.generate.code_generator import _generate_helpers_from_context
-
         context = ForwardGenContext()
         context.needs_scatter_nd = True
         context.vmap_mode = True
@@ -1889,9 +1803,6 @@ class TestConditionalPathCoverage:
 
     def test_generate_helpers_expand_standard(self):
         """Test helper generation for expand in standard mode."""
-        from torchonnx.generate._forward_gen import ForwardGenContext
-        from torchonnx.generate.code_generator import _generate_helpers_from_context
-
         context = ForwardGenContext()
         context.needs_dynamic_expand = True
         context.vmap_mode = False
@@ -1903,9 +1814,6 @@ class TestConditionalPathCoverage:
 
     def test_generate_helpers_expand_vmap(self):
         """Test helper generation for expand in vmap mode."""
-        from torchonnx.generate._forward_gen import ForwardGenContext
-        from torchonnx.generate.code_generator import _generate_helpers_from_context
-
         context = ForwardGenContext()
         context.needs_dynamic_expand = True
         context.vmap_mode = True
@@ -1917,9 +1825,6 @@ class TestConditionalPathCoverage:
 
     def test_check_slice_needs_helper_narrow_optimization(self):
         """Test that slice with narrow-compatible params doesn't need helper."""
-        from torchonnx.generate._forward_gen import ForwardGenContext
-        from torchonnx.generate.code_generator import _check_slice_needs_helper
-
         # Create a semantic layer for narrow-compatible slice
         starts = make_constant("starts", [0], torch.int64)
         ends = make_constant("ends", [10], torch.int64)
@@ -1950,9 +1855,6 @@ class TestConditionalPathCoverage:
 
     def test_check_slice_needs_helper_dynamic_starts(self):
         """Test that slice with dynamic starts needs helper."""
-        from torchonnx.generate._forward_gen import ForwardGenContext
-        from torchonnx.generate.code_generator import _check_slice_needs_helper
-
         # Create a semantic layer with dynamic starts
         starts = make_variable("starts", shape=(1,))
         ends = make_constant("ends", [10], torch.int64)
@@ -1975,8 +1877,6 @@ class TestConditionalPathCoverage:
 
     def test_check_expand_needs_helper_known_output_shape(self):
         """Test that expand with known output shape doesn't need helper."""
-        from torchonnx.generate.code_generator import _check_expand_needs_helper
-
         # Create expand layer with known output shape
         shape_const = make_constant("shape", [2, 3, 4], torch.int64)
 
@@ -1997,8 +1897,6 @@ class TestConditionalPathCoverage:
 
     def test_check_expand_needs_helper_dynamic_shape(self):
         """Test that expand with dynamic shape needs helper."""
-        from torchonnx.generate.code_generator import _check_expand_needs_helper
-
         # Create expand layer with dynamic shape
         shape_var = make_variable("shape", shape=(3,))
 
@@ -2023,8 +1921,6 @@ class TestGraphTraversalFunctions:
 
     def test_are_from_same_source_identical_variables(self):
         """Test that identical variables are from same source."""
-        from torchonnx.generate.code_generator import _are_from_same_source
-
         var1 = make_variable("x", shape=(3,))
         var2 = make_variable("x", shape=(3,))
 
@@ -2035,8 +1931,6 @@ class TestGraphTraversalFunctions:
 
     def test_are_from_same_source_different_variables(self):
         """Test that different variables are from different sources."""
-        from torchonnx.generate.code_generator import _are_from_same_source
-
         var1 = make_variable("x", shape=(3,))
         var2 = make_variable("y", shape=(3,))
 
@@ -2047,8 +1941,6 @@ class TestGraphTraversalFunctions:
 
     def test_trace_to_source_direct_variable(self):
         """Test tracing variable that is itself a source."""
-        from torchonnx.generate.code_generator import _trace_to_source
-
         var = make_variable("x", shape=(3,))
 
         result = _trace_to_source(var, {})
@@ -2058,8 +1950,6 @@ class TestGraphTraversalFunctions:
 
     def test_trace_to_source_with_no_producer_map_entry(self):
         """Test tracing variable with no producer in map."""
-        from torchonnx.generate.code_generator import _trace_to_source
-
         var = make_variable("x", shape=(3,))
         producer_map = {}
 
@@ -2070,8 +1960,6 @@ class TestGraphTraversalFunctions:
 
     def test_try_constant_case_negative_length(self):
         """Test slice with start > end returns 0."""
-        from torchonnx.generate.code_generator import _try_constant_case
-
         starts = make_constant("starts", [10], torch.int64)
         ends = make_constant("ends", [5], torch.int64)
 
@@ -2082,8 +1970,6 @@ class TestGraphTraversalFunctions:
 
     def test_try_constant_case_with_large_step(self):
         """Test slice with large step size."""
-        from torchonnx.generate.code_generator import _try_constant_case
-
         starts = make_constant("starts", [0], torch.int64)
         ends = make_constant("ends", [10], torch.int64)
 
@@ -2094,8 +1980,6 @@ class TestGraphTraversalFunctions:
 
     def test_extract_value_at_index_scalar_data(self):
         """Test extracting from scalar data."""
-        from torchonnx.generate.code_generator import _extract_value_at_index
-
         result = _extract_value_at_index(42, 0)
 
         # Scalar returns itself
@@ -2103,17 +1987,12 @@ class TestGraphTraversalFunctions:
 
     def test_extract_value_at_index_single_element_list(self):
         """Test extracting from single-element list."""
-        from torchonnx.generate.code_generator import _extract_value_at_index
-
         result = _extract_value_at_index([99], 0)
 
         assert result == 99
 
     def test_get_helper_needs_from_ir_slice_vmap_mode(self):
         """Test helper needs detection for Slice in vmap mode."""
-        from torchonnx.analyze import SemanticModelIR
-        from torchonnx.generate.code_generator import _get_helper_needs_from_ir
-
         # Create a semantic IR with dynamic slice
         starts = make_variable("starts", shape=(1,))
         ends = make_variable("ends", shape=(1,))
@@ -2146,9 +2025,6 @@ class TestGraphTraversalFunctions:
 
     def test_get_helper_needs_from_ir_scatter_nd(self):
         """Test helper needs detection for ScatterND."""
-        from torchonnx.analyze import SemanticModelIR
-        from torchonnx.generate.code_generator import _get_helper_needs_from_ir
-
         scatter_layer = SemanticLayerIR(
             name="scatter_nd_0",
             onnx_op_type="ScatterND",
@@ -2180,9 +2056,6 @@ class TestGraphTraversalFunctions:
 
     def test_get_helper_needs_from_ir_expand(self):
         """Test helper needs detection for Expand."""
-        from torchonnx.analyze import SemanticModelIR
-        from torchonnx.generate.code_generator import _get_helper_needs_from_ir
-
         # Create expand layer with dynamic shape
         shape_var = make_variable("shape", shape=(3,))
 
@@ -2220,8 +2093,6 @@ class TestGenericMethodHandlers:
 
     def test_sign_method_handling(self):
         """Test sign method handler."""
-        from torchonnx.generate._handlers._operations import _handle_generic_method
-
         layer = SemanticLayerIR(
             name="sign_0",
             onnx_op_type="Sign",
@@ -2239,8 +2110,6 @@ class TestGenericMethodHandlers:
 
     def test_cos_method_handling(self):
         """Test cos method handler."""
-        from torchonnx.generate._handlers._operations import _handle_generic_method
-
         layer = SemanticLayerIR(
             name="cos_0",
             onnx_op_type="Cos",
@@ -2258,8 +2127,6 @@ class TestGenericMethodHandlers:
 
     def test_sin_method_handling(self):
         """Test sin method handler."""
-        from torchonnx.generate._handlers._operations import _handle_generic_method
-
         layer = SemanticLayerIR(
             name="sin_0",
             onnx_op_type="Sin",
@@ -2277,8 +2144,6 @@ class TestGenericMethodHandlers:
 
     def test_floor_method_handling(self):
         """Test floor method handler."""
-        from torchonnx.generate._handlers._operations import _handle_generic_method
-
         layer = SemanticLayerIR(
             name="floor_0",
             onnx_op_type="Floor",
@@ -2300,8 +2165,6 @@ class TestGenericTorchFunctionHandlers:
 
     def test_argmax_function_handling(self):
         """Test torch.argmax handler."""
-        from torchonnx.generate._handlers._operations import _handle_generic_torch_function
-
         layer = SemanticLayerIR(
             name="argmax_0",
             onnx_op_type="ArgMax",
@@ -2320,8 +2183,6 @@ class TestGenericTorchFunctionHandlers:
 
     def test_where_function_handling(self):
         """Test torch.where handler."""
-        from torchonnx.generate._handlers._operations import _handle_generic_torch_function
-
         layer = SemanticLayerIR(
             name="where_0",
             onnx_op_type="Where",
@@ -2343,8 +2204,6 @@ class TestGenericTorchFunctionHandlers:
 
     def test_min_function_handling(self):
         """Test torch.min handler."""
-        from torchonnx.generate._handlers._operations import _handle_generic_torch_function
-
         layer = SemanticLayerIR(
             name="min_0",
             onnx_op_type="Min",
@@ -2362,8 +2221,6 @@ class TestGenericTorchFunctionHandlers:
 
     def test_max_function_handling(self):
         """Test torch.max handler."""
-        from torchonnx.generate._handlers._operations import _handle_generic_torch_function
-
         layer = SemanticLayerIR(
             name="max_0",
             onnx_op_type="Max",
@@ -2385,8 +2242,6 @@ class TestComplexHandlerEdgeCases:
 
     def test_split_with_equal_chunks(self):
         """Test split handler with equal split sizes."""
-        from torchonnx.generate._handlers._operations import _handle_split
-
         layer = SemanticLayerIR(
             name="split_0",
             onnx_op_type="Split",
@@ -2410,8 +2265,6 @@ class TestComplexHandlerEdgeCases:
 
     def test_split_with_unequal_chunks(self):
         """Test split handler with unequal split sizes."""
-        from torchonnx.generate._handlers._operations import _handle_split
-
         layer = SemanticLayerIR(
             name="split_1",
             onnx_op_type="Split",
@@ -2437,8 +2290,6 @@ class TestComplexHandlerEdgeCases:
 
     def test_cast_to_float(self):
         """Test cast handler for float conversion."""
-        from torchonnx.generate._handlers._operations import _handle_cast
-
         layer = SemanticLayerIR(
             name="cast_0",
             onnx_op_type="Cast",
@@ -2451,13 +2302,11 @@ class TestComplexHandlerEdgeCases:
 
         code = _handle_cast(layer, {})
 
+        assert isinstance(code, str)
         assert "y = " in code
-        assert code is not None
 
     def test_cast_to_int64(self):
         """Test cast handler for int64 conversion."""
-        from torchonnx.generate._handlers._operations import _handle_cast
-
         layer = SemanticLayerIR(
             name="cast_1",
             onnx_op_type="Cast",
@@ -2470,13 +2319,11 @@ class TestComplexHandlerEdgeCases:
 
         code = _handle_cast(layer, {})
 
+        assert isinstance(code, str)
         assert "y = " in code
-        assert code is not None
 
     def test_pad_constant_mode(self):
         """Test pad handler with constant mode."""
-        from torchonnx.generate._handlers._operations import _handle_pad
-
         layer = SemanticLayerIR(
             name="pad_0",
             onnx_op_type="Pad",
@@ -2497,8 +2344,6 @@ class TestComplexHandlerEdgeCases:
 
     def test_linear_with_bias(self):
         """Test linear handler with bias."""
-        from torchonnx.generate._handlers._operations import _handle_linear
-
         layer = SemanticLayerIR(
             name="linear_0",
             onnx_op_type="Gemm",
@@ -2520,8 +2365,6 @@ class TestComplexHandlerEdgeCases:
 
     def test_linear_without_bias(self):
         """Test linear handler without bias."""
-        from torchonnx.generate._handlers._operations import _handle_linear
-
         layer = SemanticLayerIR(
             name="linear_1",
             onnx_op_type="Gemm",
@@ -2541,8 +2384,6 @@ class TestComplexHandlerEdgeCases:
 
     def test_arange_with_all_constants(self):
         """Test arange handler with constant start/stop/step."""
-        from torchonnx.generate._handlers._operations import _handle_arange
-
         layer = SemanticLayerIR(
             name="arange_0",
             onnx_op_type="Range",
@@ -2564,8 +2405,6 @@ class TestComplexHandlerEdgeCases:
 
     def test_constant_of_shape_with_value(self):
         """Test constant_of_shape with value parameter."""
-        from torchonnx.generate._handlers._operations import _handle_constant_of_shape
-
         layer = SemanticLayerIR(
             name="const_0",
             onnx_op_type="ConstantOfShape",
@@ -2586,8 +2425,6 @@ class TestReduceOperations:
 
     def test_reduce_mean_with_axes_and_keepdim(self):
         """Test mean reduction with axes and keepdim."""
-        from torchonnx.generate._handlers._operations import _handle_reduce
-
         layer = SemanticLayerIR(
             name="mean_0",
             onnx_op_type="ReduceMean",
@@ -2608,8 +2445,6 @@ class TestReduceOperations:
 
     def test_reduce_sum_no_axes(self):
         """Test sum reduction without axes (reduce all)."""
-        from torchonnx.generate._handlers._operations import _handle_reduce
-
         layer = SemanticLayerIR(
             name="sum_0",
             onnx_op_type="ReduceSum",
@@ -2627,8 +2462,6 @@ class TestReduceOperations:
 
     def test_reduce_max_with_axis(self):
         """Test max reduction with axis."""
-        from torchonnx.generate._handlers._operations import _handle_reduce
-
         layer = SemanticLayerIR(
             name="max_0",
             onnx_op_type="ReduceMax",
@@ -2648,8 +2481,6 @@ class TestReduceOperations:
 
     def test_reduce_min_with_axis(self):
         """Test min reduction with axis."""
-        from torchonnx.generate._handlers._operations import _handle_reduce
-
         layer = SemanticLayerIR(
             name="min_0",
             onnx_op_type="ReduceMin",
@@ -2669,8 +2500,6 @@ class TestReduceOperations:
 
     def test_reduce_prod_all(self):
         """Test product reduction over all dimensions."""
-        from torchonnx.generate._handlers._operations import _handle_reduce
-
         layer = SemanticLayerIR(
             name="prod_0",
             onnx_op_type="ReduceProd",
@@ -2691,8 +2520,6 @@ class TestShapeOperations:
 
     def test_shape_operation(self):
         """Test shape operation."""
-        from torchonnx.generate._handlers._operations import _handle_shape
-
         layer = SemanticLayerIR(
             name="shape_0",
             onnx_op_type="Shape",
@@ -2710,8 +2537,6 @@ class TestShapeOperations:
 
     def test_reshape_to_1d(self):
         """Test reshape to 1D."""
-        from torchonnx.generate._handlers._operations import _handle_reshape
-
         layer = SemanticLayerIR(
             name="reshape_0",
             onnx_op_type="Reshape",
@@ -2732,8 +2557,6 @@ class TestShapeOperations:
 
     def test_reshape_with_inferred_dim(self):
         """Test reshape with -1 inferred dimension."""
-        from torchonnx.generate._handlers._operations import _handle_reshape
-
         layer = SemanticLayerIR(
             name="reshape_1",
             onnx_op_type="Reshape",
@@ -2753,8 +2576,6 @@ class TestShapeOperations:
 
     def test_transpose_simple(self):
         """Test simple transpose."""
-        from torchonnx.generate._handlers._operations import _handle_transpose
-
         layer = SemanticLayerIR(
             name="transpose_0",
             onnx_op_type="Transpose",
@@ -2774,8 +2595,6 @@ class TestShapeOperations:
 
     def test_squeeze_single_dim(self):
         """Test squeeze with single dimension."""
-        from torchonnx.generate._handlers._operations import _handle_squeeze
-
         layer = SemanticLayerIR(
             name="squeeze_0",
             onnx_op_type="Squeeze",
@@ -2795,8 +2614,6 @@ class TestShapeOperations:
 
     def test_squeeze_all_dims(self):
         """Test squeeze all dimensions."""
-        from torchonnx.generate._handlers._operations import _handle_squeeze
-
         layer = SemanticLayerIR(
             name="squeeze_1",
             onnx_op_type="Squeeze",
@@ -2813,8 +2630,6 @@ class TestShapeOperations:
 
     def test_unsqueeze_single(self):
         """Test unsqueeze adding single dimension."""
-        from torchonnx.generate._handlers._operations import _handle_unsqueeze
-
         layer = SemanticLayerIR(
             name="unsqueeze_0",
             onnx_op_type="Unsqueeze",
@@ -2838,8 +2653,6 @@ class TestGatherAndIndexing:
 
     def test_gather_with_axis(self):
         """Test gather with specific axis."""
-        from torchonnx.generate._handlers._operations import _handle_gather
-
         layer = SemanticLayerIR(
             name="gather_0",
             onnx_op_type="Gather",
@@ -2862,8 +2675,6 @@ class TestGatherAndIndexing:
 
     def test_concat_multiple_inputs(self):
         """Test concatenation with multiple inputs."""
-        from torchonnx.generate._handlers._operations import _handle_concat
-
         layer = SemanticLayerIR(
             name="concat_0",
             onnx_op_type="Concat",
@@ -2891,8 +2702,6 @@ class TestConvolutionOperations:
 
     def test_conv1d_detection(self):
         """Test 1D convolution detection from shape."""
-        from torchonnx.generate._handlers._operations import _handle_conv
-
         layer = SemanticLayerIR(
             name="conv_0",
             onnx_op_type="Conv",
@@ -2913,8 +2722,6 @@ class TestConvolutionOperations:
 
     def test_conv2d_detection(self):
         """Test 2D convolution detection from shape."""
-        from torchonnx.generate._handlers._operations import _handle_conv
-
         layer = SemanticLayerIR(
             name="conv_1",
             onnx_op_type="Conv",
@@ -2935,8 +2742,6 @@ class TestConvolutionOperations:
 
     def test_conv3d_detection(self):
         """Test 3D convolution detection from shape."""
-        from torchonnx.generate._handlers._operations import _handle_conv
-
         layer = SemanticLayerIR(
             name="conv_2",
             onnx_op_type="Conv",
@@ -2960,8 +2765,6 @@ class TestInterpolationAndResize:
 
     def test_interpolate_nearest_mode(self):
         """Test interpolate with nearest mode."""
-        from torchonnx.generate._handlers._operations import _handle_generic_torch_function
-
         layer = SemanticLayerIR(
             name="interp_0",
             onnx_op_type="Resize",
@@ -2985,8 +2788,6 @@ class TestImportantUtilityFunctions:
 
     def test_get_input_code_names_with_constants(self):
         """Test input code name generation with constants."""
-        from torchonnx.generate._handlers._operations import _get_input_code_names
-
         layer = SemanticLayerIR(
             name="test_0",
             onnx_op_type="Add",
@@ -3008,8 +2809,6 @@ class TestImportantUtilityFunctions:
 
     def test_get_input_code_names_with_parameters(self):
         """Test input code name generation with parameters."""
-        from torchonnx.generate._handlers._operations import _get_input_code_names
-
         layer = SemanticLayerIR(
             name="test_1",
             onnx_op_type="MatMul",
@@ -3037,8 +2836,6 @@ class TestImportantUtilityFunctions:
 
     def test_format_args_with_inputs_and_kwargs(self):
         """Test argument formatting with inputs and kwargs."""
-        from torchonnx.generate._handlers._operations import _format_args_with_inputs
-
         layer = SemanticLayerIR(
             name="test_0",
             onnx_op_type="Slice",
@@ -3070,8 +2867,6 @@ class TestSliceHandlerAdvanced:
 
     def test_slice_int64_max_end_value(self):
         """Test slice with INT64_MAX as end value (omit end in code)."""
-        from torchonnx.generate._handlers._operations import _handle_slice
-
         int64_max = 9223372036854775807
         layer = SemanticLayerIR(
             name="slice_0",
@@ -3096,8 +2891,6 @@ class TestSliceHandlerAdvanced:
 
     def test_slice_negative_step(self):
         """Test slice with negative step for reverse indexing."""
-        from torchonnx.generate._handlers._operations import _handle_slice
-
         layer = SemanticLayerIR(
             name="slice_0",
             onnx_op_type="Slice",
@@ -3121,8 +2914,6 @@ class TestSliceHandlerAdvanced:
 
     def test_slice_empty_range(self):
         """Test slice with empty range (start >= end without negative step)."""
-        from torchonnx.generate._handlers._operations import _handle_slice
-
         layer = SemanticLayerIR(
             name="slice_0",
             onnx_op_type="Slice",
@@ -3144,8 +2935,6 @@ class TestSliceHandlerAdvanced:
 
     def test_slice_dynamic_with_narrowable_length(self):
         """Test slice detection of static length for narrowing."""
-        from torchonnx.generate._handlers._operations import _handle_slice
-
         layer = SemanticLayerIR(
             name="slice_0",
             onnx_op_type="Slice",
@@ -3167,8 +2956,6 @@ class TestSliceHandlerAdvanced:
 
     def test_slice_multi_axis_complex(self):
         """Test slice with multiple axes and mixed constant/dynamic parameters."""
-        from torchonnx.generate._handlers._operations import _handle_slice
-
         layer = SemanticLayerIR(
             name="slice_0",
             onnx_op_type="Slice",
@@ -3195,8 +2982,6 @@ class TestExpandHandlerAdvanced:
 
     def test_expand_with_negative_one_dimensions(self):
         """Test expand with -1 dimensions (copy dimension from input)."""
-        from torchonnx.generate._handlers._operations import _handle_expand
-
         layer = SemanticLayerIR(
             name="expand_0",
             onnx_op_type="Expand",
@@ -3216,8 +3001,6 @@ class TestExpandHandlerAdvanced:
 
     def test_expand_scalar_broadcast(self):
         """Test expand of scalar-like tensor."""
-        from torchonnx.generate._handlers._operations import _handle_expand
-
         layer = SemanticLayerIR(
             name="expand_0",
             onnx_op_type="Expand",
@@ -3241,8 +3024,6 @@ class TestPadHandlerAdvanced:
 
     def test_pad_reflect_mode(self):
         """Test pad with reflect mode."""
-        from torchonnx.generate._handlers._operations import _handle_pad
-
         layer = SemanticLayerIR(
             name="pad_0",
             onnx_op_type="Pad",
@@ -3262,8 +3043,6 @@ class TestPadHandlerAdvanced:
 
     def test_pad_non_zero_value(self):
         """Test pad with non-zero padding value."""
-        from torchonnx.generate._handlers._operations import _handle_pad
-
         layer = SemanticLayerIR(
             name="pad_0",
             onnx_op_type="Pad",
@@ -3287,8 +3066,6 @@ class TestReshapeHandlerAdvanced:
 
     def test_reshape_infer_dimension_negative_one(self):
         """Test reshape with -1 dimension inference."""
-        from torchonnx.generate._handlers._operations import _handle_reshape
-
         layer = SemanticLayerIR(
             name="reshape_0",
             onnx_op_type="Reshape",
@@ -3308,8 +3085,6 @@ class TestReshapeHandlerAdvanced:
 
     def test_reshape_flatten_to_vector(self):
         """Test reshape as flatten operation."""
-        from torchonnx.generate._handlers._operations import _handle_reshape
-
         layer = SemanticLayerIR(
             name="reshape_0",
             onnx_op_type="Reshape",
@@ -3333,8 +3108,6 @@ class TestReduceOperationsAdvanced:
 
     def test_reduce_mean_multi_axis_keepdim(self):
         """Test reduce_mean with multiple axes and keepdim=True."""
-        from torchonnx.generate._handlers._operations import _handle_reduce
-
         layer = SemanticLayerIR(
             name="reduce_mean_0",
             onnx_op_type="ReduceMean",
@@ -3355,8 +3128,6 @@ class TestReduceOperationsAdvanced:
 
     def test_reduce_sum_no_axes_all_reduce(self):
         """Test reduce_sum without axes (reduce all dimensions)."""
-        from torchonnx.generate._handlers._operations import _handle_reduce
-
         layer = SemanticLayerIR(
             name="reduce_sum_0",
             onnx_op_type="ReduceSum",
@@ -3378,8 +3149,6 @@ class TestGatherHandlerAdvanced:
 
     def test_gather_2d_indices(self):
         """Test gather with 2D indices."""
-        from torchonnx.generate._handlers._operations import _handle_gather
-
         layer = SemanticLayerIR(
             name="gather_0",
             onnx_op_type="Gather",
@@ -3399,8 +3168,6 @@ class TestGatherHandlerAdvanced:
 
     def test_gather_negative_axis(self):
         """Test gather with negative axis."""
-        from torchonnx.generate._handlers._operations import _handle_gather
-
         layer = SemanticLayerIR(
             name="gather_0",
             onnx_op_type="Gather",
@@ -3424,8 +3191,6 @@ class TestConcatHandlerAdvanced:
 
     def test_concat_negative_axis(self):
         """Test concat with negative axis."""
-        from torchonnx.generate._handlers._operations import _handle_concat
-
         layer = SemanticLayerIR(
             name="concat_0",
             onnx_op_type="Concat",
@@ -3446,8 +3211,6 @@ class TestConcatHandlerAdvanced:
 
     def test_concat_many_inputs(self):
         """Test concat with many inputs."""
-        from torchonnx.generate._handlers._operations import _handle_concat
-
         layer = SemanticLayerIR(
             name="concat_0",
             onnx_op_type="Concat",
@@ -3473,8 +3236,6 @@ class TestSplitHandlerAdvanced:
 
     def test_split_unequal_sizes(self):
         """Test split with unequal split sizes."""
-        from torchonnx.generate._handlers._operations import _handle_split
-
         layer = SemanticLayerIR(
             name="split_0",
             onnx_op_type="Split",
@@ -3498,8 +3259,6 @@ class TestSplitHandlerAdvanced:
 
     def test_split_3d_tensor(self):
         """Test split on 3D tensor."""
-        from torchonnx.generate._handlers._operations import _handle_split
-
         layer = SemanticLayerIR(
             name="split_0",
             onnx_op_type="Split",
@@ -3526,8 +3285,6 @@ class TestLinearHandlerAdvanced:
 
     def test_linear_with_transb_flag(self):
         """Test linear with transB=1 (transposed weights)."""
-        from torchonnx.generate._handlers._operations import _handle_linear
-
         layer = SemanticLayerIR(
             name="gemm_0",
             onnx_op_type="Gemm",
@@ -3548,8 +3305,6 @@ class TestLinearHandlerAdvanced:
 
     def test_linear_with_alpha_beta(self):
         """Test linear (gemm) with alpha and beta scaling factors."""
-        from torchonnx.generate._handlers._operations import _handle_linear
-
         layer = SemanticLayerIR(
             name="gemm_0",
             onnx_op_type="Gemm",
@@ -3577,8 +3332,6 @@ class TestClipHandlerAdvanced:
 
     def test_clip_min_only(self):
         """Test clip with only minimum value."""
-        from torchonnx.generate._handlers._operations import _handle_clip
-
         layer = SemanticLayerIR(
             name="clip_0",
             onnx_op_type="Clip",
@@ -3599,8 +3352,6 @@ class TestClipHandlerAdvanced:
 
     def test_clip_max_only(self):
         """Test clip with only maximum value."""
-        from torchonnx.generate._handlers._operations import _handle_clip
-
         layer = SemanticLayerIR(
             name="clip_0",
             onnx_op_type="Clip",
@@ -3621,8 +3372,6 @@ class TestClipHandlerAdvanced:
 
     def test_clip_tensor_bounds(self):
         """Test clip with tensor min/max bounds."""
-        from torchonnx.generate._handlers._operations import _handle_clip
-
         layer = SemanticLayerIR(
             name="clip_0",
             onnx_op_type="Clip",
@@ -3647,8 +3396,6 @@ class TestArangeHandlerAdvanced:
 
     def test_arange_runtime_parameters(self):
         """Test arange with runtime parameters (not all constants)."""
-        from torchonnx.generate._handlers._operations import _handle_arange
-
         layer = SemanticLayerIR(
             name="arange_0",
             onnx_op_type="Range",
@@ -3670,8 +3417,6 @@ class TestArangeHandlerAdvanced:
 
     def test_arange_float_step(self):
         """Test arange with float step size."""
-        from torchonnx.generate._handlers._operations import _handle_arange
-
         layer = SemanticLayerIR(
             name="arange_0",
             onnx_op_type="Range",
@@ -3697,8 +3442,6 @@ class TestTransposeHandlerAdvanced:
 
     def test_transpose_identity_permutation(self):
         """Test transpose that is essentially identity (same order)."""
-        from torchonnx.generate._handlers._operations import _handle_transpose
-
         layer = SemanticLayerIR(
             name="transpose_0",
             onnx_op_type="Transpose",
@@ -3715,8 +3458,6 @@ class TestTransposeHandlerAdvanced:
 
     def test_transpose_complex_permutation(self):
         """Test transpose with complex permutation."""
-        from torchonnx.generate._handlers._operations import _handle_transpose
-
         layer = SemanticLayerIR(
             name="transpose_0",
             onnx_op_type="Transpose",
@@ -3738,8 +3479,6 @@ class TestSqueezeUnsqueezeAdvanced:
 
     def test_squeeze_multiple_axes(self):
         """Test squeeze removing multiple singleton dimensions."""
-        from torchonnx.generate._handlers._operations import _handle_squeeze
-
         layer = SemanticLayerIR(
             name="squeeze_0",
             onnx_op_type="Squeeze",
@@ -3757,8 +3496,6 @@ class TestSqueezeUnsqueezeAdvanced:
 
     def test_unsqueeze_at_end(self):
         """Test unsqueeze adding dimension at the end."""
-        from torchonnx.generate._handlers._operations import _handle_unsqueeze
-
         layer = SemanticLayerIR(
             name="unsqueeze_0",
             onnx_op_type="Unsqueeze",
@@ -3780,8 +3517,6 @@ class TestCastHandlerAdvanced:
 
     def test_cast_to_various_dtypes(self):
         """Test cast to various dtype targets."""
-        from torchonnx.generate._handlers._operations import _handle_cast
-
         for target_dtype in [
             "float32",
             "float64",
@@ -3811,8 +3546,6 @@ class TestCastHandlerAdvanced:
 
     def test_cast_from_float_to_int(self):
         """Test cast from float to int."""
-        from torchonnx.generate._handlers._operations import _handle_cast
-
         layer = SemanticLayerIR(
             name="cast_0",
             onnx_op_type="Cast",
@@ -3833,8 +3566,6 @@ class TestOperatorHandlersAdvanced:
 
     def test_add_vector_literals(self):
         """Test add with small vector literal constants."""
-        from torchonnx.generate._handlers._operators import _handle_add
-
         layer = SemanticLayerIR(
             name="add_0",
             onnx_op_type="Add",
@@ -3855,8 +3586,6 @@ class TestOperatorHandlersAdvanced:
 
     def test_mul_scalar_constant(self):
         """Test mul with scalar constant."""
-        from torchonnx.generate._handlers._operators import _handle_mul
-
         layer = SemanticLayerIR(
             name="mul_0",
             onnx_op_type="Mul",
@@ -3877,8 +3606,6 @@ class TestOperatorHandlersAdvanced:
 
     def test_pow_integer_exponent(self):
         """Test power with integer exponent."""
-        from torchonnx.generate._handlers._operators import _handle_pow
-
         layer = SemanticLayerIR(
             name="pow_0",
             onnx_op_type="Pow",
@@ -3899,8 +3626,6 @@ class TestOperatorHandlersAdvanced:
 
     def test_matmul_buffer_to_buffer(self):
         """Test matmul with buffer inputs."""
-        from torchonnx.generate._handlers._operators import _handle_matmul
-
         layer = SemanticLayerIR(
             name="matmul_0",
             onnx_op_type="MatMul",
@@ -3925,8 +3650,6 @@ class TestConvolutionHandlerAdvanced:
 
     def test_conv1d_detection_from_shape(self):
         """Test conv handler detects 1D from input shape."""
-        from torchonnx.generate._handlers._operations import _handle_conv
-
         layer = SemanticLayerIR(
             name="conv_0",
             onnx_op_type="Conv",
@@ -3950,8 +3673,6 @@ class TestConvolutionHandlerAdvanced:
 
     def test_conv3d_detection_from_shape(self):
         """Test conv handler detects 3D from input shape."""
-        from torchonnx.generate._handlers._operations import _handle_conv
-
         layer = SemanticLayerIR(
             name="conv_0",
             onnx_op_type="Conv",
@@ -3989,9 +3710,6 @@ class TestSliceHandlerVmapMode:
 
     def test_slice_vmap_with_dynamic_starts_ends(self):
         """Test slice in vmap mode with both dynamic starts and ends."""
-        from torchonnx.generate._forward_gen import ForwardGenContext
-        from torchonnx.generate._handlers._operations import _handle_slice
-
         context = ForwardGenContext()
         context.vmap_mode = True
         context.first_input_name = "x"
@@ -4017,12 +3735,6 @@ class TestSliceHandlerVmapMode:
 
     def test_slice_with_vmap_static_length_hints(self):
         """Test slice with pre-computed static lengths for vmap."""
-        from torchonnx.generate._forward_gen import (
-            ForwardGenContext,
-            set_forward_gen_context,
-        )
-        from torchonnx.generate._handlers._operations import _handle_slice
-
         context = ForwardGenContext()
         context.vmap_mode = True
         context.first_input_name = "x"
@@ -4056,8 +3768,6 @@ class TestExpandHandlerEdgeCases:
 
     def test_expand_with_zero_dimension(self):
         """Test expand attempting to create zero dimension."""
-        from torchonnx.generate._handlers._operations import _handle_expand
-
         layer = SemanticLayerIR(
             name="expand_0",
             onnx_op_type="Expand",
@@ -4077,8 +3787,6 @@ class TestExpandHandlerEdgeCases:
 
     def test_expand_with_all_ones_shape(self):
         """Test expand when all dimensions are 1."""
-        from torchonnx.generate._handlers._operations import _handle_expand
-
         layer = SemanticLayerIR(
             name="expand_0",
             onnx_op_type="Expand",
@@ -4102,8 +3810,6 @@ class TestReshapeHandlerEdgeCases:
 
     def test_reshape_with_zero_dimension(self):
         """Test reshape resulting in zero dimension."""
-        from torchonnx.generate._handlers._operations import _handle_reshape
-
         layer = SemanticLayerIR(
             name="reshape_0",
             onnx_op_type="Reshape",
@@ -4123,8 +3829,6 @@ class TestReshapeHandlerEdgeCases:
 
     def test_reshape_1d_to_1d_no_change(self):
         """Test reshape from 1D to 1D with same size."""
-        from torchonnx.generate._handlers._operations import _handle_reshape
-
         layer = SemanticLayerIR(
             name="reshape_0",
             onnx_op_type="Reshape",
@@ -4148,8 +3852,6 @@ class TestGatherHandlerEdgeCases:
 
     def test_gather_with_scalar_indices(self):
         """Test gather with scalar index values."""
-        from torchonnx.generate._handlers._operations import _handle_gather
-
         layer = SemanticLayerIR(
             name="gather_0",
             onnx_op_type="Gather",
@@ -4169,8 +3871,6 @@ class TestGatherHandlerEdgeCases:
 
     def test_gather_last_axis(self):
         """Test gather on last axis of multi-dimensional tensor."""
-        from torchonnx.generate._handlers._operations import _handle_gather
-
         layer = SemanticLayerIR(
             name="gather_0",
             onnx_op_type="Gather",
@@ -4194,8 +3894,6 @@ class TestConcatHandlerEdgeCases:
 
     def test_concat_single_input(self):
         """Test concat with single input (no-op)."""
-        from torchonnx.generate._handlers._operations import _handle_concat
-
         layer = SemanticLayerIR(
             name="concat_0",
             onnx_op_type="Concat",
@@ -4212,8 +3910,6 @@ class TestConcatHandlerEdgeCases:
 
     def test_concat_first_axis(self):
         """Test concat on first axis (batch dimension)."""
-        from torchonnx.generate._handlers._operations import _handle_concat
-
         layer = SemanticLayerIR(
             name="concat_0",
             onnx_op_type="Concat",
@@ -4237,8 +3933,6 @@ class TestSplitHandlerEdgeCases:
 
     def test_split_single_output(self):
         """Test split with single output (no-op)."""
-        from torchonnx.generate._handlers._operations import _handle_split
-
         layer = SemanticLayerIR(
             name="split_0",
             onnx_op_type="Split",
@@ -4258,8 +3952,6 @@ class TestSplitHandlerEdgeCases:
 
     def test_split_on_batch_axis(self):
         """Test split on batch dimension."""
-        from torchonnx.generate._handlers._operations import _handle_split
-
         layer = SemanticLayerIR(
             name="split_0",
             onnx_op_type="Split",
@@ -4288,8 +3980,6 @@ class TestShapeOperationHandler:
 
     def test_shape_full_tensor(self):
         """Test shape extraction from full tensor."""
-        from torchonnx.generate._handlers._operations import _handle_shape
-
         layer = SemanticLayerIR(
             name="shape_0",
             onnx_op_type="Shape",
@@ -4311,8 +4001,6 @@ class TestConstantOfShapeHandler:
 
     def test_constant_of_shape_with_value(self):
         """Test creating constant tensor of shape with specific value."""
-        from torchonnx.generate._handlers._operations import _handle_constant_of_shape
-
         layer = SemanticLayerIR(
             name="const_0",
             onnx_op_type="ConstantOfShape",
@@ -4335,8 +4023,6 @@ class TestGenericHandlerPaths:
 
     def test_generic_method_simple_case(self):
         """Test generic method handler with simple operation."""
-        from torchonnx.generate._handlers._operations import _handle_generic_method
-
         layer = SemanticLayerIR(
             name="generic_0",
             onnx_op_type="CustomOp",
@@ -4353,8 +4039,6 @@ class TestGenericHandlerPaths:
 
     def test_generic_torch_function_basic(self):
         """Test generic torch function handler."""
-        from torchonnx.generate._handlers._operations import _handle_generic_torch_function
-
         layer = SemanticLayerIR(
             name="torch_0",
             onnx_op_type="CustomTorchOp",
@@ -4375,8 +4059,6 @@ class TestOperatorEdgeCases:
 
     def test_add_buffer_plus_variable(self):
         """Test add with buffer and variable operands."""
-        from torchonnx.generate._handlers._operators import _handle_add
-
         layer = SemanticLayerIR(
             name="add_0",
             onnx_op_type="Add",
@@ -4397,8 +4079,6 @@ class TestOperatorEdgeCases:
 
     def test_sub_variable_minus_constant(self):
         """Test sub with variable and constant."""
-        from torchonnx.generate._handlers._operators import _handle_sub
-
         layer = SemanticLayerIR(
             name="sub_0",
             onnx_op_type="Sub",
@@ -4419,8 +4099,6 @@ class TestOperatorEdgeCases:
 
     def test_div_variable_by_variable(self):
         """Test div with two variables."""
-        from torchonnx.generate._handlers._operators import _handle_div
-
         layer = SemanticLayerIR(
             name="div_0",
             onnx_op_type="Div",
@@ -4441,8 +4119,6 @@ class TestOperatorEdgeCases:
 
     def test_pow_with_variable_exponent(self):
         """Test power with variable exponent."""
-        from torchonnx.generate._handlers._operators import _handle_pow
-
         layer = SemanticLayerIR(
             name="pow_0",
             onnx_op_type="Pow",
@@ -4462,8 +4138,6 @@ class TestOperatorEdgeCases:
 
     def test_equal_operator(self):
         """Test equality comparison operator."""
-        from torchonnx.generate._handlers._operators import _handle_equal
-
         layer = SemanticLayerIR(
             name="eq_0",
             onnx_op_type="Equal",
@@ -4483,8 +4157,6 @@ class TestOperatorEdgeCases:
 
     def test_neg_unary_operator(self):
         """Test negation unary operator."""
-        from torchonnx.generate._handlers._operators import _handle_neg
-
         layer = SemanticLayerIR(
             name="neg_0",
             onnx_op_type="Neg",
@@ -4505,8 +4177,6 @@ class TestTransposeHandlerEdgeCases:
 
     def test_transpose_2d_swap(self):
         """Test transpose swapping 2D matrix."""
-        from torchonnx.generate._handlers._operations import _handle_transpose
-
         layer = SemanticLayerIR(
             name="transpose_0",
             onnx_op_type="Transpose",
@@ -4524,8 +4194,6 @@ class TestTransposeHandlerEdgeCases:
 
     def test_transpose_no_perm_attribute(self):
         """Test transpose with implicit perm (reverse all dims)."""
-        from torchonnx.generate._handlers._operations import _handle_transpose
-
         layer = SemanticLayerIR(
             name="transpose_0",
             onnx_op_type="Transpose",
@@ -4546,8 +4214,6 @@ class TestSqueezeUnsqueezeEdgeCases:
 
     def test_squeeze_all_dimensions(self):
         """Test squeeze removing all singleton dimensions."""
-        from torchonnx.generate._handlers._operations import _handle_squeeze
-
         layer = SemanticLayerIR(
             name="squeeze_0",
             onnx_op_type="Squeeze",
@@ -4564,8 +4230,6 @@ class TestSqueezeUnsqueezeEdgeCases:
 
     def test_unsqueeze_multiple_times(self):
         """Test unsqueeze chain (multiple operations)."""
-        from torchonnx.generate._handlers._operations import _handle_unsqueeze
-
         layer = SemanticLayerIR(
             name="unsqueeze_0",
             onnx_op_type="Unsqueeze",
@@ -4586,8 +4250,6 @@ class TestCastHandlerEdgeCases:
 
     def test_cast_bool_to_int(self):
         """Test cast from bool to int."""
-        from torchonnx.generate._handlers._operations import _handle_cast
-
         layer = SemanticLayerIR(
             name="cast_0",
             onnx_op_type="Cast",
@@ -4604,8 +4266,6 @@ class TestCastHandlerEdgeCases:
 
     def test_cast_float64_to_float32(self):
         """Test cast from float64 to float32."""
-        from torchonnx.generate._handlers._operations import _handle_cast
-
         layer = SemanticLayerIR(
             name="cast_0",
             onnx_op_type="Cast",
@@ -4626,8 +4286,6 @@ class TestMathematicalOperations:
 
     def test_sign_operation(self):
         """Test sign operation handler."""
-        from torchonnx.generate._handlers._operations import _handle_generic_torch_function
-
         layer = SemanticLayerIR(
             name="sign_0",
             onnx_op_type="Sign",
@@ -4644,8 +4302,6 @@ class TestMathematicalOperations:
 
     def test_floor_operation(self):
         """Test floor operation handler."""
-        from torchonnx.generate._handlers._operations import _handle_generic_torch_function
-
         layer = SemanticLayerIR(
             name="floor_0",
             onnx_op_type="Floor",
@@ -4662,8 +4318,6 @@ class TestMathematicalOperations:
 
     def test_cos_operation(self):
         """Test cosine operation handler."""
-        from torchonnx.generate._handlers._operations import _handle_generic_torch_function
-
         layer = SemanticLayerIR(
             name="cos_0",
             onnx_op_type="Cos",
@@ -4680,8 +4334,6 @@ class TestMathematicalOperations:
 
     def test_sin_operation(self):
         """Test sine operation handler."""
-        from torchonnx.generate._handlers._operations import _handle_generic_torch_function
-
         layer = SemanticLayerIR(
             name="sin_0",
             onnx_op_type="Sin",

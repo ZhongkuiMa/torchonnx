@@ -16,10 +16,11 @@ __all__ = [
 ]
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import torch
+from torch import Tensor
 
 
 @dataclass(frozen=True)
@@ -57,7 +58,7 @@ class ParameterInfo:
     code_name: str
     shape: tuple[int, ...]
     dtype: torch.dtype
-    data: torch.Tensor
+    data: Tensor
 
 
 @dataclass(frozen=True)
@@ -77,7 +78,7 @@ class ConstantInfo:
     code_name: str
     shape: tuple[int, ...]
     dtype: torch.dtype
-    data: torch.Tensor
+    data: Tensor
 
 
 @dataclass(frozen=True)
@@ -106,17 +107,15 @@ class ArgumentInfo:
         return self.default_value is not None and self.value == self.default_value
 
 
-class OperatorClass(Enum):
-    """Classification of ONNX operators for PyTorch code generation.
-
-    :cvar LAYER: Trainable module (Conv2d, Linear, BatchNorm2d)
-    :cvar OPERATION: Stateless function (reshape, transpose, pad)
-    :cvar OPERATOR: Stateless math operator (+, -, *, @)
-    """
+class OperatorClass(StrEnum):
+    """Classification of ONNX operators for PyTorch code generation."""
 
     LAYER = "layer"
+    """Trainable module (Conv2d, Linear, BatchNorm2d)."""
     OPERATION = "operation"
+    """Stateless function (reshape, transpose, pad)."""
     OPERATOR = "operator"
+    """Stateless math operator (+, -, *, @)."""
 
 
 @dataclass(frozen=True)

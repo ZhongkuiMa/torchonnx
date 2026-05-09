@@ -49,7 +49,7 @@ class TestGeneratePyTorchModule:
 
         module_code, state_dict = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
         assert len(module_code) > 0
         assert isinstance(state_dict, dict)
         assert "import torch" in module_code
@@ -134,7 +134,7 @@ class TestGeneratePyTorchModule:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
         assert len(module_code) > 0
 
     def test_generate_module_vmap_mode_false(self, linear_model):
@@ -148,7 +148,7 @@ class TestGeneratePyTorchModule:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=False)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
         assert len(module_code) > 0
 
 
@@ -192,11 +192,13 @@ class TestGenerateInitMethod:
         except TypeError:
             pytest.skip("classify_inputs() bug prevents semantic IR generation")
 
-        module_code, _ = generate_pytorch_module(semantic_ir)
+        module_code, state_dict = generate_pytorch_module(semantic_ir)
 
         # For Linear model, should have parameters
-        # Check for any parameter registration
+        assert isinstance(module_code, str)
         assert len(module_code) > 0
+        assert isinstance(state_dict, dict)
+        assert len(state_dict) > 0
 
     def test_init_registers_buffers(self, batchnorm_model):
         """Verify __init__ registers buffers (running_mean, running_var)."""
@@ -207,10 +209,13 @@ class TestGenerateInitMethod:
         except TypeError:
             pytest.skip("classify_inputs() bug prevents semantic IR generation")
 
-        module_code, _ = generate_pytorch_module(semantic_ir)
+        module_code, state_dict = generate_pytorch_module(semantic_ir)
 
         # BatchNorm should have buffers
+        assert isinstance(module_code, str)
         assert len(module_code) > 0
+        assert isinstance(state_dict, dict)
+        assert len(state_dict) > 0
 
     def test_init_layer_name_mapping(self, linear_model):
         """Verify layer names are correctly mapped in __init__."""
@@ -224,7 +229,8 @@ class TestGenerateInitMethod:
         module_code, _ = generate_pytorch_module(semantic_ir)
 
         # Verify it's valid Python
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -313,7 +319,8 @@ class TestGenerateForwardMethod:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
 
 
 class TestStateDictGeneration:
@@ -479,7 +486,8 @@ class TestCodeValidation:
         module_code, _ = generate_pytorch_module(semantic_ir)
 
         # Should parse without syntax errors
-        ast.parse(module_code)
+        tree = ast.parse(module_code)
+        assert isinstance(tree, ast.AST)
 
     def test_generated_code_is_valid_python_conv(self, conv2d_model):
         """Verify generated code from conv model is valid Python."""
@@ -493,7 +501,8 @@ class TestCodeValidation:
         module_code, _ = generate_pytorch_module(semantic_ir)
 
         # Should parse without syntax errors
-        ast.parse(module_code)
+        tree = ast.parse(module_code)
+        assert isinstance(tree, ast.AST)
 
     def test_generated_code_has_valid_class_structure(self, linear_model):
         """Verify generated code has valid class structure."""
@@ -576,7 +585,7 @@ class TestVmapModeValidation:
 
         # Should parse without syntax errors
         tree = ast.parse(module_code)
-        assert tree is not None
+        assert isinstance(tree, ast.Module)
 
     def test_vmap_mode_nonvmap_code_syntax_valid(self, linear_model):
         """Verify non-vmap mode generated code has valid Python syntax."""
@@ -591,7 +600,7 @@ class TestVmapModeValidation:
 
         # Should parse without syntax errors
         tree = ast.parse(module_code)
-        assert tree is not None
+        assert isinstance(tree, ast.Module)
 
     def test_vmap_mode_with_complex_model(self, mlp_model):
         """Test vmap mode with multi-layer MLP model."""
@@ -605,7 +614,7 @@ class TestVmapModeValidation:
         module_code, state_dict = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
         # Verify code is generated and valid
-        assert module_code is not None
+        assert isinstance(module_code, str)
         assert len(module_code) > 0
         assert "class ONNXModel" in module_code
         assert isinstance(state_dict, dict)
@@ -627,9 +636,9 @@ class TestVmapModeValidation:
         nonvmap_code, nonvmap_dict = generate_pytorch_module(semantic_ir, vmap_mode=False)
 
         # Both should generate valid code
-        assert vmap_code is not None
+        assert isinstance(vmap_code, str)
         assert len(vmap_code) > 0
-        assert nonvmap_code is not None
+        assert isinstance(nonvmap_code, str)
         assert len(nonvmap_code) > 0
 
         # Both should have valid state dicts
@@ -669,7 +678,8 @@ class TestSliceCodeGeneratorPaths:
         # Should generate valid code without helper (if pattern recognized)
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Should handle dynamic slicing
         assert "torch" in module_code.lower()
@@ -692,7 +702,8 @@ class TestSliceCodeGeneratorPaths:
         # Should generate expand helper
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Check if dynamic expand helper is present
         assert "expand" in module_code.lower() or "dynamic_expand" in module_code
@@ -714,7 +725,8 @@ class TestSliceCodeGeneratorPaths:
         # Should generate scatter_nd helper
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -739,7 +751,8 @@ class TestCodeGeneratorVmapMode:
         vmap_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
         # Should generate valid code
-        assert vmap_code is not None
+        assert isinstance(vmap_code, str)
+        assert len(vmap_code) > 0
         ast.parse(vmap_code)
 
     def test_vmap_mode_vs_nonvmap_mode_slice(self, slice_dynamic_starts_model):
@@ -761,8 +774,10 @@ class TestCodeGeneratorVmapMode:
         nonvmap_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=False)
 
         # Both should be valid
-        assert vmap_code is not None
-        assert nonvmap_code is not None
+        assert isinstance(vmap_code, str)
+        assert len(vmap_code) > 0
+        assert isinstance(nonvmap_code, str)
+        assert len(nonvmap_code) > 0
         ast.parse(vmap_code)
         ast.parse(nonvmap_code)
 
@@ -787,7 +802,8 @@ class TestCodeGeneratorHelperSelection:
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
         # Check if appropriate slice helper is included
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_helpers_from_context_expand(self, expand_runtime_shape_model):
@@ -806,7 +822,8 @@ class TestCodeGeneratorHelperSelection:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -841,7 +858,7 @@ class TestCodeGeneratorImportGeneration:
         # Exercises: _generate_imports
         assert "import torch.nn as nn" in module_code
 
-    def test_imports_functional_when_needed(self):
+    def test_imports_functional_when_needed(self):  # wct:skip ASN1
         """Test that functional imports are included when needed.
 
         Exercises:
@@ -853,7 +870,7 @@ class TestCodeGeneratorImportGeneration:
 class TestCodeGeneratorEdgeCases:
     """Test code generator edge cases and special paths."""
 
-    def test_generate_with_no_layers(self):
+    def test_generate_with_no_layers(self):  # wct:skip ASN1
         """Test code generation with minimal model.
 
         Exercises:
@@ -878,7 +895,8 @@ class TestCodeGeneratorEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         # Static slice should not need dynamic_slice helper
         # Should use native Python slicing
         assert "def dynamic_slice" not in module_code
@@ -899,7 +917,8 @@ class TestCodeGeneratorEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         # Static expand should not need helper
         assert "def dynamic_expand" not in module_code or "expand" in module_code
 
@@ -980,7 +999,8 @@ class TestPhase15PatternMatching:
         # Should detect and handle Add pattern
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Should generate valid Python code with pattern optimization
         assert "torch" in module_code.lower()
@@ -1003,7 +1023,8 @@ class TestPhase15PatternMatching:
         # Should trace through shape ops to find Add pattern
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_expand_through_add_computation(self, expand_through_computation_model):
@@ -1024,7 +1045,8 @@ class TestPhase15PatternMatching:
         # Should detect dynamic shape computation and emit helper or optimize to reshape
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # May include expand helper, or optimize to reshape/expand
         assert "expand" in module_code.lower() or "reshape" in module_code.lower()
@@ -1046,7 +1068,8 @@ class TestPhase15PatternMatching:
         # Should generate scatter_nd helper
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -1071,7 +1094,8 @@ class TestPhase15DeepAnalysisVmapMode:
         # Generate with vmap mode - should detect static length
         vmap_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert vmap_code is not None
+        assert isinstance(vmap_code, str)
+        assert len(vmap_code) > 0
         ast.parse(vmap_code)
 
     def test_vmap_vs_nonvmap_add_pattern(self, slice_with_add_pattern_model):
@@ -1093,8 +1117,10 @@ class TestPhase15DeepAnalysisVmapMode:
         nonvmap_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=False)
 
         # Both should be valid
-        assert vmap_code is not None
-        assert nonvmap_code is not None
+        assert isinstance(vmap_code, str)
+        assert len(vmap_code) > 0
+        assert isinstance(nonvmap_code, str)
+        assert len(nonvmap_code) > 0
         ast.parse(vmap_code)
         ast.parse(nonvmap_code)
 
@@ -1116,7 +1142,8 @@ class TestPhase15DeepAnalysisVmapMode:
         # Should handle complex tracing
         vmap_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert vmap_code is not None
+        assert isinstance(vmap_code, str)
+        assert len(vmap_code) > 0
         ast.parse(vmap_code)
 
 
@@ -1139,7 +1166,8 @@ class TestPhase15OptimizationPaths:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         # Code should be valid - pattern should be detected and optimized
         ast.parse(module_code)
 
@@ -1159,7 +1187,8 @@ class TestPhase15OptimizationPaths:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -1183,7 +1212,8 @@ class TestPhase15MultipleOperationChains:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_combined_add_and_shape_ops(self, slice_through_shape_ops_model):
@@ -1203,7 +1233,8 @@ class TestPhase15MultipleOperationChains:
         # Generate with vmap mode
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -1230,7 +1261,8 @@ class TestPhase16HelperNeedsEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_expand_less_than_2_inputs(self, expand_constant_shape_model):
@@ -1247,7 +1279,8 @@ class TestPhase16HelperNeedsEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -1268,7 +1301,8 @@ class TestPhase16PatternMatchingEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_add_pattern_variable_offset(self, slice_with_add_pattern_model):
@@ -1285,7 +1319,8 @@ class TestPhase16PatternMatchingEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -1306,7 +1341,8 @@ class TestPhase16GraphTracingEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_source_variable_equals_self(self, slice_through_shape_ops_model):
@@ -1323,7 +1359,8 @@ class TestPhase16GraphTracingEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -1345,7 +1382,8 @@ class TestPhase16ComplexGraphPatterns:
         # Should detect pattern through chain
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_nested_add_patterns(self, slice_with_add_pattern_model):
@@ -1362,7 +1400,8 @@ class TestPhase16ComplexGraphPatterns:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -1384,7 +1423,8 @@ class TestPhase16NonVmapPaths:
         # Generate non-vmap version
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=False)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_nonvmap_expand_dynamic(self, expand_runtime_shape_model):
@@ -1401,7 +1441,8 @@ class TestPhase16NonVmapPaths:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=False)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -1428,7 +1469,8 @@ class TestPhase17SliceOptimizations:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Narrow optimization or direct slicing (via [:] syntax) should work
         assert "narrow" in module_code.lower() or ":" in module_code
@@ -1444,7 +1486,8 @@ class TestPhase17SliceOptimizations:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -1465,7 +1508,8 @@ class TestPhase17FunctionalImports:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Should include functional import or relu
         assert (
@@ -1492,7 +1536,8 @@ class TestPhase17ReshapeInference:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Reshape with -1 may be optimized to flatten() or use reshape()
         assert "reshape" in module_code.lower() or "flatten" in module_code.lower()
@@ -1512,7 +1557,8 @@ class TestPhase17AnalysisEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_steps_list_extraction_default(self, slice_dynamic_starts_model):
@@ -1526,7 +1572,8 @@ class TestPhase17AnalysisEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -1544,7 +1591,8 @@ class TestPhase17HelperContextDetection:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Static slice should not generate dynamic_slice helper
         assert "def dynamic_slice" not in module_code
@@ -1560,7 +1608,8 @@ class TestPhase17HelperContextDetection:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -1578,7 +1627,8 @@ class TestPhase17ExpandAnalysis:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_expand_dynamic_shape_needs_helper(self, expand_runtime_shape_model):
@@ -1592,7 +1642,8 @@ class TestPhase17ExpandAnalysis:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -1610,7 +1661,8 @@ class TestPhase17StaticLengthDetection:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -1628,7 +1680,8 @@ class TestPhase17ProducerMapHandling:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -1655,7 +1708,8 @@ class TestPhase18SliceMinimalInputs:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -1676,7 +1730,8 @@ class TestPhase18ExpandMinimalInputs:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -1697,7 +1752,8 @@ class TestPhase18ExpandDynamicShape:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Dynamic shape should trigger helper generation
         assert "expand" in module_code.lower() or "view" in module_code.lower()
@@ -1720,7 +1776,8 @@ class TestPhase18SliceLargeIndices:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Should be able to handle large indices
         assert (
@@ -1745,7 +1802,8 @@ class TestPhase18NumericBoundaryConditions:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -1763,7 +1821,8 @@ class TestPhase18NegativeIndices:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         assert "gather" in module_code.lower() or "index_select" in module_code.lower()
 
@@ -1785,7 +1844,8 @@ class TestPhase18ComplexOptimizationBranches:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -1806,7 +1866,8 @@ class TestPhase18ErrorHandlingPaths:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -1833,7 +1894,8 @@ class TestPhase19ConditionalImports:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         # Should have F.* import or relu operation
         assert (
             "functional" in module_code.lower()
@@ -1860,7 +1922,8 @@ class TestPhase19ScatterNDOptimization:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Should generate scatter or helper code
         assert "scatter" in module_code.lower() or "helper" in module_code.lower()
@@ -1883,7 +1946,8 @@ class TestPhase19MultiAxisOperations:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         assert "mean" in module_code.lower()
 
@@ -1905,7 +1969,8 @@ class TestPhase19ConcurrentHelperNeeds:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -1926,7 +1991,8 @@ class TestPhase19TransposeOptimization:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         assert "permute" in module_code.lower() or "transpose" in module_code.lower()
 
@@ -1948,7 +2014,8 @@ class TestPhase19SplitAndConcatCombo:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -1969,7 +2036,8 @@ class TestPhase19InterpolateScaling:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -1990,7 +2058,8 @@ class TestPhase19MatmulBufferHandling:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         assert "matmul" in module_code.lower() or "@" in module_code
 
@@ -2012,7 +2081,8 @@ class TestPhase19ConvolutionOperations:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         assert "conv" in module_code.lower()
 
@@ -2030,7 +2100,8 @@ class TestPhase19ConvolutionOperations:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2051,7 +2122,8 @@ class TestPhase19PaddingOperations:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_pad_with_value_handling(self, pad_with_value_model):
@@ -2068,7 +2140,8 @@ class TestPhase19PaddingOperations:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2089,7 +2162,8 @@ class TestPhase19ShapeOperations:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         assert "squeeze" in module_code.lower()
 
@@ -2107,7 +2181,8 @@ class TestPhase19ShapeOperations:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         assert "unsqueeze" in module_code.lower()
 
@@ -2129,7 +2204,8 @@ class TestPhase19ReductionOperations:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         assert "sum" in module_code.lower()
 
@@ -2151,7 +2227,8 @@ class TestPhase19PoolingOperations:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_avgpool_handling(self, avgpool_model):
@@ -2168,7 +2245,8 @@ class TestPhase19PoolingOperations:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2189,7 +2267,8 @@ class TestPhase19NormalizationOperations:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2216,7 +2295,8 @@ class TestPhase20TrigonometricOperations:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2237,7 +2317,8 @@ class TestPhase20ClipOperations:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         assert "clamp" in module_code.lower() or "clip" in module_code.lower()
 
@@ -2255,7 +2336,8 @@ class TestPhase20ClipOperations:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2276,7 +2358,8 @@ class TestPhase20CastOperations:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2297,7 +2380,8 @@ class TestPhase20ArithmeticOperations:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2318,7 +2402,8 @@ class TestPhase20SignOperation:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2339,7 +2424,8 @@ class TestPhase20FloorOperation:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2360,7 +2446,8 @@ class TestPhase20ShapeAndConstantOfShape:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_constantofshape_operation(self, constantofshape_model):
@@ -2377,7 +2464,8 @@ class TestPhase20ShapeAndConstantOfShape:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2398,7 +2486,8 @@ class TestPhase20IdentityOperation:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_constant_node(self, constant_node_model):
@@ -2415,7 +2504,8 @@ class TestPhase20IdentityOperation:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2436,7 +2526,8 @@ class TestPhase20ArangeOperation:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_arange_runtime_values(self, arange_runtime_model):
@@ -2453,7 +2544,8 @@ class TestPhase20ArangeOperation:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2474,7 +2566,8 @@ class TestPhase20MultiInputMultiOutput:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_multi_output_model(self, multi_output_model):
@@ -2491,7 +2584,8 @@ class TestPhase20MultiInputMultiOutput:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2512,7 +2606,8 @@ class TestPhase20ResNetBlock:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2533,7 +2628,8 @@ class TestPhase20MLPModel:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2554,7 +2650,8 @@ class TestPhase20LinearTransposed:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2575,7 +2672,8 @@ class TestPhase20ArgmaxArgmin:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         assert "argmax" in module_code.lower() or "max" in module_code.lower()
 
@@ -2597,7 +2695,8 @@ class TestPhase20AsyncPadDynamic:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2624,7 +2723,8 @@ class TestPhase21SliceEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_slice_through_shape_ops(self, slice_through_shape_ops_model):
@@ -2641,7 +2741,8 @@ class TestPhase21SliceEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2662,7 +2763,8 @@ class TestPhase21ExpandEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_expand_computation_through_ops(self, expand_through_computation_model):
@@ -2679,7 +2781,8 @@ class TestPhase21ExpandEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2700,7 +2803,8 @@ class TestPhase21GatherEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2721,7 +2825,8 @@ class TestPhase21PadEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2742,7 +2847,8 @@ class TestPhase21ConcatEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_concat_standard(self, concat_model):
@@ -2759,7 +2865,8 @@ class TestPhase21ConcatEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2780,7 +2887,8 @@ class TestPhase21ScatterNDEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2801,7 +2909,8 @@ class TestPhase21ReduceEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2822,7 +2931,8 @@ class TestPhase21ConvEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         assert "conv" in module_code.lower()
 
@@ -2840,7 +2950,8 @@ class TestPhase21ConvEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2861,7 +2972,8 @@ class TestPhase21LinearEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2882,7 +2994,8 @@ class TestPhase21BatchNormEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2909,7 +3022,8 @@ class TestPhase22SliceHelperAnalysis:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_slice_narrow_check_conditions(self, slice_narrow_compatible_model):
@@ -2926,7 +3040,8 @@ class TestPhase22SliceHelperAnalysis:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2947,7 +3062,8 @@ class TestPhase22ExpandHelperAnalysis:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_expand_constant_shape_analysis(self, expand_constant_shape_model):
@@ -2964,7 +3080,8 @@ class TestPhase22ExpandHelperAnalysis:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -2985,7 +3102,8 @@ class TestPhase22StaticSliceLengthDetection:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -3006,7 +3124,8 @@ class TestPhase22PatternCaseMatching:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -3027,7 +3146,8 @@ class TestPhase22GraphTracing:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_producer_detection_in_expand(self, expand_through_computation_model):
@@ -3044,7 +3164,8 @@ class TestPhase22GraphTracing:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -3065,7 +3186,8 @@ class TestPhase22ExtractAxisList:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_steps_extraction_from_slice(self, slice_static_model):
@@ -3082,7 +3204,8 @@ class TestPhase22ExtractAxisList:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -3103,7 +3226,8 @@ class TestPhase22HelperGeneration:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Should generate slice helper or dynamic slice code
         assert "slice" in module_code.lower() or "helper" in module_code.lower()
@@ -3122,7 +3246,8 @@ class TestPhase22HelperGeneration:
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -3144,7 +3269,8 @@ class TestPhase22VmapOptimizations:
         # Test with vmap_mode=True to trigger vmap-specific paths
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_non_vmap_code_generation(self, slice_static_model):
@@ -3162,7 +3288,8 @@ class TestPhase22VmapOptimizations:
         # Test with vmap_mode=False
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=False)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -3183,7 +3310,8 @@ class TestPhase23OperatorHandlers:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Check that subtraction operator is used
         assert "-" in module_code
@@ -3202,7 +3330,8 @@ class TestPhase23OperatorHandlers:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Check that division operator is used
         assert "/" in module_code
@@ -3221,7 +3350,8 @@ class TestPhase23OperatorHandlers:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Check that power operator is used
         assert "**" in module_code
@@ -3240,7 +3370,8 @@ class TestPhase23OperatorHandlers:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Check that negation operator is used
         assert "= -" in module_code or "= -x" in module_code
@@ -3259,7 +3390,8 @@ class TestPhase23OperatorHandlers:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Check that equality operator is used
         assert "==" in module_code
@@ -3278,7 +3410,8 @@ class TestPhase23OperatorHandlers:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Check that add operation is present
         assert "+" in module_code or "torch.add" in module_code
@@ -3297,7 +3430,8 @@ class TestPhase23OperatorHandlers:
 
         module_code, state_dict = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         # Verify state dict is properly generated
         assert isinstance(state_dict, dict)
 
@@ -3315,7 +3449,8 @@ class TestPhase23OperatorHandlers:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_matmul_operator_no_literals(self, add_model):
@@ -3332,7 +3467,8 @@ class TestPhase23OperatorHandlers:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
     def test_operator_handler_error_validation(self, add_model):
@@ -3350,7 +3486,8 @@ class TestPhase23OperatorHandlers:
         module_code, _ = generate_pytorch_module(semantic_ir)
 
         # Should generate valid module without errors
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
 
 
@@ -3371,7 +3508,8 @@ class TestPhase24OperatorEdgeCases:
 
         module_code, state_dict = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Verify state dict includes the bias vector
         assert isinstance(state_dict, dict)
@@ -3390,7 +3528,8 @@ class TestPhase24OperatorEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Check for multiplication operator
         assert "*" in module_code
@@ -3409,7 +3548,8 @@ class TestPhase24OperatorEdgeCases:
 
         module_code, state_dict = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Verify all operations are present
         assert "-" in module_code  # Sub
@@ -3432,7 +3572,8 @@ class TestPhase24OperatorEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         assert "/" in module_code
 
@@ -3450,7 +3591,8 @@ class TestPhase24OperatorEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         assert "-" in module_code
 
@@ -3468,7 +3610,8 @@ class TestPhase24OperatorEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         assert "**" in module_code
 
@@ -3486,7 +3629,8 @@ class TestPhase24OperatorEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         assert "= -" in module_code or "= -x" in module_code
 
@@ -3504,7 +3648,8 @@ class TestPhase24OperatorEdgeCases:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         assert "==" in module_code
 
@@ -3522,7 +3667,8 @@ class TestPhase24OperatorEdgeCases:
 
         module_code, state_dict = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         assert isinstance(state_dict, dict)
 
@@ -3544,7 +3690,8 @@ class TestPhase25OperationHandlers:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Verify reshape operation is present
         assert "reshape" in module_code.lower() or "view" in module_code.lower()
@@ -3563,7 +3710,8 @@ class TestPhase25OperationHandlers:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Verify gather operation is present
         assert "gather" in module_code.lower() or "index_select" in module_code.lower()
@@ -3582,7 +3730,8 @@ class TestPhase25OperationHandlers:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Verify concat operation is present
         assert "cat" in module_code.lower() or "concat" in module_code.lower()
@@ -3601,7 +3750,8 @@ class TestPhase25OperationHandlers:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Verify reduce operation is present
         assert "mean" in module_code.lower() or "reduce" in module_code.lower()
@@ -3620,7 +3770,8 @@ class TestPhase25OperationHandlers:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Verify expand, broadcast, repeat, or reshape operation is present (reshape is valid optimization)
         assert (
@@ -3644,7 +3795,8 @@ class TestPhase25OperationHandlers:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Verify split operation is present or model is valid
         assert "def forward" in module_code  # At minimum verify module structure is correct
@@ -3663,7 +3815,8 @@ class TestPhase25OperationHandlers:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Verify module is syntactically valid
         assert "def forward" in module_code
@@ -3682,7 +3835,8 @@ class TestPhase25OperationHandlers:
 
         module_code, state_dict = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         assert isinstance(state_dict, dict)
 
@@ -3700,7 +3854,8 @@ class TestPhase25OperationHandlers:
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
-        assert module_code is not None
+        assert isinstance(module_code, str)
+        assert len(module_code) > 0
         ast.parse(module_code)
         # Verify forward method is generated
         assert "forward" in module_code

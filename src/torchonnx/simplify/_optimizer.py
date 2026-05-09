@@ -8,14 +8,14 @@ __all__ = ["optimize_generated_code"]
 
 import re
 
-import torch
+from torch import Tensor
 
 from torchonnx.simplify._line_optimizer import optimize_line
 
 
 def optimize_generated_code(
-    code: str, state_dict: dict[str, torch.Tensor] | None = None, enable: bool = True
-) -> str | tuple[str, dict[str, torch.Tensor]]:
+    code: str, state_dict: dict[str, Tensor] | None = None, enable: bool = True
+) -> str | tuple[str, dict[str, Tensor]]:
     """Apply code-level optimizations to generated PyTorch code.
 
     Optimizations include:

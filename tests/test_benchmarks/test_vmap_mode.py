@@ -28,12 +28,14 @@ __all__ = [
 
 import importlib.util
 import json
+import sys
 import time
 from pathlib import Path
 
 import numpy as np
 import pytest
 import torch
+from torch.func import vmap
 
 from tests.test_benchmarks.benchmark_utils import (
     find_benchmarks,
@@ -386,9 +388,9 @@ def test_verify_vmap_vs_standard(model_path, dtype, device, output_dir_vmap, ben
 
     # Verify vmap vs standard (simplified check)
     try:
-        get_model_data_path(model_path_obj, benchmarks_root)
-        # For now, just verify the files exist and can be loaded
-        # A full verification would compare outputs, but that's complex due to input loading
+        data_path = get_model_data_path(model_path_obj, benchmarks_root)
+        # Verify the files exist and data path is valid
+        assert isinstance(data_path, Path), f"Expected Path, got {type(data_path)}"
         print(f"\n{rel_path} ({dtype}, {device}): Model files accessible")
     except (FileNotFoundError, RuntimeError) as e:
         pytest.fail(f"Error verifying vmap vs standard: {e}")
@@ -427,6 +429,8 @@ def test_torch_vmap_compatibility(model_path, output_dir_vmap, benchmarks_root):
             raise ImportError(f"Failed to load module spec from {result_py_vmap}")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
+        assert hasattr(module, "__all__"), f"Module {result_py_vmap.stem} missing __all__"
+        assert len(module.__all__) > 0, f"Module {result_py_vmap.stem} has empty __all__"
         print(f"\n{rel_path}: Vmap model loaded successfully")
     except (FileNotFoundError, ImportError, SyntaxError) as e:
         pytest.fail(f"Error loading vmap model: {e}")
@@ -691,8 +695,6 @@ def _test_vmap_on_model(
 
     :return: (status, error_message)
     """
-    from torch.func import vmap
-
     try:
         input_tensor = torch.from_numpy(inputs).float()
 
@@ -820,6 +822,7 @@ def test_vmap_compatibility(benchmarks_root, output_dir_vmap, max_per_benchmark:
     print(f"Unexpected failures: {counts['failed']}")
     print(f"Skipped: {counts['skipped']}")
 
+    assert isinstance(all_results, dict)
     return all_results
 
 
@@ -919,8 +922,6 @@ def main():
         pytest tests/test_vmap_mode.py::test_verify_vmap_vs_standard
         pytest tests/test_vmap_mode.py::test_torch_vmap_compatibility
     """
-    import sys
-
     print("\n" + "=" * 70)
     print("STEP 1: Converting models to vmap mode")
     print("=" * 70)

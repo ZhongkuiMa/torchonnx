@@ -20,6 +20,7 @@ __all__ = [
 ]
 
 import importlib.util
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -961,8 +962,6 @@ def main() -> None:
         pytest tests/test_benchmarks.py::test_convert_model
         pytest tests/test_benchmarks.py::test_verify_model_against_original
     """
-    import sys
-
     print("\n" + "=" * 70)
     print("STEP 1: Converting ONNX models to PyTorch")
     print("=" * 70)

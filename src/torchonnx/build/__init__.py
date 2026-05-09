@@ -4,7 +4,7 @@ This module builds intermediate representation (IR) from normalized ONNX models.
 """
 
 __docformat__ = "restructuredtext"
-__all__ = ["NodeIR", "ModelIR", "build_model_ir"]
+__all__ = ["ModelIR", "NodeIR", "build_model_ir"]
 
-from .builder import build_model_ir
-from .types import ModelIR, NodeIR
+from torchonnx.build.builder import build_model_ir
+from torchonnx.build.types import ModelIR, NodeIR

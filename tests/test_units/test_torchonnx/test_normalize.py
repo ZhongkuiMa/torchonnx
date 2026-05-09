@@ -14,11 +14,20 @@ Test Coverage:
 - TestValidation: 4 tests - Model validation and error cases
 """
 
+import tempfile
+from pathlib import Path
+
 import onnx
 import pytest
 from google.protobuf.message import DecodeError
 
 from torchonnx.normalize import load_and_preprocess_onnx_model
+from torchonnx.normalize.normalize import (
+    _apply_shapeonnx_inference,
+    _check_model,
+    _convert_version,
+    _infer_shapes,
+)
 
 
 class TestNormalizeBasics:
@@ -27,28 +36,27 @@ class TestNormalizeBasics:
     def test_load_identity_model(self, identity_model):
         """Test loading and preprocessing Identity model."""
         model = load_and_preprocess_onnx_model(identity_model, target_opset=20, infer_shapes=True)
-        assert model is not None
-        assert model.ir_version == 8
         assert isinstance(model, onnx.ModelProto)
+        assert model.ir_version == 8
 
     def test_load_linear_model(self, linear_model):
         """Test loading and preprocessing Linear model."""
         model = load_and_preprocess_onnx_model(linear_model, target_opset=20, infer_shapes=True)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
         assert len(model.graph.initializer) == 2
-        assert model.graph.name is not None
+        assert isinstance(model.graph.name, str)
 
     def test_load_mlp_model(self, mlp_model):
         """Test loading and preprocessing MLP (multi-layer) model."""
         model = load_and_preprocess_onnx_model(mlp_model, target_opset=20, infer_shapes=True)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
         assert len(model.graph.node) > 2  # Multiple layers
         assert len(model.graph.initializer) > 2  # Multiple parameters
 
     def test_load_conv_model(self, conv2d_model):
         """Test loading and preprocessing Conv2d model."""
         model = load_and_preprocess_onnx_model(conv2d_model, target_opset=20, infer_shapes=True)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
         assert any(node.op_type == "Conv" for node in model.graph.node)
 
 
@@ -58,22 +66,22 @@ class TestOpsetHandling:
     def test_load_with_target_opset_20(self, linear_model):
         """Test loading model with target opset 20."""
         model = load_and_preprocess_onnx_model(linear_model, target_opset=20, infer_shapes=True)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
         # Model should be valid after opset conversion
         onnx.checker.check_model(model)
 
     def test_load_with_target_opset_19(self, linear_model):
         """Test loading model with target opset 19."""
         model = load_and_preprocess_onnx_model(linear_model, target_opset=19, infer_shapes=True)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
         onnx.checker.check_model(model)
 
     def test_load_with_opset_version_inference(self, mlp_model):
         """Test model loading respects opset version."""
         model = load_and_preprocess_onnx_model(mlp_model, target_opset=20, infer_shapes=True)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
         # Should have valid producer name
-        assert model.producer_name is not None or model.producer_name == ""
+        assert isinstance(model.producer_name, str)
 
 
 class TestShapeInference:
@@ -82,22 +90,22 @@ class TestShapeInference:
     def test_shape_inference_linear_model(self, linear_model):
         """Test shape inference on Linear model."""
         model = load_and_preprocess_onnx_model(linear_model, infer_shapes=True)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
         # Check that graph inputs have shape information
         for input_info in model.graph.input:
-            assert input_info.type.tensor_type is not None
+            assert input_info.type.tensor_type.elem_type > 0
 
     def test_shape_inference_conv_model(self, conv2d_model):
         """Test shape inference on Conv2d model."""
         model = load_and_preprocess_onnx_model(conv2d_model, infer_shapes=True)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
         # Graph should have inputs defined
         assert len(model.graph.input) > 0
 
     def test_shape_inference_with_dynamic_dims(self, multi_input_model):
         """Test shape inference handles dynamic dimensions."""
         model = load_and_preprocess_onnx_model(multi_input_model, infer_shapes=True)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
         # Should still be valid even with dynamic dims
         onnx.checker.check_model(model)
 
@@ -118,7 +126,7 @@ class TestValidation:
     def test_load_nonexistent_model(self, tmp_path):
         """Test error handling for nonexistent ONNX file."""
         nonexistent = tmp_path / "nonexistent.onnx"
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(FileNotFoundError, match=r"No such file"):
             load_and_preprocess_onnx_model(str(nonexistent))
 
     def test_load_invalid_onnx_file(self, tmp_path):
@@ -152,8 +160,6 @@ class TestDynamicShapeHandling:
 
     def test_normalize_with_dynamic_batch_dimension(self):
         """Test normalization with dynamic batch dimension (None, C, H, W)."""
-        from pathlib import Path
-
         # Create a model with dynamic batch size
         X = onnx.helper.make_tensor_value_info(  # noqa: N806
             "X", onnx.TensorProto.FLOAT, [None, 3, 224, 224]
@@ -167,7 +173,6 @@ class TestDynamicShapeHandling:
         model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 13)])
 
         # Create temp file
-        import tempfile
 
         with tempfile.NamedTemporaryFile(suffix=".onnx", delete=False) as f:
             onnx.save(model, f.name)
@@ -176,7 +181,7 @@ class TestDynamicShapeHandling:
         try:
             # Should handle dynamic batch dimension
             normalized = load_and_preprocess_onnx_model(temp_path)
-            assert normalized is not None
+            assert isinstance(normalized, onnx.ModelProto)
             # Check that input shape is preserved with None for batch
             input_shape = [
                 d.dim_value if d.dim_value > 0 else None
@@ -188,8 +193,6 @@ class TestDynamicShapeHandling:
 
     def test_normalize_with_dynamic_spatial_dimensions(self):
         """Test normalization with dynamic spatial dimensions."""
-        from pathlib import Path
-
         # Create a model with dynamic H, W
         X = onnx.helper.make_tensor_value_info(  # noqa: N806
             "X", onnx.TensorProto.FLOAT, [1, 3, None, None]
@@ -216,8 +219,6 @@ class TestDynamicShapeHandling:
         graph = onnx.helper.make_graph([node], "DynamicSpatialModel", [X], [Y], [W, B])
         model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 13)])
 
-        import tempfile
-
         with tempfile.NamedTemporaryFile(suffix=".onnx", delete=False) as f:
             onnx.save(model, f.name)
             temp_path = f.name
@@ -225,14 +226,12 @@ class TestDynamicShapeHandling:
         try:
             # Should handle dynamic spatial dimensions
             normalized = load_and_preprocess_onnx_model(temp_path)
-            assert normalized is not None
+            assert isinstance(normalized, onnx.ModelProto)
         finally:
             Path(temp_path).unlink()
 
     def test_normalize_with_multiple_dynamic_dims(self):
         """Test normalization with multiple dynamic dimensions."""
-        from pathlib import Path
-
         # Create a model with multiple None dimensions
         X = onnx.helper.make_tensor_value_info(  # noqa: N806
             "X", onnx.TensorProto.FLOAT, [None, None, 256]
@@ -245,8 +244,6 @@ class TestDynamicShapeHandling:
         graph = onnx.helper.make_graph([node], "MultiDynamicModel", [X], [Y])
         model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 13)])
 
-        import tempfile
-
         with tempfile.NamedTemporaryFile(suffix=".onnx", delete=False) as f:
             onnx.save(model, f.name)
             temp_path = f.name
@@ -254,7 +251,7 @@ class TestDynamicShapeHandling:
         try:
             # Should handle multiple dynamic dimensions
             normalized = load_and_preprocess_onnx_model(temp_path)
-            assert normalized is not None
+            assert isinstance(normalized, onnx.ModelProto)
         finally:
             Path(temp_path).unlink()
 
@@ -264,14 +261,12 @@ class TestDynamicShapeHandling:
         normalized = load_and_preprocess_onnx_model(linear_model)
 
         # Check that shape info is preserved
-        assert normalized.graph is not None
+        assert len(normalized.graph.node) >= 0
         assert len(normalized.graph.input) > 0
-        assert normalized.graph.input[0].type is not None
+        assert normalized.graph.input[0].type.tensor_type.elem_type > 0
 
     def test_normalize_preserves_dynamic_shape_info(self):
         """Test that normalization preserves shape information for inference."""
-        from pathlib import Path
-
         # Create a model with symbolic shape info
         X = onnx.helper.make_tensor_value_info(  # noqa: N806
             "X",
@@ -286,8 +281,6 @@ class TestDynamicShapeHandling:
         graph = onnx.helper.make_graph([node], "DynamicShapeModel", [X], [Y])
         model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 13)])
 
-        import tempfile
-
         with tempfile.NamedTemporaryFile(suffix=".onnx", delete=False) as f:
             onnx.save(model, f.name)
             temp_path = f.name
@@ -296,7 +289,7 @@ class TestDynamicShapeHandling:
             normalized = load_and_preprocess_onnx_model(temp_path)
             # After normalization, dynamic shapes should be handled
             # (may be inferred to concrete shapes or remain dynamic depending on implementation)
-            assert normalized is not None
+            assert isinstance(normalized, onnx.ModelProto)
             assert len(normalized.graph.input) > 0
         finally:
             Path(temp_path).unlink()
@@ -312,14 +305,12 @@ class TestShapeONNXIntegration:
         """Test that use_shapeonnx=False uses ONNX's built-in shape inference."""
         # Default behavior should use ONNX shape inference, not shapeonnx
         model = load_and_preprocess_onnx_model(linear_model, target_opset=20, infer_shapes=True)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
         # Shape inference should have completed
         assert len(model.graph.value_info) > 0 or len(model.graph.output) > 0
 
     def test_apply_shapeonnx_inference_updates_value_info(self):
         """Test that _apply_shapeonnx_inference updates existing value_info."""
-        from torchonnx.normalize.normalize import _apply_shapeonnx_inference
-
         # Create a simple model with value_info
         X = onnx.helper.make_tensor_value_info("X", onnx.TensorProto.FLOAT, [None, 10])  # noqa: N806
         Y = onnx.helper.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, [None, 5])  # noqa: N806
@@ -343,8 +334,6 @@ class TestShapeONNXIntegration:
 
     def test_apply_shapeonnx_inference_creates_new_value_info(self):
         """Test that _apply_shapeonnx_inference creates missing value_info."""
-        from torchonnx.normalize.normalize import _apply_shapeonnx_inference
-
         # Create a simple model without value_info
         X = onnx.helper.make_tensor_value_info("X", onnx.TensorProto.FLOAT, [1, 10])  # noqa: N806
         Y = onnx.helper.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, [1, 5])  # noqa: N806
@@ -359,12 +348,10 @@ class TestShapeONNXIntegration:
 
         # Check that value_info was created
         # (May or may not be added depending on whether 'intermediate' is in graph)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
     def test_check_model_validates_onnx_structure(self):
         """Test that _check_model validates ONNX model structure."""
-        from torchonnx.normalize.normalize import _check_model
-
         # Create a valid model
         X = onnx.helper.make_tensor_value_info("X", onnx.TensorProto.FLOAT, [1, 10])  # noqa: N806
         Y = onnx.helper.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, [1, 10])  # noqa: N806
@@ -381,8 +368,6 @@ class TestShapeONNXIntegration:
 
     def test_check_model_raises_on_invalid_model(self):
         """Test that _check_model raises ValueError for invalid models."""
-        from torchonnx.normalize.normalize import _check_model
-
         # Create an invalid model (missing required inputs)
         Y = onnx.helper.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, [1, 10])  # noqa: N806
 
@@ -405,8 +390,6 @@ class TestShapeONNXIntegration:
 
     def test_opset_outside_tested_range_warning(self):
         """Test warning when opset is outside recommended range."""
-        from torchonnx.normalize.normalize import _convert_version
-
         X = onnx.helper.make_tensor_value_info("X", onnx.TensorProto.FLOAT, [1, 10])  # noqa: N806
         Y = onnx.helper.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, [1, 10])  # noqa: N806
 
@@ -420,10 +403,6 @@ class TestShapeONNXIntegration:
 
     def test_version_conversion_preserves_model_structure(self, linear_model):
         """Test that version conversion preserves model structure."""
-        import onnx
-
-        from torchonnx.normalize.normalize import _convert_version
-
         # Load model and get original structure
         original = onnx.load(linear_model)
         original_nodes = len(original.graph.node)
@@ -432,7 +411,7 @@ class TestShapeONNXIntegration:
         converted = _convert_version(original, target_opset=13, warn_on_diff=False)
 
         # Model structure should be preserved
-        assert converted is not None
+        assert isinstance(converted, onnx.ModelProto)
         assert (
             len(converted.graph.node) >= original_nodes
             or len(converted.graph.node) <= original_nodes
@@ -440,10 +419,6 @@ class TestShapeONNXIntegration:
 
     def test_shapeonnx_import_error_handling(self):
         """Test graceful fallback when shapeonnx is not available."""
-        import onnx
-
-        from torchonnx.normalize.normalize import _infer_shapes
-
         X = onnx.helper.make_tensor_value_info("X", onnx.TensorProto.FLOAT, [1, 10])  # noqa: N806
         Y = onnx.helper.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, [1, 10])  # noqa: N806
 
@@ -455,7 +430,7 @@ class TestShapeONNXIntegration:
         try:
             result = _infer_shapes(model, use_shapeonnx=True)
             # Should complete without error (either using shapeonnx or falling back)
-            assert result is not None
+            assert isinstance(result, onnx.ModelProto)
         except ImportError:
             # If shapeonnx is not installed, this is expected
             pytest.skip("shapeonnx not installed")

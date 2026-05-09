@@ -6,7 +6,7 @@ Assembles complete PyTorch module from semantic IR.
 __docformat__ = "restructuredtext"
 __all__ = ["generate_pytorch_module"]
 
-import torch
+from torch import Tensor
 
 from torchonnx.analyze import SemanticModelIR
 from torchonnx.generate._forward_gen import (
@@ -24,7 +24,7 @@ def generate_pytorch_module(
     semantic_ir: SemanticModelIR,
     module_name: str = "ONNXModel",
     vmap_mode: bool = True,
-) -> tuple[str, dict[str, torch.Tensor]]:
+) -> tuple[str, dict[str, Tensor]]:
     """Generate complete PyTorch module from semantic IR.
 
     Creates a complete PyTorch nn.Module class with:

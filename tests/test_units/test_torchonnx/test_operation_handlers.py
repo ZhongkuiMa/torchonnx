@@ -28,40 +28,21 @@ from torchonnx.normalize import load_and_preprocess_onnx_model
 class TestSliceOperations:
     """Test Slice operation handler with various parameter combinations."""
 
-    def test_slice_static_model_loads(self, slice_static_model):
-        """Test that static slice model can be loaded and preprocessed."""
-        model = load_and_preprocess_onnx_model(slice_static_model)
-        assert model is not None
-        assert len(model.graph.node) > 0
-
-    def test_slice_dynamic_starts_model_loads(self, slice_dynamic_starts_model):
-        """Test that dynamic starts slice model can be loaded."""
-        model = load_and_preprocess_onnx_model(slice_dynamic_starts_model)
-        assert model is not None
-        assert len(model.graph.node) > 0
-
-    def test_slice_dynamic_ends_model_loads(self, slice_dynamic_ends_model):
-        """Test that dynamic ends slice model can be loaded."""
-        model = load_and_preprocess_onnx_model(slice_dynamic_ends_model)
-        assert model is not None
-        assert len(model.graph.node) > 0
-
-    def test_slice_narrow_compatible_model_loads(self, slice_narrow_compatible_model):
-        """Test that narrow-compatible slice model can be loaded."""
-        model = load_and_preprocess_onnx_model(slice_narrow_compatible_model)
-        assert model is not None
-        assert len(model.graph.node) > 0
-
-    def test_slice_multi_axis_model_loads(self, slice_multi_axis_model):
-        """Test that multi-axis slice model can be loaded."""
-        model = load_and_preprocess_onnx_model(slice_multi_axis_model)
-        assert model is not None
-        assert len(model.graph.node) > 0
-
-    def test_slice_int64max_model_loads(self, slice_int64max_model):
-        """Test that INT64_MAX slice model can be loaded."""
-        model = load_and_preprocess_onnx_model(slice_int64max_model)
-        assert model is not None
+    @pytest.mark.parametrize(
+        "model_fixture",
+        [
+            pytest.param("slice_static_model", id="static"),
+            pytest.param("slice_dynamic_starts_model", id="dynamic_starts"),
+            pytest.param("slice_dynamic_ends_model", id="dynamic_ends"),
+            pytest.param("slice_narrow_compatible_model", id="narrow_compatible"),
+            pytest.param("slice_multi_axis_model", id="multi_axis"),
+            pytest.param("slice_int64max_model", id="int64max"),
+        ],
+    )
+    def test_slice_model_loads(self, model_fixture, request):
+        """Test that slice models can be loaded and preprocessed."""
+        model = load_and_preprocess_onnx_model(request.getfixturevalue(model_fixture))
+        assert isinstance(model, onnx.ModelProto)
         assert len(model.graph.node) > 0
 
     def test_slice_static_through_build_ir(self, slice_static_model):
@@ -69,41 +50,26 @@ class TestSliceOperations:
         model = load_and_preprocess_onnx_model(slice_static_model)
         ir = build_model_ir(model)
 
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
-        assert ir.input_names is not None
-        assert ir.output_names is not None
+        assert isinstance(ir.input_names, list)
+        assert isinstance(ir.output_names, list)
 
-    def test_slice_dynamic_starts_through_build_ir(self, slice_dynamic_starts_model):
-        """Test dynamic starts slice model through Build IR stage."""
-        model = load_and_preprocess_onnx_model(slice_dynamic_starts_model)
+    @pytest.mark.parametrize(
+        "model_fixture",
+        [
+            pytest.param("slice_dynamic_starts_model", id="dynamic_starts"),
+            pytest.param("slice_multi_axis_model", id="multi_axis"),
+            pytest.param("slice_int64max_model", id="int64max"),
+            pytest.param("slice_narrow_compatible_model", id="narrow_compatible"),
+        ],
+    )
+    def test_slice_model_through_build_ir(self, model_fixture, request):
+        """Test slice models through Build IR stage."""
+        model = load_and_preprocess_onnx_model(request.getfixturevalue(model_fixture))
         ir = build_model_ir(model)
 
-        assert ir is not None
-        assert len(ir.layers) > 0
-
-    def test_slice_multi_axis_through_build_ir(self, slice_multi_axis_model):
-        """Test multi-axis slice model through Build IR stage."""
-        model = load_and_preprocess_onnx_model(slice_multi_axis_model)
-        ir = build_model_ir(model)
-
-        assert ir is not None
-        assert len(ir.layers) > 0
-
-    def test_slice_int64max_through_build_ir(self, slice_int64max_model):
-        """Test INT64_MAX slice model through Build IR stage."""
-        model = load_and_preprocess_onnx_model(slice_int64max_model)
-        ir = build_model_ir(model)
-
-        assert ir is not None
-        assert len(ir.layers) > 0
-
-    def test_slice_narrow_compatible_through_build_ir(self, slice_narrow_compatible_model):
-        """Test narrow-compatible slice model through Build IR stage."""
-        model = load_and_preprocess_onnx_model(slice_narrow_compatible_model)
-        ir = build_model_ir(model)
-
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
 
     def test_slice_models_have_correct_structure(self, slice_static_model):
@@ -176,7 +142,8 @@ class TestSliceHelperFunctions:
 
         # Should parse as valid Python
         try:
-            ast.parse(code)
+            tree = ast.parse(code)
+            assert isinstance(tree, ast.AST)
         except SyntaxError:
             pytest.fail(f"Generated code is not valid Python: {code}")
 
@@ -221,7 +188,8 @@ class TestSliceHelperFunctions:
         )
 
         # Should generate narrow code
-        assert code is not None
+        assert isinstance(code, str)
+        assert len(code) > 0
         assert "narrow" in code
         assert "y = x.narrow" in code
 
@@ -339,69 +307,57 @@ class TestSliceEndToEnd:
     def test_slice_static_normalizes(self, slice_static_model):
         """Test static slice operation can be normalized."""
         model = load_and_preprocess_onnx_model(slice_static_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
         # Verify opset version is set
-        assert model.opset_import is not None
+        assert len(model.opset_import) > 0
 
     def test_slice_dynamic_starts_normalizes(self, slice_dynamic_starts_model):
         """Test dynamic starts slice can be normalized."""
         model = load_and_preprocess_onnx_model(slice_dynamic_starts_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
     def test_slice_multi_axis_normalizes(self, slice_multi_axis_model):
         """Test multi-axis slice can be normalized."""
         model = load_and_preprocess_onnx_model(slice_multi_axis_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
     def test_slice_int64max_normalizes(self, slice_int64max_model):
         """Test INT64_MAX slice can be normalized."""
         model = load_and_preprocess_onnx_model(slice_int64max_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
 
 class TestExpandOperations:
     """Test Expand operation handler with various shape configurations."""
 
-    def test_expand_constant_shape_loads(self, expand_constant_shape_model):
-        """Test that constant shape expand model can be loaded."""
-        model = load_and_preprocess_onnx_model(expand_constant_shape_model)
-        assert model is not None
+    @pytest.mark.parametrize(
+        "model_fixture",
+        [
+            pytest.param("expand_constant_shape_model", id="constant"),
+            pytest.param("expand_runtime_shape_model", id="runtime"),
+            pytest.param("expand_broadcast_model", id="broadcast"),
+        ],
+    )
+    def test_expand_model_loads(self, model_fixture, request):
+        """Test that expand models can be loaded and preprocessed."""
+        model = load_and_preprocess_onnx_model(request.getfixturevalue(model_fixture))
+        assert isinstance(model, onnx.ModelProto)
         assert len(model.graph.node) > 0
 
-    def test_expand_runtime_shape_loads(self, expand_runtime_shape_model):
-        """Test that runtime shape expand model can be loaded."""
-        model = load_and_preprocess_onnx_model(expand_runtime_shape_model)
-        assert model is not None
-        assert len(model.graph.node) > 0
-
-    def test_expand_broadcast_loads(self, expand_broadcast_model):
-        """Test that broadcast expand model can be loaded."""
-        model = load_and_preprocess_onnx_model(expand_broadcast_model)
-        assert model is not None
-        assert len(model.graph.node) > 0
-
-    def test_expand_constant_through_build_ir(self, expand_constant_shape_model):
-        """Test constant shape expand through Build IR stage."""
-        model = load_and_preprocess_onnx_model(expand_constant_shape_model)
+    @pytest.mark.parametrize(
+        "model_fixture",
+        [
+            pytest.param("expand_constant_shape_model", id="constant"),
+            pytest.param("expand_runtime_shape_model", id="runtime"),
+            pytest.param("expand_broadcast_model", id="broadcast"),
+        ],
+    )
+    def test_expand_model_through_build_ir(self, model_fixture, request):
+        """Test expand models through Build IR stage."""
+        model = load_and_preprocess_onnx_model(request.getfixturevalue(model_fixture))
         ir = build_model_ir(model)
 
-        assert ir is not None
-        assert len(ir.layers) > 0
-
-    def test_expand_runtime_through_build_ir(self, expand_runtime_shape_model):
-        """Test runtime shape expand through Build IR stage."""
-        model = load_and_preprocess_onnx_model(expand_runtime_shape_model)
-        ir = build_model_ir(model)
-
-        assert ir is not None
-        assert len(ir.layers) > 0
-
-    def test_expand_broadcast_through_build_ir(self, expand_broadcast_model):
-        """Test broadcast expand through Build IR stage."""
-        model = load_and_preprocess_onnx_model(expand_broadcast_model)
-        ir = build_model_ir(model)
-
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
 
     def test_expand_models_have_correct_structure(self, expand_constant_shape_model):
@@ -415,63 +371,51 @@ class TestExpandOperations:
     def test_expand_constant_normalizes(self, expand_constant_shape_model):
         """Test constant expand can be normalized."""
         model = load_and_preprocess_onnx_model(expand_constant_shape_model)
-        assert model is not None
-        assert model.opset_import is not None
+        assert isinstance(model, onnx.ModelProto)
+        assert len(model.opset_import) > 0
 
     def test_expand_runtime_normalizes(self, expand_runtime_shape_model):
         """Test runtime expand can be normalized."""
         model = load_and_preprocess_onnx_model(expand_runtime_shape_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
     def test_expand_broadcast_normalizes(self, expand_broadcast_model):
         """Test broadcast expand can be normalized."""
         model = load_and_preprocess_onnx_model(expand_broadcast_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
 
 class TestPadOperations:
     """Test Pad operation handler with various padding configurations."""
 
-    def test_pad_constant_pads_loads(self, pad_constant_pads_model):
-        """Test that constant pads pad model can be loaded."""
-        model = load_and_preprocess_onnx_model(pad_constant_pads_model)
-        assert model is not None
+    @pytest.mark.parametrize(
+        "model_fixture",
+        [
+            pytest.param("pad_constant_pads_model", id="constant_pads"),
+            pytest.param("pad_dynamic_pads_model", id="dynamic_pads"),
+            pytest.param("pad_with_value_model", id="with_value"),
+        ],
+    )
+    def test_pad_model_loads(self, model_fixture, request):
+        """Test that pad models can be loaded and preprocessed."""
+        model = load_and_preprocess_onnx_model(request.getfixturevalue(model_fixture))
+        assert isinstance(model, onnx.ModelProto)
         assert len(model.graph.node) > 0
 
-    def test_pad_dynamic_pads_loads(self, pad_dynamic_pads_model):
-        """Test that dynamic pads pad model can be loaded."""
-        model = load_and_preprocess_onnx_model(pad_dynamic_pads_model)
-        assert model is not None
-        assert len(model.graph.node) > 0
-
-    def test_pad_with_value_loads(self, pad_with_value_model):
-        """Test that pad with value model can be loaded."""
-        model = load_and_preprocess_onnx_model(pad_with_value_model)
-        assert model is not None
-        assert len(model.graph.node) > 0
-
-    def test_pad_constant_through_build_ir(self, pad_constant_pads_model):
-        """Test constant pads pad through Build IR stage."""
-        model = load_and_preprocess_onnx_model(pad_constant_pads_model)
+    @pytest.mark.parametrize(
+        "model_fixture",
+        [
+            pytest.param("pad_constant_pads_model", id="constant_pads"),
+            pytest.param("pad_dynamic_pads_model", id="dynamic_pads"),
+            pytest.param("pad_with_value_model", id="with_value"),
+        ],
+    )
+    def test_pad_model_through_build_ir(self, model_fixture, request):
+        """Test pad models through Build IR stage."""
+        model = load_and_preprocess_onnx_model(request.getfixturevalue(model_fixture))
         ir = build_model_ir(model)
 
-        assert ir is not None
-        assert len(ir.layers) > 0
-
-    def test_pad_dynamic_through_build_ir(self, pad_dynamic_pads_model):
-        """Test dynamic pads pad through Build IR stage."""
-        model = load_and_preprocess_onnx_model(pad_dynamic_pads_model)
-        ir = build_model_ir(model)
-
-        assert ir is not None
-        assert len(ir.layers) > 0
-
-    def test_pad_with_value_through_build_ir(self, pad_with_value_model):
-        """Test pad with value through Build IR stage."""
-        model = load_and_preprocess_onnx_model(pad_with_value_model)
-        ir = build_model_ir(model)
-
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
 
     def test_pad_models_have_correct_structure(self, pad_constant_pads_model):
@@ -485,18 +429,18 @@ class TestPadOperations:
     def test_pad_constant_normalizes(self, pad_constant_pads_model):
         """Test constant pads pad can be normalized."""
         model = load_and_preprocess_onnx_model(pad_constant_pads_model)
-        assert model is not None
-        assert model.opset_import is not None
+        assert isinstance(model, onnx.ModelProto)
+        assert len(model.opset_import) > 0
 
     def test_pad_dynamic_normalizes(self, pad_dynamic_pads_model):
         """Test dynamic pads pad can be normalized."""
         model = load_and_preprocess_onnx_model(pad_dynamic_pads_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
     def test_pad_with_value_normalizes(self, pad_with_value_model):
         """Test pad with value can be normalized."""
         model = load_and_preprocess_onnx_model(pad_with_value_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
 
 class TestGatherOperations:
@@ -505,13 +449,13 @@ class TestGatherOperations:
     def test_gather_scalar_index_loads(self, gather_scalar_index_model):
         """Test that scalar index gather model can be loaded."""
         model = load_and_preprocess_onnx_model(gather_scalar_index_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
         assert len(model.graph.node) > 0
 
     def test_gather_vector_indices_loads(self, gather_vector_indices_model):
         """Test that vector indices gather model can be loaded."""
         model = load_and_preprocess_onnx_model(gather_vector_indices_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
         assert len(model.graph.node) > 0
 
     def test_gather_scalar_through_build_ir(self, gather_scalar_index_model):
@@ -519,7 +463,7 @@ class TestGatherOperations:
         model = load_and_preprocess_onnx_model(gather_scalar_index_model)
         ir = build_model_ir(model)
 
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
 
     def test_gather_vector_through_build_ir(self, gather_vector_indices_model):
@@ -527,7 +471,7 @@ class TestGatherOperations:
         model = load_and_preprocess_onnx_model(gather_vector_indices_model)
         ir = build_model_ir(model)
 
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
 
     def test_gather_models_have_correct_structure(self, gather_scalar_index_model):
@@ -541,13 +485,13 @@ class TestGatherOperations:
     def test_gather_scalar_normalizes(self, gather_scalar_index_model):
         """Test scalar index gather can be normalized."""
         model = load_and_preprocess_onnx_model(gather_scalar_index_model)
-        assert model is not None
-        assert model.opset_import is not None
+        assert isinstance(model, onnx.ModelProto)
+        assert len(model.opset_import) > 0
 
     def test_gather_vector_normalizes(self, gather_vector_indices_model):
         """Test vector indices gather can be normalized."""
         model = load_and_preprocess_onnx_model(gather_vector_indices_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
 
 class TestScatterNDOperations:
@@ -556,7 +500,7 @@ class TestScatterNDOperations:
     def test_scatter_nd_loads(self, scatter_nd_model):
         """Test that scatter_nd model can be loaded."""
         model = load_and_preprocess_onnx_model(scatter_nd_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
         assert len(model.graph.node) > 0
 
     def test_scatter_nd_through_build_ir(self, scatter_nd_model):
@@ -564,7 +508,7 @@ class TestScatterNDOperations:
         model = load_and_preprocess_onnx_model(scatter_nd_model)
         ir = build_model_ir(model)
 
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
 
     def test_scatter_nd_has_correct_structure(self, scatter_nd_model):
@@ -578,8 +522,8 @@ class TestScatterNDOperations:
     def test_scatter_nd_normalizes(self, scatter_nd_model):
         """Test scatter_nd can be normalized."""
         model = load_and_preprocess_onnx_model(scatter_nd_model)
-        assert model is not None
-        assert model.opset_import is not None
+        assert isinstance(model, onnx.ModelProto)
+        assert len(model.opset_import) > 0
 
 
 class TestConcatOperations:
@@ -588,7 +532,7 @@ class TestConcatOperations:
     def test_concat_batch_expand_loads(self, concat_batch_expand_model):
         """Test that concat batch expand model can be loaded."""
         model = load_and_preprocess_onnx_model(concat_batch_expand_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
         assert len(model.graph.node) > 0
 
     def test_concat_through_build_ir(self, concat_batch_expand_model):
@@ -596,7 +540,7 @@ class TestConcatOperations:
         model = load_and_preprocess_onnx_model(concat_batch_expand_model)
         ir = build_model_ir(model)
 
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
 
     def test_concat_has_correct_structure(self, concat_batch_expand_model):
@@ -610,8 +554,8 @@ class TestConcatOperations:
     def test_concat_normalizes(self, concat_batch_expand_model):
         """Test concat can be normalized."""
         model = load_and_preprocess_onnx_model(concat_batch_expand_model)
-        assert model is not None
-        assert model.opset_import is not None
+        assert isinstance(model, onnx.ModelProto)
+        assert len(model.opset_import) > 0
 
 
 class TestSplitOperations:
@@ -620,13 +564,13 @@ class TestSplitOperations:
     def test_split_equal_loads(self, split_equal_model):
         """Test that equal split model can be loaded."""
         model = load_and_preprocess_onnx_model(split_equal_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
         assert len(model.graph.node) > 0
 
     def test_split_unequal_loads(self, split_unequal_model):
         """Test that unequal split model can be loaded."""
         model = load_and_preprocess_onnx_model(split_unequal_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
         assert len(model.graph.node) > 0
 
     def test_split_equal_through_build_ir(self, split_equal_model):
@@ -634,7 +578,7 @@ class TestSplitOperations:
         model = load_and_preprocess_onnx_model(split_equal_model)
         ir = build_model_ir(model)
 
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
 
     def test_split_unequal_through_build_ir(self, split_unequal_model):
@@ -642,7 +586,7 @@ class TestSplitOperations:
         model = load_and_preprocess_onnx_model(split_unequal_model)
         ir = build_model_ir(model)
 
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
 
     def test_split_models_have_correct_structure(self, split_equal_model):
@@ -656,13 +600,13 @@ class TestSplitOperations:
     def test_split_equal_normalizes(self, split_equal_model):
         """Test equal split can be normalized."""
         model = load_and_preprocess_onnx_model(split_equal_model)
-        assert model is not None
-        assert model.opset_import is not None
+        assert isinstance(model, onnx.ModelProto)
+        assert len(model.opset_import) > 0
 
     def test_split_unequal_normalizes(self, split_unequal_model):
         """Test unequal split can be normalized."""
         model = load_and_preprocess_onnx_model(split_unequal_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
 
 # ===== Phase 4: Convolution and Linear Operations =====
@@ -673,28 +617,28 @@ class TestConvOperations:
 
     def test_conv1d_loads(self, conv1d_model):
         """Test Conv1D model loads successfully."""
-        assert conv1d_model is not None
+        assert conv1d_model
         model = load_and_preprocess_onnx_model(conv1d_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
     def test_conv3d_loads(self, conv3d_model):
         """Test Conv3D model loads successfully."""
-        assert conv3d_model is not None
+        assert conv3d_model
         model = load_and_preprocess_onnx_model(conv3d_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
     def test_conv1d_through_build_ir(self, conv1d_model):
         """Test Conv1D through IR building stage."""
         normalized = load_and_preprocess_onnx_model(conv1d_model)
         ir = build_model_ir(normalized)
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
 
     def test_conv3d_through_build_ir(self, conv3d_model):
         """Test Conv3D through IR building stage."""
         normalized = load_and_preprocess_onnx_model(conv3d_model)
         ir = build_model_ir(normalized)
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
 
     def test_conv_models_have_correct_structure(self, conv1d_model, conv3d_model):
@@ -709,13 +653,13 @@ class TestConvOperations:
     def test_conv1d_normalizes(self, conv1d_model):
         """Test Conv1D normalizes correctly."""
         normalized = load_and_preprocess_onnx_model(conv1d_model)
-        assert normalized is not None
+        assert isinstance(normalized, onnx.ModelProto)
         onnx.checker.check_model(normalized)
 
     def test_conv3d_normalizes(self, conv3d_model):
         """Test Conv3D normalizes correctly."""
         normalized = load_and_preprocess_onnx_model(conv3d_model)
-        assert normalized is not None
+        assert isinstance(normalized, onnx.ModelProto)
         onnx.checker.check_model(normalized)
 
 
@@ -724,15 +668,15 @@ class TestLinearOperations:
 
     def test_linear_transposed_loads(self, linear_transposed_model):
         """Test Linear with transposed weights loads successfully."""
-        assert linear_transposed_model is not None
+        assert linear_transposed_model
         model = load_and_preprocess_onnx_model(linear_transposed_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
     def test_linear_transposed_through_build_ir(self, linear_transposed_model):
         """Test Linear with transposed weights through IR building."""
         normalized = load_and_preprocess_onnx_model(linear_transposed_model)
         ir = build_model_ir(normalized)
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
 
     def test_linear_transposed_has_correct_structure(self, linear_transposed_model):
@@ -744,7 +688,7 @@ class TestLinearOperations:
     def test_linear_transposed_normalizes(self, linear_transposed_model):
         """Test Linear with transposed weights normalizes correctly."""
         normalized = load_and_preprocess_onnx_model(linear_transposed_model)
-        assert normalized is not None
+        assert isinstance(normalized, onnx.ModelProto)
         onnx.checker.check_model(normalized)
 
     def test_linear_normal_and_transposed_differ(self, linear_model, linear_transposed_model):
@@ -766,15 +710,15 @@ class TestInterpolateOperations:
 
     def test_interpolate_loads(self, interpolate_model):
         """Test Interpolate model loads successfully."""
-        assert interpolate_model is not None
+        assert interpolate_model
         model = load_and_preprocess_onnx_model(interpolate_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
     def test_interpolate_through_build_ir(self, interpolate_model):
         """Test Interpolate through IR building stage."""
         normalized = load_and_preprocess_onnx_model(interpolate_model)
         ir = build_model_ir(normalized)
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
 
     def test_interpolate_has_correct_structure(self, interpolate_model):
@@ -786,7 +730,7 @@ class TestInterpolateOperations:
     def test_interpolate_normalizes(self, interpolate_model):
         """Test Interpolate normalizes correctly."""
         normalized = load_and_preprocess_onnx_model(interpolate_model)
-        assert normalized is not None
+        assert isinstance(normalized, onnx.ModelProto)
         onnx.checker.check_model(normalized)
 
 
@@ -795,15 +739,15 @@ class TestConvTransposeOperations:
 
     def test_conv_transpose_loads(self, conv_transpose_model):
         """Test ConvTranspose model loads successfully."""
-        assert conv_transpose_model is not None
+        assert conv_transpose_model
         model = load_and_preprocess_onnx_model(conv_transpose_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
     def test_conv_transpose_through_build_ir(self, conv_transpose_model):
         """Test ConvTranspose through IR building stage."""
         normalized = load_and_preprocess_onnx_model(conv_transpose_model)
         ir = build_model_ir(normalized)
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
 
     def test_conv_transpose_has_correct_structure(self, conv_transpose_model):
@@ -815,7 +759,7 @@ class TestConvTransposeOperations:
     def test_conv_transpose_normalizes(self, conv_transpose_model):
         """Test ConvTranspose normalizes correctly."""
         normalized = load_and_preprocess_onnx_model(conv_transpose_model)
-        assert normalized is not None
+        assert isinstance(normalized, onnx.ModelProto)
         onnx.checker.check_model(normalized)
 
 
@@ -827,40 +771,40 @@ class TestClipOperations:
 
     def test_clip_constant_bounds_loads(self, clip_constant_bounds_model):
         """Test Clip with constant bounds loads successfully."""
-        assert clip_constant_bounds_model is not None
+        assert clip_constant_bounds_model
         model = load_and_preprocess_onnx_model(clip_constant_bounds_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
     def test_clip_tensor_bounds_loads(self, clip_tensor_bounds_model):
         """Test Clip with tensor bounds loads successfully."""
-        assert clip_tensor_bounds_model is not None
+        assert clip_tensor_bounds_model
         model = load_and_preprocess_onnx_model(clip_tensor_bounds_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
     def test_clip_constant_through_build_ir(self, clip_constant_bounds_model):
         """Test Clip with constant bounds through IR building."""
         normalized = load_and_preprocess_onnx_model(clip_constant_bounds_model)
         ir = build_model_ir(normalized)
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
 
     def test_clip_tensor_through_build_ir(self, clip_tensor_bounds_model):
         """Test Clip with tensor bounds through IR building."""
         normalized = load_and_preprocess_onnx_model(clip_tensor_bounds_model)
         ir = build_model_ir(normalized)
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
 
     def test_clip_constant_normalizes(self, clip_constant_bounds_model):
         """Test Clip with constant bounds normalizes correctly."""
         normalized = load_and_preprocess_onnx_model(clip_constant_bounds_model)
-        assert normalized is not None
+        assert isinstance(normalized, onnx.ModelProto)
         onnx.checker.check_model(normalized)
 
     def test_clip_tensor_normalizes(self, clip_tensor_bounds_model):
         """Test Clip with tensor bounds normalizes correctly."""
         normalized = load_and_preprocess_onnx_model(clip_tensor_bounds_model)
-        assert normalized is not None
+        assert isinstance(normalized, onnx.ModelProto)
         onnx.checker.check_model(normalized)
 
 
@@ -869,40 +813,40 @@ class TestArangeOperations:
 
     def test_arange_literal_loads(self, arange_literal_model):
         """Test Arange with literal parameters loads successfully."""
-        assert arange_literal_model is not None
+        assert arange_literal_model
         model = load_and_preprocess_onnx_model(arange_literal_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
     def test_arange_runtime_loads(self, arange_runtime_model):
         """Test Arange with runtime parameters loads successfully."""
-        assert arange_runtime_model is not None
+        assert arange_runtime_model
         model = load_and_preprocess_onnx_model(arange_runtime_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
     def test_arange_literal_through_build_ir(self, arange_literal_model):
         """Test Arange with literal parameters through IR building."""
         normalized = load_and_preprocess_onnx_model(arange_literal_model)
         ir = build_model_ir(normalized)
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
 
     def test_arange_runtime_through_build_ir(self, arange_runtime_model):
         """Test Arange with runtime parameters through IR building."""
         normalized = load_and_preprocess_onnx_model(arange_runtime_model)
         ir = build_model_ir(normalized)
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
 
     def test_arange_literal_normalizes(self, arange_literal_model):
         """Test Arange with literal parameters normalizes correctly."""
         normalized = load_and_preprocess_onnx_model(arange_literal_model)
-        assert normalized is not None
+        assert isinstance(normalized, onnx.ModelProto)
         onnx.checker.check_model(normalized)
 
     def test_arange_runtime_normalizes(self, arange_runtime_model):
         """Test Arange with runtime parameters normalizes correctly."""
         normalized = load_and_preprocess_onnx_model(arange_runtime_model)
-        assert normalized is not None
+        assert isinstance(normalized, onnx.ModelProto)
         onnx.checker.check_model(normalized)
 
 
@@ -911,15 +855,15 @@ class TestReshapeOperations:
 
     def test_reshape_infer_dim_loads(self, reshape_infer_dim_model):
         """Test Reshape with dimension inference loads successfully."""
-        assert reshape_infer_dim_model is not None
+        assert reshape_infer_dim_model
         model = load_and_preprocess_onnx_model(reshape_infer_dim_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
     def test_reshape_infer_dim_through_build_ir(self, reshape_infer_dim_model):
         """Test Reshape with dimension inference through IR building."""
         normalized = load_and_preprocess_onnx_model(reshape_infer_dim_model)
         ir = build_model_ir(normalized)
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
 
     def test_reshape_infer_dim_has_correct_structure(self, reshape_infer_dim_model):
@@ -931,7 +875,7 @@ class TestReshapeOperations:
     def test_reshape_infer_dim_normalizes(self, reshape_infer_dim_model):
         """Test Reshape with dimension inference normalizes correctly."""
         normalized = load_and_preprocess_onnx_model(reshape_infer_dim_model)
-        assert normalized is not None
+        assert isinstance(normalized, onnx.ModelProto)
         onnx.checker.check_model(normalized)
 
 
@@ -940,28 +884,28 @@ class TestReduceOperations:
 
     def test_reduce_mean_loads(self, reduce_mean_model):
         """Test ReduceMean model loads successfully."""
-        assert reduce_mean_model is not None
+        assert reduce_mean_model
         model = load_and_preprocess_onnx_model(reduce_mean_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
     def test_reduce_sum_loads(self, reduce_sum_model):
         """Test ReduceSum model loads successfully."""
-        assert reduce_sum_model is not None
+        assert reduce_sum_model
         model = load_and_preprocess_onnx_model(reduce_sum_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
     def test_reduce_mean_through_build_ir(self, reduce_mean_model):
         """Test ReduceMean through IR building stage."""
         normalized = load_and_preprocess_onnx_model(reduce_mean_model)
         ir = build_model_ir(normalized)
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
 
     def test_reduce_sum_through_build_ir(self, reduce_sum_model):
         """Test ReduceSum through IR building stage."""
         normalized = load_and_preprocess_onnx_model(reduce_sum_model)
         ir = build_model_ir(normalized)
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
 
     def test_reduce_mean_has_correct_structure(self, reduce_mean_model):
@@ -982,13 +926,13 @@ class TestReduceOperations:
     def test_reduce_mean_normalizes(self, reduce_mean_model):
         """Test ReduceMean normalizes correctly."""
         normalized = load_and_preprocess_onnx_model(reduce_mean_model)
-        assert normalized is not None
+        assert isinstance(normalized, onnx.ModelProto)
         onnx.checker.check_model(normalized)
 
     def test_reduce_sum_normalizes(self, reduce_sum_model):
         """Test ReduceSum normalizes correctly."""
         normalized = load_and_preprocess_onnx_model(reduce_sum_model)
-        assert normalized is not None
+        assert isinstance(normalized, onnx.ModelProto)
         onnx.checker.check_model(normalized)
 
 
@@ -998,112 +942,48 @@ class TestReduceOperations:
 class TestSimpleOperations:
     """Test simple operation handlers with basic configurations."""
 
-    def test_transpose_loads(self, transpose_model):
-        """Test Transpose model loads successfully."""
-        assert transpose_model is not None
-        model = load_and_preprocess_onnx_model(transpose_model)
-        assert model is not None
-
-    def test_squeeze_loads(self, squeeze_model):
-        """Test Squeeze model loads successfully."""
-        assert squeeze_model is not None
-        model = load_and_preprocess_onnx_model(squeeze_model)
-        assert model is not None
-
-    def test_unsqueeze_loads(self, unsqueeze_model):
-        """Test Unsqueeze model loads successfully."""
-        assert unsqueeze_model is not None
-        model = load_and_preprocess_onnx_model(unsqueeze_model)
-        assert model is not None
-
-    def test_cast_loads(self, cast_model):
-        """Test Cast model loads successfully."""
-        assert cast_model is not None
-        model = load_and_preprocess_onnx_model(cast_model)
-        assert model is not None
-
-    def test_shape_loads(self, shape_model):
-        """Test Shape model loads successfully."""
-        assert shape_model is not None
-        model = load_and_preprocess_onnx_model(shape_model)
-        assert model is not None
-
-    def test_sign_loads(self, sign_model):
-        """Test Sign model loads successfully."""
-        assert sign_model is not None
-        model = load_and_preprocess_onnx_model(sign_model)
-        assert model is not None
-
-    def test_trigonometric_loads(self, trigonometric_model):
-        """Test Trigonometric (Sin) model loads successfully."""
-        assert trigonometric_model is not None
-        model = load_and_preprocess_onnx_model(trigonometric_model)
-        assert model is not None
-
-    def test_floor_loads(self, floor_model):
-        """Test Floor model loads successfully."""
-        assert floor_model is not None
-        model = load_and_preprocess_onnx_model(floor_model)
-        assert model is not None
+    @pytest.mark.parametrize(
+        "model_fixture",
+        [
+            pytest.param("transpose_model", id="transpose"),
+            pytest.param("squeeze_model", id="squeeze"),
+            pytest.param("unsqueeze_model", id="unsqueeze"),
+            pytest.param("cast_model", id="cast"),
+            pytest.param("shape_model", id="shape"),
+            pytest.param("sign_model", id="sign"),
+            pytest.param("trigonometric_model", id="trigonometric"),
+            pytest.param("floor_model", id="floor"),
+        ],
+    )
+    def test_simple_op_loads(self, model_fixture, request):
+        """Test simple operation models load successfully."""
+        model_path = request.getfixturevalue(model_fixture)
+        assert model_path
+        model = load_and_preprocess_onnx_model(model_path)
+        assert isinstance(model, onnx.ModelProto)
 
 
 class TestSimpleOperationIntegration:
     """Test simple operations through IR building pipeline."""
 
-    def test_transpose_through_build_ir(self, transpose_model):
-        """Test Transpose through IR building stage."""
-        normalized = load_and_preprocess_onnx_model(transpose_model)
+    @pytest.mark.parametrize(
+        "model_fixture",
+        [
+            pytest.param("transpose_model", id="transpose"),
+            pytest.param("squeeze_model", id="squeeze"),
+            pytest.param("unsqueeze_model", id="unsqueeze"),
+            pytest.param("cast_model", id="cast"),
+            pytest.param("shape_model", id="shape"),
+            pytest.param("sign_model", id="sign"),
+            pytest.param("trigonometric_model", id="trigonometric"),
+            pytest.param("floor_model", id="floor"),
+        ],
+    )
+    def test_simple_op_through_build_ir(self, model_fixture, request):
+        """Test simple operations through IR building stage."""
+        normalized = load_and_preprocess_onnx_model(request.getfixturevalue(model_fixture))
         ir = build_model_ir(normalized)
-        assert ir is not None
-        assert len(ir.layers) > 0
-
-    def test_squeeze_through_build_ir(self, squeeze_model):
-        """Test Squeeze through IR building stage."""
-        normalized = load_and_preprocess_onnx_model(squeeze_model)
-        ir = build_model_ir(normalized)
-        assert ir is not None
-        assert len(ir.layers) > 0
-
-    def test_unsqueeze_through_build_ir(self, unsqueeze_model):
-        """Test Unsqueeze through IR building stage."""
-        normalized = load_and_preprocess_onnx_model(unsqueeze_model)
-        ir = build_model_ir(normalized)
-        assert ir is not None
-        assert len(ir.layers) > 0
-
-    def test_cast_through_build_ir(self, cast_model):
-        """Test Cast through IR building stage."""
-        normalized = load_and_preprocess_onnx_model(cast_model)
-        ir = build_model_ir(normalized)
-        assert ir is not None
-        assert len(ir.layers) > 0
-
-    def test_shape_through_build_ir(self, shape_model):
-        """Test Shape through IR building stage."""
-        normalized = load_and_preprocess_onnx_model(shape_model)
-        ir = build_model_ir(normalized)
-        assert ir is not None
-        assert len(ir.layers) > 0
-
-    def test_sign_through_build_ir(self, sign_model):
-        """Test Sign through IR building stage."""
-        normalized = load_and_preprocess_onnx_model(sign_model)
-        ir = build_model_ir(normalized)
-        assert ir is not None
-        assert len(ir.layers) > 0
-
-    def test_trigonometric_through_build_ir(self, trigonometric_model):
-        """Test Trigonometric through IR building stage."""
-        normalized = load_and_preprocess_onnx_model(trigonometric_model)
-        ir = build_model_ir(normalized)
-        assert ir is not None
-        assert len(ir.layers) > 0
-
-    def test_floor_through_build_ir(self, floor_model):
-        """Test Floor through IR building stage."""
-        normalized = load_and_preprocess_onnx_model(floor_model)
-        ir = build_model_ir(normalized)
-        assert ir is not None
+        assert isinstance(ir.layers, list)
         assert len(ir.layers) > 0
 
 
@@ -1152,50 +1032,21 @@ class TestSimpleOperationValidation:
 class TestSimpleOperationNormalization:
     """Test simple operations normalize correctly."""
 
-    def test_transpose_normalizes(self, transpose_model):
-        """Test Transpose normalizes correctly."""
-        normalized = load_and_preprocess_onnx_model(transpose_model)
-        assert normalized is not None
-        onnx.checker.check_model(normalized)
-
-    def test_squeeze_normalizes(self, squeeze_model):
-        """Test Squeeze normalizes correctly."""
-        normalized = load_and_preprocess_onnx_model(squeeze_model)
-        assert normalized is not None
-        onnx.checker.check_model(normalized)
-
-    def test_unsqueeze_normalizes(self, unsqueeze_model):
-        """Test Unsqueeze normalizes correctly."""
-        normalized = load_and_preprocess_onnx_model(unsqueeze_model)
-        assert normalized is not None
-        onnx.checker.check_model(normalized)
-
-    def test_cast_normalizes(self, cast_model):
-        """Test Cast normalizes correctly."""
-        normalized = load_and_preprocess_onnx_model(cast_model)
-        assert normalized is not None
-        onnx.checker.check_model(normalized)
-
-    def test_shape_normalizes(self, shape_model):
-        """Test Shape normalizes correctly."""
-        normalized = load_and_preprocess_onnx_model(shape_model)
-        assert normalized is not None
-        onnx.checker.check_model(normalized)
-
-    def test_sign_normalizes(self, sign_model):
-        """Test Sign normalizes correctly."""
-        normalized = load_and_preprocess_onnx_model(sign_model)
-        assert normalized is not None
-        onnx.checker.check_model(normalized)
-
-    def test_trigonometric_normalizes(self, trigonometric_model):
-        """Test Trigonometric normalizes correctly."""
-        normalized = load_and_preprocess_onnx_model(trigonometric_model)
-        assert normalized is not None
-        onnx.checker.check_model(normalized)
-
-    def test_floor_normalizes(self, floor_model):
-        """Test Floor normalizes correctly."""
-        normalized = load_and_preprocess_onnx_model(floor_model)
-        assert normalized is not None
+    @pytest.mark.parametrize(
+        "model_fixture",
+        [
+            pytest.param("transpose_model", id="transpose"),
+            pytest.param("squeeze_model", id="squeeze"),
+            pytest.param("unsqueeze_model", id="unsqueeze"),
+            pytest.param("cast_model", id="cast"),
+            pytest.param("shape_model", id="shape"),
+            pytest.param("sign_model", id="sign"),
+            pytest.param("trigonometric_model", id="trigonometric"),
+            pytest.param("floor_model", id="floor"),
+        ],
+    )
+    def test_simple_op_normalizes(self, model_fixture, request):
+        """Test simple operations normalize correctly."""
+        normalized = load_and_preprocess_onnx_model(request.getfixturevalue(model_fixture))
+        assert isinstance(normalized, onnx.ModelProto)
         onnx.checker.check_model(normalized)

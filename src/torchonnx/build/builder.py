@@ -9,7 +9,8 @@ __all__ = ["build_model_ir"]
 
 from onnx import ModelProto, NodeProto
 
-from ..normalize import (
+from torchonnx.build.types import ModelIR, NodeIR
+from torchonnx.normalize import (
     extract_onnx_opset_version,
     get_onnx_initializers,
     get_onnx_model_input_names,
@@ -17,7 +18,6 @@ from ..normalize import (
     get_onnx_model_shapes,
     get_onnx_nodes,
 )
-from .types import ModelIR, NodeIR
 
 
 def _clean_shape(shape: tuple[int | str, ...] | None) -> tuple[int, ...] | None:
@@ -59,9 +59,7 @@ def _build_node_ir(
 
     # Generate node name from ONNX node name, or use first output name as fallback
     name = (
-        node.name
-        if node.name
-        else (node.output[0] if node.output else f"node_{node_counter}")
+        node.name or (node.output[0] if node.output else f"node_{node_counter}")
     )
 
     # Store raw ONNX attributes (unparsed)

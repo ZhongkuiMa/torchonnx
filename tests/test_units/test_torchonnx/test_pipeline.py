@@ -19,6 +19,7 @@ import importlib.util
 
 import numpy as np
 import onnx
+import onnxruntime as ort
 import pytest
 import torch
 
@@ -58,10 +59,9 @@ class TestNormalizeToBuild:
     def test_normalize_to_build_pipeline(self, identity_model):
         """Test pipeline from normalize to build stages."""
         model = load_and_preprocess_onnx_model(identity_model)
-        assert model is not None
+        assert isinstance(model, onnx.ModelProto)
 
         ir = build_model_ir(model)
-        assert ir is not None
         assert len(ir.layers) == 1
 
     def test_build_stage_handles_multiple_layers(self, mlp_model):
@@ -70,15 +70,16 @@ class TestNormalizeToBuild:
         ir = build_model_ir(model)
 
         assert len(ir.layers) == 3
-        assert ir.input_names
-        assert ir.output_names
+        assert isinstance(ir.input_names, list)
+        assert len(ir.input_names) > 0
+        assert isinstance(ir.output_names, list)
+        assert len(ir.output_names) > 0
 
     def test_normalize_opset_affects_build(self, linear_model):
         """Test that normalize opset version is preserved in IR."""
         model = load_and_preprocess_onnx_model(linear_model, target_opset=20)
         ir = build_model_ir(model)
 
-        assert ir is not None
         assert len(ir.layers) == 1
 
 
@@ -100,7 +101,7 @@ class TestBuildProperties:
         ir = build_model_ir(model)
 
         # MLP should have parameters for 3 layers (2 Gemm + 1 for ReLU)
-        assert ir.initializers is not None
+        assert isinstance(ir.initializers, dict)
         # Should have multiple initializers for multi-layer model
         assert len(ir.initializers) > 0
 
@@ -111,7 +112,7 @@ class TestPipelineErrorPropagation:
     def test_normalize_error_blocks_pipeline(self, tmp_path):
         """Test that normalize errors prevent build from running."""
         nonexistent = tmp_path / "nonexistent.onnx"
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(FileNotFoundError, match=r"No such file"):
             load_and_preprocess_onnx_model(str(nonexistent))
 
     def test_build_error_from_invalid_ir(self):
@@ -246,12 +247,10 @@ class TestConvertAPI:
         # Instantiate the class
         model_class = classes[0]
         model_instance = model_class()
-        assert model_instance is not None
+        assert isinstance(model_instance, torch.nn.Module)
 
     def test_convert_numerical_accuracy(self, linear_model, tmp_path):
         """Compare numerical outputs between ONNX and generated PyTorch."""
-        import onnxruntime as ort
-
         converter = TorchONNX()
         output_py = tmp_path / "numeric.py"
         output_pth = tmp_path / "numeric.pth"
