@@ -8,6 +8,8 @@ Test Coverage:
 - TestSliceEndToEnd: 4 tests - End-to-end slice operation through the pipeline
 """
 
+__docformat__ = "restructuredtext"
+
 import ast
 
 import numpy as np

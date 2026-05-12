@@ -14,6 +14,8 @@ Test Coverage:
 - TestBuildEdgeCases: 2 tests - Skip connections, complex patterns
 """
 
+__docformat__ = "restructuredtext"
+
 from torchonnx.build import build_model_ir
 from torchonnx.normalize import load_and_preprocess_onnx_model
 

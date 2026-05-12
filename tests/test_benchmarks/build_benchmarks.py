@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Build script to set up benchmarks symlink for torchonnx tests."""
 
+__docformat__ = "restructuredtext"
+
 import sys
 from pathlib import Path
 

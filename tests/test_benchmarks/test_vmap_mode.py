@@ -19,12 +19,6 @@ Directory structure:
 """
 
 __docformat__ = "restructuredtext"
-__all__ = [
-    "convert_model_vmap",
-    "convert_models_without_batch_dim",
-    "test_vmap_compatibility",
-    "verify_vmap_vs_standard",
-]
 
 import importlib.util
 import json
@@ -80,10 +74,14 @@ def _load_pytorch_module(
 ):
     """Load a PyTorch module from file.
 
-    :param module_path: Path to .py file
-    :param state_dict_path: Path to .pth file
-    :param dtype: Data type ("float32" or "float64")
-    :param device: Device ("cpu" or "cuda")
+    :param module_path: Path to .py file.
+
+    :param state_dict_path: Path to .pth file.
+
+    :param dtype: Data type ("float32" or "float64").
+
+    :param device: Device ("cpu" or "cuda").
+
     :return: Loaded model instance
     """
     module_file = Path(module_path)
@@ -120,11 +118,16 @@ def _run_pytorch_module(
 ) -> dict:
     """Run PyTorch module inference.
 
-    :param module_path: Path to PyTorch module file
-    :param state_dict_path: Path to state dict file
-    :param inputs: input arrays
-    :param dtype: Data type ("float32" or "float64")
-    :param device: Device to run on ("cpu" or "cuda")
+    :param module_path: Path to PyTorch module file.
+
+    :param state_dict_path: Path to state dict file.
+
+    :param inputs: input arrays.
+
+    :param dtype: Data type ("float32" or "float64").
+
+    :param device: Device to run on ("cpu" or "cuda").
+
     :return: Dictionary of output arrays
     """
     model = _load_pytorch_module(module_path, state_dict_path, dtype, device)
@@ -230,8 +233,10 @@ def find_models_without_batch_dim(
 ) -> list[Path]:
     """Find ONNX models that do NOT have batch dimension.
 
-    :param benchmark_dir: Root benchmark directory
-    :param max_per_benchmark: Maximum models per benchmark
+    :param benchmark_dir: Root benchmark directory.
+
+    :param max_per_benchmark: Maximum models per benchmark.
+
     :return: List of model paths without batch dimension
     """
     benchmarks = find_benchmarks(benchmark_dir)
@@ -250,10 +255,14 @@ def convert_model_vmap(
 ) -> dict:
     """Convert one ONNX model to PyTorch with vmap mode.
 
-    :param model_path: Path to source ONNX model file
-    :param output_dir: Directory to save converted PyTorch module
-    :param benchmarks_root: Path to benchmarks root directory
-    :param vmap_mode: Whether to use vmap mode
+    :param model_path: Path to source ONNX model file.
+
+    :param output_dir: Directory to save converted PyTorch module.
+
+    :param benchmarks_root: Path to benchmarks root directory.
+
+    :param vmap_mode: Whether to use vmap mode.
+
     :return: Dictionary with conversion results
     """
     benchmark_name = get_model_benchmark_name(model_path)
@@ -320,14 +329,7 @@ def get_vmap_models():
 
     # Return a skip marker if no models found (prevents pytest collection error)
     if not model_list:
-        return [
-            pytest.param(
-                None,
-                marks=pytest.mark.skip(
-                    reason="Benchmark data not available (run build_benchmarks.py)"
-                ),
-            )
-        ]
+        return [None]  # Will trigger assertion in test
     return model_list
 
 
@@ -335,12 +337,11 @@ def get_vmap_models():
 def test_convert_vmap_model(model_path, output_dir_vmap, benchmarks_root):
     """Convert one ONNX model to PyTorch with vmap mode.
 
-    Parametrized test that runs vmap conversion for each applicable model.
-
-    :param model_path: Path to source ONNX model
-    :param output_dir_vmap: Output directory (from conftest fixture)
-    :param benchmarks_root: Benchmarks root (from conftest fixture)
+    :param model_path: Path to source ONNX model.
+    :param output_dir_vmap: Output directory (from conftest fixture).
+    :param benchmarks_root: Benchmarks root (from conftest fixture).
     """
+    assert model_path is not None, "Benchmark data not available (run build_benchmarks.py)"
     model_path_obj = Path(model_path)
     result = convert_model_vmap(model_path_obj, output_dir_vmap, benchmarks_root, vmap_mode=True)
 
@@ -363,15 +364,20 @@ def test_verify_vmap_vs_standard(model_path, dtype, device, output_dir_vmap, ben
 
     Parametrized test that verifies each vmap model across dtypes and devices.
 
-    :param model_path: Path to original ONNX model
-    :param dtype: Data type to test (float32 or float64)
-    :param device: Device to test (cpu or cuda)
-    :param output_dir_vmap: Output directory (from conftest fixture)
-    :param benchmarks_root: Benchmarks root (from conftest fixture)
+    :param model_path: Path to original ONNX model.
+
+    :param dtype: Data type to test (float32 or float64).
+
+    :param device: Device to test (cpu or cuda).
+
+    :param output_dir_vmap: Output directory (from conftest fixture).
+
+    :param benchmarks_root: Benchmarks root (from conftest fixture).
+
     """
     # Skip if CUDA not available
     if device == "cuda" and not torch.cuda.is_available():
-        pytest.skip("CUDA not available")
+        assert torch.cuda.is_available(), "CUDA not available"
 
     model_path_obj = Path(model_path)
     rel_path = get_model_relative_path(model_path_obj, benchmarks_root)
@@ -382,9 +388,9 @@ def test_verify_vmap_vs_standard(model_path, dtype, device, output_dir_vmap, ben
 
     # Skip if vmap model doesn't exist
     if not result_py_vmap.exists():
-        pytest.skip(f"Vmap model not found: {result_py_vmap.name}")
+        assert result_py_vmap.exists(), f"Vmap model not found: {result_py_vmap.name}"
     if not result_pth_vmap.exists():
-        pytest.skip(f"Vmap state dict not found: {result_pth_vmap.name}")
+        assert result_pth_vmap.exists(), f"Vmap state dict not found: {result_pth_vmap.name}"
 
     # Verify vmap vs standard (simplified check)
     try:
@@ -402,12 +408,17 @@ def test_torch_vmap_compatibility(model_path, output_dir_vmap, benchmarks_root):
 
     Parametrized test to verify vmap compatibility for applicable models.
 
-    :param model_path: Path to ONNX model
-    :param output_dir_vmap: Output directory (from conftest fixture)
-    :param benchmarks_root: Benchmarks root (from conftest fixture)
+    :param model_path: Path to ONNX model.
+
+    :param output_dir_vmap: Output directory (from conftest fixture).
+
+    :param benchmarks_root: Benchmarks root (from conftest fixture).
+
     """
     if importlib.util.find_spec("torch.func.vmap") is None:
-        pytest.skip("torch.func.vmap not available")
+        assert hasattr(torch.func, "vmap"), (
+            "torch.func.vmap not available (requires PyTorch >= 2.0)"
+        )
 
     model_path_obj = Path(model_path)
     rel_path = get_model_relative_path(model_path_obj, benchmarks_root)
@@ -418,9 +429,9 @@ def test_torch_vmap_compatibility(model_path, output_dir_vmap, benchmarks_root):
 
     # Skip if vmap model doesn't exist
     if not result_py_vmap.exists():
-        pytest.skip(f"Vmap model not found: {result_py_vmap.name}")
+        assert result_py_vmap.exists(), f"Vmap model not found: {result_py_vmap.name}"
     if not result_pth_vmap.exists():
-        pytest.skip(f"Vmap state dict not found: {result_pth_vmap.name}")
+        assert result_pth_vmap.exists(), f"Vmap state dict not found: {result_pth_vmap.name}"
 
     # Verify that vmap model can be loaded (actual vmap execution is complex due to input shaping)
     try:
@@ -443,9 +454,12 @@ def convert_models_without_batch_dim(
 ) -> dict:
     """Convert all models without batch dimension using vmap mode.
 
-    :param benchmark_dir: Root directory of benchmarks
-    :param output_dir: Directory to save converted PyTorch modules
-    :param max_per_benchmark: Maximum models per benchmark to process
+    :param benchmark_dir: Root directory of benchmarks.
+
+    :param output_dir: Directory to save converted PyTorch modules.
+
+    :param max_per_benchmark: Maximum models per benchmark to process.
+
     :return: Dictionary with overall statistics
     """
     benchmarks_root = Path(benchmark_dir)
@@ -577,12 +591,18 @@ def verify_vmap_vs_standard(
 ) -> dict:
     """Verify vmap mode outputs match standard mode outputs.
 
-    :param benchmark_dir: Root benchmark directory
-    :param vmap_dir: Directory with vmap mode converted models
-    :param standard_dir: Directory with standard mode converted models
-    :param max_per_benchmark: Max models per benchmark
-    :param dtype: Data type ("float32" or "float64")
-    :param device: Device ("cpu" or "cuda")
+    :param benchmark_dir: Root benchmark directory.
+
+    :param vmap_dir: Directory with vmap mode converted models.
+
+    :param standard_dir: Directory with standard mode converted models.
+
+    :param max_per_benchmark: Max models per benchmark.
+
+    :param dtype: Data type ("float32" or "float64").
+
+    :param device: Device ("cpu" or "cuda").
+
     :return: Verification results
     """
     benchmarks_root = Path(benchmark_dir)
@@ -733,13 +753,18 @@ def _test_vmap_on_model(
 def test_vmap_compatibility(benchmarks_root, output_dir_vmap, max_per_benchmark: int) -> dict:
     """Test that vmap mode models work with torch.vmap.
 
-    :param benchmarks_root: Root benchmark directory (from conftest fixture)
-    :param output_dir_vmap: Directory with vmap mode converted models (from conftest fixture)
-    :param max_per_benchmark: Max models per benchmark (from conftest fixture)
+    :param benchmarks_root: Root benchmark directory (from conftest fixture).
+
+    :param output_dir_vmap: Directory with vmap mode converted models (from conftest fixture).
+
+    :param max_per_benchmark: Max models per benchmark (from conftest fixture).
+
     :return: Dictionary with test results
     """
     if importlib.util.find_spec("torch.func") is None:
-        pytest.skip("torch.func.vmap not available (requires PyTorch >= 2.0)")
+        assert hasattr(torch.func, "vmap"), (
+            "torch.func.vmap not available (requires PyTorch >= 2.0)"
+        )
 
     vmap_root = output_dir_vmap
     models = find_models_without_batch_dim(str(benchmarks_root), max_per_benchmark)
@@ -834,10 +859,14 @@ def run_all_tests(
 ) -> dict:
     """Run all vmap mode tests.
 
-    :param benchmark_dir: Root benchmark directory
-    :param output_dir: Output directory for vmap models
-    :param standard_dir: Directory with standard models for comparison
-    :param max_per_benchmark: Max models per benchmark
+    :param benchmark_dir: Root benchmark directory.
+
+    :param output_dir: Output directory for vmap models.
+
+    :param standard_dir: Directory with standard models for comparison.
+
+    :param max_per_benchmark: Max models per benchmark.
+
     :return: All test results
     """
     all_results = {}
@@ -928,9 +957,7 @@ def main():
     exit_code = pytest.main(
         [
             __file__ + "::test_convert_vmap_model",
-            "-v",
-            "--tb=short",
-        ]
+        ],
     )
 
     if exit_code != 0:
@@ -943,9 +970,7 @@ def main():
     exit_code = pytest.main(
         [
             __file__ + "::test_verify_vmap_vs_standard",
-            "-v",
-            "--tb=short",
-        ]
+        ],
     )
 
     print("\n" + "=" * 70)
@@ -954,9 +979,7 @@ def main():
     exit_code = pytest.main(
         [
             __file__ + "::test_torch_vmap_compatibility",
-            "-v",
-            "--tb=short",
-        ]
+        ],
     )
 
     sys.exit(exit_code)

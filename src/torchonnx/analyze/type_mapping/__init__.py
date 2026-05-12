@@ -31,7 +31,8 @@ from torchonnx.analyze.type_mapping._operations import (
 def _convert_to_operator_function(onnx_op_type: str) -> str:
     """Convert ONNX operator to PyTorch function name.
 
-    :param onnx_op_type: ONNX operator type
+    :param onnx_op_type: ONNX operator type.
+
     :return: PyTorch function name (e.g., "torch.add")
     """
     # Map common operators to torch.* functions
@@ -51,7 +52,8 @@ def _convert_to_operator_function(onnx_op_type: str) -> str:
 def _convert_to_operation_function(onnx_op_type: str) -> str:
     """Convert ONNX operation to PyTorch function name.
 
-    :param onnx_op_type: ONNX operation type
+    :param onnx_op_type: ONNX operation type.
+
     :return: PyTorch function name
     """
     # Get from the operations mapping
@@ -89,8 +91,10 @@ def _get_convtranspose_pytorch_type(node: NodeProto, initializers: dict[str, Ten
 def convert_to_pytorch_type(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
     """Infer PyTorch layer type from ONNX node.
 
-    :param node: ONNX node
-    :param initializers: Optional ONNX initializers for weight shape inspection
+    :param node: ONNX node.
+
+    :param initializers: Optional ONNX initializers for weight shape inspection.
+
     :return: PyTorch layer type (e.g., "Conv2d", "Linear") or operation type
     """
     if node.op_type == "Conv":

@@ -25,8 +25,10 @@ HANDLERS: dict[str, Handler] = {}
 def register_handler(pytorch_type: str, handler: Handler) -> None:
     """Register handler for a PyTorch type.
 
-    :param pytorch_type: PyTorch type string (e.g., "nn.Conv2d", "torch.add")
-    :param handler: Handler function
+    :param pytorch_type: PyTorch type string (e.g., "nn.Conv2d", "torch.add").
+
+    :param handler: Handler function.
+
     """
     HANDLERS[pytorch_type] = handler
 
@@ -34,7 +36,8 @@ def register_handler(pytorch_type: str, handler: Handler) -> None:
 def get_handler(pytorch_type: str) -> Handler | None:
     """Get handler for PyTorch type.
 
-    :param pytorch_type: PyTorch type string
+    :param pytorch_type: PyTorch type string.
+
     :return: Handler function or None if not found
     """
     return HANDLERS.get(pytorch_type)

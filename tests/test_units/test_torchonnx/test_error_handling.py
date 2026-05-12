@@ -16,6 +16,8 @@ Test Coverage:
 - TestPipelineErrors: 2 tests - End-to-end error propagation
 """
 
+__docformat__ = "restructuredtext"
+
 import math
 import tempfile
 import warnings

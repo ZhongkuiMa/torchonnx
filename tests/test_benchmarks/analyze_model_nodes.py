@@ -5,6 +5,8 @@ the intermediate outputs with the corresponding PyTorch module to identify
 discrepancies.
 """
 
+__docformat__ = "restructuredtext"
+
 import argparse
 import importlib.util
 import sys
@@ -21,8 +23,10 @@ sys.path.insert(0, "..")
 def load_pytorch_module(module_path: str, state_dict_path: str):
     """Load PyTorch module and state dict.
 
-    :param module_path: Path to PyTorch module file
-    :param state_dict_path: Path to state dict file
+    :param module_path: Path to PyTorch module file.
+
+    :param state_dict_path: Path to state dict file.
+
     :return: Loaded PyTorch model
     """
     module_file = Path(module_path)
@@ -46,8 +50,10 @@ def load_pytorch_module(module_path: str, state_dict_path: str):
 def run_onnx_node_by_node(onnx_model_path: str, input_data: np.ndarray):
     """Run ONNX model and capture all intermediate outputs.
 
-    :param onnx_model_path: Path to ONNX model
-    :param input_data: Input data as numpy array
+    :param onnx_model_path: Path to ONNX model.
+
+    :param input_data: Input data as numpy array.
+
     :return: Dictionary mapping tensor names to their values
     """
     # Load ONNX model
@@ -77,8 +83,10 @@ def run_onnx_node_by_node(onnx_model_path: str, input_data: np.ndarray):
 def create_intermediate_onnx_model(onnx_model_path: str, output_names: list):
     """Create a modified ONNX model that outputs intermediate tensors.
 
-    :param onnx_model_path: Path to original ONNX model
-    :param output_names: List of intermediate tensor names to output
+    :param onnx_model_path: Path to original ONNX model.
+
+    :param output_names: List of intermediate tensor names to output.
+
     :return: Modified ONNX model
     """
     onnx_model = onnx.load(onnx_model_path)
@@ -179,9 +187,12 @@ def _run_onnx_with_intermediates(
 def _print_node_analysis(onnx_model, onnx_results: dict, max_nodes: int | None):
     """Print analysis of ONNX model nodes.
 
-    :param onnx_model: ONNX model
-    :param onnx_results: Dictionary of captured outputs
-    :param max_nodes: Maximum nodes to analyze
+    :param onnx_model: ONNX model.
+
+    :param onnx_results: Dictionary of captured outputs.
+
+    :param max_nodes: Maximum nodes to analyze.
+
     """
     print(f"\n{'=' * 80}")
     print("Node Analysis")
@@ -212,9 +223,12 @@ def _print_node_analysis(onnx_model, onnx_results: dict, max_nodes: int | None):
 def _print_final_output_comparison(onnx_model, onnx_results: dict, pytorch_output: np.ndarray):
     """Print comparison of final outputs.
 
-    :param onnx_model: ONNX model
-    :param onnx_results: Dictionary of captured outputs
-    :param pytorch_output: PyTorch output
+    :param onnx_model: ONNX model.
+
+    :param onnx_results: Dictionary of captured outputs.
+
+    :param pytorch_output: PyTorch output.
+
     """
     print(f"\n{'=' * 80}")
     print("Final Output Comparison")
@@ -260,11 +274,16 @@ def analyze_model_nodes(
 ):
     """Analyze ONNX model nodes and compare with PyTorch.
 
-    :param onnx_model_path: Path to ONNX model
-    :param pytorch_module_path: Path to PyTorch module
-    :param state_dict_path: Path to state dict
-    :param input_shape: Optional input shape (auto-detected if None)
-    :param max_nodes: Maximum number of nodes to analyze (None for all)
+    :param onnx_model_path: Path to ONNX model.
+
+    :param pytorch_module_path: Path to PyTorch module.
+
+    :param state_dict_path: Path to state dict.
+
+    :param input_shape: Optional input shape (auto-detected if None).
+
+    :param max_nodes: Maximum number of nodes to analyze (None for all).
+
     """
     # Load ONNX model
     onnx_model = onnx.load(onnx_model_path)

@@ -6,6 +6,8 @@ Generated: 2025-12-22 03:36:19
 This module was automatically converted from an ONNX model.
 """
 
+__docformat__ = "restructuredtext"
+
 __all__ = ["Nn4sys2023Mscn2048d"]
 
 import torch

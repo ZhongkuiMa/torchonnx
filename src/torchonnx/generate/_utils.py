@@ -19,7 +19,8 @@ from typing import Any
 def format_tensor_shape(shape: tuple[int, ...] | None) -> str:
     """Format tensor shape as Python tuple string.
 
-    :param shape: Tensor shape tuple or None
+    :param shape: Tensor shape tuple or None.
+
     :return: Formatted shape string (e.g., "(1, 3, 224, 224)")
     """
     if shape is None:
@@ -32,9 +33,11 @@ def format_argument(value: Any) -> str:
 
     Handles common types: None, bool, int, float, str, list, tuple.
 
-    :param value: Argument value to format
+    :param value: Argument value to format.
+
     :return: Python literal string suitable for code generation
-    :raises TypeError: If value type is not supported
+    :raises TypeError: If value type is not supported.
+
     """
     if value is None:
         return "None"
@@ -67,7 +70,8 @@ def sanitize_identifier(name: str) -> str:
     Replaces invalid characters with underscores and ensures
     the result is a valid Python identifier.
 
-    :param name: String to sanitize
+    :param name: String to sanitize.
+
     :return: Valid Python identifier
     """
     if not name:
@@ -97,7 +101,8 @@ def sanitize_layer_name(name: str) -> str:
     Removes underscores and non-alphanumeric characters, keeping only
     letters and digits. Example: "relu_1" -> "relu1"
 
-    :param name: ONNX layer name
+    :param name: ONNX layer name.
+
     :return: Clean Python identifier without underscores
     """
     if not name:
@@ -129,7 +134,8 @@ def to_camel_case(name: str) -> str:
         "patch-1" -> "Patch1"
         "vgg16-7" -> "Vgg167"
 
-    :param name: Original name
+    :param name: Original name.
+
     :return: CamelCase name
     """
     if not name:

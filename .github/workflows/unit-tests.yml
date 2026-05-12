@@ -53,11 +53,17 @@ jobs:
 
       - name: Run unit tests with coverage (Python 3.11 only)
         if: matrix.python-version == '3.11'
+        env:
+          OMP_NUM_THREADS: 1
+          MKL_NUM_THREADS: 1
         run: |
           pytest tests/ --cov=src/torchonnx --cov-report=term-missing --cov-report=xml
 
       - name: Run unit tests (Python 3.12)
         if: matrix.python-version == '3.12'
+        env:
+          OMP_NUM_THREADS: 1
+          MKL_NUM_THREADS: 1
         run: pytest tests/
 
       - name: Upload coverage to Codecov

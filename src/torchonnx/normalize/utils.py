@@ -16,7 +16,8 @@ from onnx import ModelProto, NodeProto, TensorProto, ValueInfoProto
 def _get_onnx_input_nodes(model: ModelProto) -> list[ValueInfoProto]:
     """Get model input ValueInfoProto objects.
 
-    :param model: ONNX model
+    :param model: ONNX model.
+
     :return: List of input ValueInfoProto
     """
     initializers = get_onnx_initializers(model)
@@ -28,7 +29,8 @@ def _get_onnx_input_nodes(model: ModelProto) -> list[ValueInfoProto]:
 def _get_onnx_output_nodes(model: ModelProto) -> list[ValueInfoProto]:
     """Get model output ValueInfoProto objects.
 
-    :param model: ONNX model
+    :param model: ONNX model.
+
     :return: List of output ValueInfoProto
     """
     return list(model.graph.output)
@@ -37,7 +39,8 @@ def _get_onnx_output_nodes(model: ModelProto) -> list[ValueInfoProto]:
 def get_onnx_model_input_names(model: ModelProto) -> list[str]:
     """Get model input tensor names.
 
-    :param model: ONNX model
+    :param model: ONNX model.
+
     :return: List of input tensor names
     """
     model_inputs = _get_onnx_input_nodes(model)
@@ -47,7 +50,8 @@ def get_onnx_model_input_names(model: ModelProto) -> list[str]:
 def get_onnx_model_output_names(model: ModelProto) -> list[str]:
     """Get model output tensor names.
 
-    :param model: ONNX model
+    :param model: ONNX model.
+
     :return: List of output tensor names
     """
     return [output_info.name for output_info in model.graph.output]
@@ -56,7 +60,8 @@ def get_onnx_model_output_names(model: ModelProto) -> list[str]:
 def get_onnx_nodes(model: ModelProto) -> list[NodeProto]:
     """Get all nodes in the model graph.
 
-    :param model: ONNX model
+    :param model: ONNX model.
+
     :return: List of ONNX nodes
     """
     return list(model.graph.node)
@@ -65,7 +70,8 @@ def get_onnx_nodes(model: ModelProto) -> list[NodeProto]:
 def get_onnx_initializers(model: ModelProto) -> dict[str, TensorProto]:
     """Get all initializer tensors.
 
-    :param model: ONNX model
+    :param model: ONNX model.
+
     :return: Dictionary mapping initializer tensor names to TensorProto
     """
     return {init.name: init for init in model.graph.initializer}
@@ -74,7 +80,8 @@ def get_onnx_initializers(model: ModelProto) -> dict[str, TensorProto]:
 def _get_onnx_initializer_names(model: ModelProto) -> set[str]:
     """Get all initializer tensor names.
 
-    :param model: ONNX model
+    :param model: ONNX model.
+
     :return: Set of initializer tensor names
     """
     return {init.name for init in model.graph.initializer}
@@ -125,7 +132,8 @@ def get_onnx_model_shapes(
 def extract_onnx_opset_version(model: ModelProto) -> int:
     """Extract ONNX opset version from model.
 
-    :param model: ONNX model
+    :param model: ONNX model.
+
     :return: Opset version
     """
     if not model.opset_import:

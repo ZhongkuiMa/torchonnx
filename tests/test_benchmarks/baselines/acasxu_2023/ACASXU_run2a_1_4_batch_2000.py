@@ -6,6 +6,8 @@ Generated: 2025-12-22 03:36:13
 This module was automatically converted from an ONNX model.
 """
 
+__docformat__ = "restructuredtext"
+
 __all__ = ["Acasxu2023AcasxuRun2a14Batch2000"]
 
 import torch

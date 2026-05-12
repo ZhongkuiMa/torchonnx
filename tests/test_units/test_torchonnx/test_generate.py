@@ -15,6 +15,8 @@ Test Coverage:
 - TestCodeUtilities: 5 tests - Formatting and naming utilities
 """
 
+__docformat__ = "restructuredtext"
+
 import ast
 import keyword
 
@@ -652,7 +654,7 @@ class TestVmapModeValidation:
 
 # ============================================================================
 # PHASE 14: Integration Tests - Code Generator Analysis Paths
-# Target: +8% coverage (79% → 87%+), 30+ integration tests
+# Target: +8% coverage (79% -> 87%+), 30+ integration tests
 # Exercises: code_generator.py analysis functions through real ONNX models
 # ============================================================================
 
@@ -972,7 +974,7 @@ class TestCodeGeneratorStateDictGeneration:
 
 # ============================================================================
 # PHASE 15: Pattern-Specific ONNX Models - Deep Analysis Functions
-# Target: +5% coverage (80% → 85%+), 12+ specialized tests
+# Target: +5% coverage (80% -> 85%+), 12+ specialized tests
 # Exercises deep code_generator.py analysis functions
 # ============================================================================
 
@@ -1009,7 +1011,7 @@ class TestPhase15PatternMatching:
         """Test slice with shape-preserving operation chain.
 
         Exercises:
-        - _find_producer_through_shape_ops (Unsqueeze → Squeeze)
+        - _find_producer_through_shape_ops (Unsqueeze -> Squeeze)
         - _trace_to_source tracing through multiple ops
         - _detect_static_slice_lengths with traced sources
         """
@@ -1240,7 +1242,7 @@ class TestPhase15MultipleOperationChains:
 
 # ============================================================================
 # PHASE 16: Remaining Edge Cases and Untested Paths
-# Target: +7% coverage (83% → 90%+), 12+ specialized tests
+# Target: +7% coverage (83% -> 90%+), 12+ specialized tests
 # ============================================================================
 
 
@@ -1370,7 +1372,7 @@ class TestPhase16ComplexGraphPatterns:
     def test_multiple_shape_ops_before_add(self, slice_through_shape_ops_model):
         """Test pattern matching after multiple shape-preserving ops.
 
-        Exercises full tracing chain: Unsqueeze → Squeeze → Add.
+        Exercises full tracing chain: Unsqueeze -> Squeeze -> Add.
         """
         try:
             normalized = load_and_preprocess_onnx_model(slice_through_shape_ops_model)
@@ -1448,7 +1450,7 @@ class TestPhase16NonVmapPaths:
 
 # ============================================================================
 # PHASE 17: Deep Edge Cases and Missing Branch Coverage
-# Target: +4% coverage (83% → 87%+), 15+ specialized tests
+# Target: +4% coverage (83% -> 87%+), 15+ specialized tests
 # ============================================================================
 
 

@@ -29,9 +29,12 @@ class VariableInfo:
 
     Appears in forward() as a runtime tensor variable.
 
-    :param onnx_name: Original ONNX tensor name (for reference/tracing)
-    :param code_name: Generated variable name in code (e.g., "x1", "x2")
-    :param shape: Inferred shape (None if unknown/dynamic, may contain symbolic str dims)
+    :param onnx_name: Original ONNX tensor name (for reference/tracing).
+
+    :param code_name: Generated variable name in code (e.g., "x1", "x2").
+
+    :param shape: Inferred shape (None if unknown/dynamic, may contain symbolic str dims).
+
     """
 
     onnx_name: str
@@ -45,12 +48,18 @@ class ParameterInfo:
 
     Loaded from state_dict (large tensor data).
 
-    :param onnx_name: Original ONNX initializer name (for reference/tracing)
-    :param pytorch_name: PyTorch parameter name ("weight", "bias", "running_mean", etc.)
-    :param code_name: Generated parameter name in code (e.g., "p1", "p2")
-    :param shape: Parameter shape
-    :param dtype: PyTorch dtype
-    :param data: Resolved tensor data as PyTorch tensor
+    :param onnx_name: Original ONNX initializer name (for reference/tracing).
+
+    :param pytorch_name: PyTorch parameter name ("weight", "bias", "running_mean", etc.).
+
+    :param code_name: Generated parameter name in code (e.g., "p1", "p2").
+
+    :param shape: Parameter shape.
+
+    :param dtype: PyTorch dtype.
+
+    :param data: Resolved tensor data as PyTorch tensor.
+
     """
 
     onnx_name: str
@@ -67,11 +76,16 @@ class ConstantInfo:
 
     Loaded from state_dict (large tensor data).
 
-    :param onnx_name: Original ONNX initializer name (for reference/tracing)
-    :param code_name: Generated constant name in code (e.g., "c1", "c2")
-    :param shape: Constant shape
-    :param dtype: PyTorch dtype
-    :param data: Resolved tensor data as PyTorch tensor
+    :param onnx_name: Original ONNX initializer name (for reference/tracing).
+
+    :param code_name: Generated constant name in code (e.g., "c1", "c2").
+
+    :param shape: Constant shape.
+
+    :param dtype: PyTorch dtype.
+
+    :param data: Resolved tensor data as PyTorch tensor.
+
     """
 
     onnx_name: str
@@ -88,10 +102,14 @@ class ArgumentInfo:
     Appears as Python literal in generated code.
     NOT loaded from state_dict - embedded as literal.
 
-    :param onnx_name: Original ONNX attribute name (None if synthetic/derived)
-    :param pytorch_name: PyTorch argument name (e.g., "padding", "stride", "axes")
-    :param value: Actual value (int, float, tuple, list, bool, str, etc.)
-    :param default_value: PyTorch default value (None if no default exists)
+    :param onnx_name: Original ONNX attribute name (None if synthetic/derived).
+
+    :param pytorch_name: PyTorch argument name (e.g., "padding", "stride", "axes").
+
+    :param value: Actual value (int, float, tuple, list, bool, str, etc.).
+
+    :param default_value: PyTorch default value (None if no default exists).
+
     """
 
     onnx_name: str | None
@@ -124,13 +142,20 @@ class SemanticLayerIR:
 
     Combines structural info from Stage 2 with semantic classifications from Stage 3.
 
-    :param name: Node name (for layer instance or variable naming)
-    :param onnx_op_type: ONNX operator type (e.g., "Conv", "Add", "Reshape")
-    :param pytorch_type: PyTorch type (e.g., "Conv2d", "Linear", "+", "reshape")
-    :param operator_class: Layer, Operation, or Operator
-    :param inputs: Ordered list of typed inputs (VariableInfo | ParameterInfo | ConstantInfo)
-    :param outputs: Ordered list of typed outputs (all VariableInfo)
-    :param arguments: Literal arguments (for __init__ or forward())
+    :param name: Node name (for layer instance or variable naming).
+
+    :param onnx_op_type: ONNX operator type (e.g., "Conv", "Add", "Reshape").
+
+    :param pytorch_type: PyTorch type (e.g., "Conv2d", "Linear", "+", "reshape").
+
+    :param operator_class: Layer, Operation, or Operator.
+
+    :param inputs: Ordered list of typed inputs (VariableInfo | ParameterInfo | ConstantInfo).
+
+    :param outputs: Ordered list of typed outputs (all VariableInfo).
+
+    :param arguments: Literal arguments (for __init__ or forward()).
+
     """
 
     # Structural (from Stage 2)
@@ -156,13 +181,20 @@ class SemanticModelIR:
     Fully resolved - no ONNX dependencies (TensorProto, ModelProto).
     All tensor data converted to PyTorch tensors.
 
-    :param layers: Semantically annotated layers
-    :param parameters: All trainable parameters (with resolved PyTorch tensors)
-    :param constants: All constant tensors (with resolved PyTorch tensors)
-    :param variables: All runtime variables
-    :param input_names: Model input tensor names (ONNX names)
-    :param output_names: Model output tensor names (ONNX names)
-    :param shapes: All tensor shapes (ONNX names as keys)
+    :param layers: Semantically annotated layers.
+
+    :param parameters: All trainable parameters (with resolved PyTorch tensors).
+
+    :param constants: All constant tensors (with resolved PyTorch tensors).
+
+    :param variables: All runtime variables.
+
+    :param input_names: Model input tensor names (ONNX names).
+
+    :param output_names: Model output tensor names (ONNX names).
+
+    :param shapes: All tensor shapes (ONNX names as keys).
+
     """
 
     layers: list[SemanticLayerIR]

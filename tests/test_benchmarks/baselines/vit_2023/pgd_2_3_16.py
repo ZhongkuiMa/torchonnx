@@ -6,6 +6,8 @@ Generated: 2025-12-22 03:36:40
 This module was automatically converted from an ONNX model.
 """
 
+__docformat__ = "restructuredtext"
+
 __all__ = ["Vit2023Pgd2316"]
 
 import torch

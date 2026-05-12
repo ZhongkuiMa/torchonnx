@@ -23,9 +23,12 @@ def optimize_generated_code(
     - Removing default arguments from layer constructors and functions
     - Removing unused buffer registrations
 
-    :param code: Generated Python code from Stage 5
-    :param state_dict: Optional state dict to filter based on removed buffers
-    :param enable: If False, return code unchanged
+    :param code: Generated Python code from Stage 5.
+
+    :param state_dict: Optional state dict to filter based on removed buffers.
+
+    :param enable: If False, return code unchanged.
+
     :return: Optimized code, or (optimized_code, filtered_state_dict) if state_dict provided
     """
     if not enable:
@@ -58,7 +61,8 @@ def _remove_unused_buffers(code: str) -> tuple[str, set[str]]:
     Parses __init__ to find all register_buffer() calls, parses forward()
     to find buffer usage, and removes unused registrations.
 
-    :param code: Generated code
+    :param code: Generated code.
+
     :return: Tuple of (code with unused buffers removed, set of removed buffer names)
     """
     lines = code.split("\n")

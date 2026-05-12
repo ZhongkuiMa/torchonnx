@@ -34,9 +34,12 @@ def generate_pytorch_module(
     - forward() method
     - state_dict
 
-    :param semantic_ir: Semantic IR from Stage 3/4
-    :param module_name: Name for the generated class
-    :param vmap_mode: If True, generate vmap-compatible helper functions that
+    :param semantic_ir: Semantic IR from Stage 3/4.
+
+    :param module_name: Name for the generated class.
+
+    :param vmap_mode: If True, generate vmap-compatible helper functions that.
+
         avoid .item() calls and in-place operations. Default False preserves
         the standard helpers for backward compatibility.
     :return: Tuple of (module_code_string, state_dict)
@@ -83,9 +86,12 @@ def _generate_forward_with_context(
 ) -> tuple[str, ForwardGenContext]:
     """Generate forward method and return the context with helper usage info.
 
-    :param semantic_ir: Semantic IR
-    :param layer_name_mapping: Layer name mapping
-    :param vmap_mode: If True, analyze for vmap-compatible code generation
+    :param semantic_ir: Semantic IR.
+
+    :param layer_name_mapping: Layer name mapping.
+
+    :param vmap_mode: If True, analyze for vmap-compatible code generation.
+
     :return: Tuple of (forward_method_code, context)
     """
     # Analyze the IR to determine which helpers are actually needed
@@ -106,10 +112,14 @@ def _check_slice_needs_helper(
 ) -> bool:
     """Check if Slice operation needs dynamic_slice helper.
 
-    :param layer: Slice layer
-    :param producer_map: Producer mapping for slice length detection
-    :param vmap_mode: If True, detect static slice lengths
-    :param ctx: Context to update with helper needs
+    :param layer: Slice layer.
+
+    :param producer_map: Producer mapping for slice length detection.
+
+    :param vmap_mode: If True, detect static slice lengths.
+
+    :param ctx: Context to update with helper needs.
+
     :return: True if helper is needed, False otherwise
     """
     from torchonnx.analyze import ConstantInfo
@@ -186,7 +196,8 @@ def _extract_steps_list(steps_input, axes_len: int) -> list:
 def _check_expand_needs_helper(layer) -> bool:
     """Check if Expand operation needs helper.
 
-    :param layer: Expand layer
+    :param layer: Expand layer.
+
     :return: True if helper is needed
     """
     from torchonnx.analyze import ConstantInfo
@@ -222,8 +233,10 @@ def _get_helper_needs_from_ir(
     needed after code generation optimizations. In vmap_mode, it also
     analyzes Slice operations to detect static slice lengths.
 
-    :param semantic_ir: Semantic IR
-    :param vmap_mode: If True, detect static slice lengths for vmap compatibility
+    :param semantic_ir: Semantic IR.
+
+    :param vmap_mode: If True, detect static slice lengths for vmap compatibility.
+
     :return: Context with helper needs flags
     """
     from torchonnx.generate._forward_gen import ForwardGenContext
@@ -259,12 +272,18 @@ def _detect_static_slice_lengths(
     is constant even if starts/ends are dynamic. Common pattern:
     ends = starts + constant → slice_length = constant
 
-    :param layer: Slice layer
-    :param starts_input: Starts tensor info
-    :param ends_input: Ends tensor info
-    :param axes_input: Axes tensor info (may be None or ConstantInfo)
-    :param steps_input: Steps tensor info (may be None or ConstantInfo)
-    :param producer_map: Maps onnx_name -> (producer_layer, output_index)
+    :param layer: Slice layer.
+
+    :param starts_input: Starts tensor info.
+
+    :param ends_input: Ends tensor info.
+
+    :param axes_input: Axes tensor info (may be None or ConstantInfo).
+
+    :param steps_input: Steps tensor info (may be None or ConstantInfo).
+
+    :param producer_map: Maps onnx_name -> (producer_layer, output_index).
+
     :return: List of static slice lengths, or None if can't determine
     """
     from torchonnx.analyze import ConstantInfo
@@ -310,8 +329,10 @@ def _detect_static_slice_lengths(
 def _extract_value_at_index(data, axis_idx: int):
     """Extract scalar value from data at given axis index.
 
-    :param data: Converted data (list or scalar)
-    :param axis_idx: Index into array
+    :param data: Converted data (list or scalar).
+
+    :param axis_idx: Index into array.
+
     :return: Scalar value
     """
     if isinstance(data, list) and axis_idx < len(data):
@@ -322,10 +343,14 @@ def _extract_value_at_index(data, axis_idx: int):
 def _try_constant_case(starts_input, ends_input, axis_idx: int, step: int) -> int | None:
     """Try to determine length when both starts and ends are constants.
 
-    :param starts_input: Starts input (should be ConstantInfo)
-    :param ends_input: Ends input (should be ConstantInfo)
-    :param axis_idx: Axis index
-    :param step: Step size
+    :param starts_input: Starts input (should be ConstantInfo).
+
+    :param ends_input: Ends input (should be ConstantInfo).
+
+    :param axis_idx: Axis index.
+
+    :param step: Step size.
+
     :return: Slice length or None
     """
     from torchonnx.analyze import ConstantInfo
@@ -347,11 +372,16 @@ def _try_add_pattern_case(
 ) -> int | None:
     """Try to detect ends = starts + constant pattern.
 
-    :param starts_input: Starts input
-    :param ends_input: Ends input
-    :param axis_idx: Axis index (unused but kept for symmetry)
-    :param step: Step size
-    :param producer_map: Producer mapping
+    :param starts_input: Starts input.
+
+    :param ends_input: Ends input.
+
+    :param axis_idx: Axis index (unused but kept for symmetry).
+
+    :param step: Step size.
+
+    :param producer_map: Producer mapping.
+
     :return: Slice length or None
     """
     from torchonnx.analyze import ConstantInfo, VariableInfo
@@ -400,11 +430,16 @@ def _get_static_slice_length(
 ) -> int | None:
     """Get static slice length for a single axis.
 
-    :param starts_input: Starts tensor info
-    :param ends_input: Ends tensor info
-    :param axis_idx: Index into starts/ends arrays
-    :param step: Step size (assumed constant)
-    :param producer_map: Maps onnx_name -> (producer_layer, output_index)
+    :param starts_input: Starts tensor info.
+
+    :param ends_input: Ends tensor info.
+
+    :param axis_idx: Index into starts/ends arrays.
+
+    :param step: Step size (assumed constant).
+
+    :param producer_map: Maps onnx_name -> (producer_layer, output_index).
+
     :return: Static slice length, or None if can't determine
     """
     # Case 1: Both are constants
@@ -423,9 +458,12 @@ def _get_static_slice_length(
 def _find_producer_through_shape_ops(onnx_name: str, producer_map, depth: int = 5):
     """Find the actual producer by tracing through shape-preserving operations.
 
-    :param onnx_name: Starting variable onnx_name
-    :param producer_map: Producer mapping
-    :param depth: Max depth to trace
+    :param onnx_name: Starting variable onnx_name.
+
+    :param producer_map: Producer mapping.
+
+    :param depth: Max depth to trace.
+
     :return: Producer layer, or None if can't find
     """
     from torchonnx.analyze import VariableInfo
@@ -479,9 +517,12 @@ def _are_from_same_source(var1, var2, producer_map) -> bool:
 def _trace_to_source(var, producer_map, depth: int = 5) -> str | None:
     """Trace a variable back to its source, skipping shape-preserving ops.
 
-    :param var: Variable to trace
-    :param producer_map: Producer mapping
-    :param depth: Max depth to trace
+    :param var: Variable to trace.
+
+    :param producer_map: Producer mapping.
+
+    :param depth: Max depth to trace.
+
     :return: Source onnx_name, or None if can't trace
     """
     from torchonnx.analyze import VariableInfo
@@ -525,7 +566,8 @@ def _trace_to_source(var, producer_map, depth: int = 5) -> str | None:
 def _generate_imports(semantic_ir: SemanticModelIR) -> str:
     """Generate import statements based on operations used.
 
-    :param semantic_ir: Semantic IR
+    :param semantic_ir: Semantic IR.
+
     :return: Import statements string
     """
     imports = [
@@ -548,8 +590,10 @@ def _generate_helpers_from_context(ctx: ForwardGenContext, vmap_mode: bool = Tru
     Only emits helpers that are actually called in the generated code,
     not just based on ONNX op type existence.
 
-    :param ctx: Forward generation context with helper usage flags
-    :param vmap_mode: If True, use vmap-compatible helpers that avoid .item()
+    :param ctx: Forward generation context with helper usage flags.
+
+    :param vmap_mode: If True, use vmap-compatible helpers that avoid .item().
+
         and in-place operations.
     :return: Helper function definitions string
     """

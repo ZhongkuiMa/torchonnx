@@ -26,7 +26,8 @@ def _clean_shape(shape: tuple[int | str, ...] | None) -> tuple[int, ...] | None:
     Batch dimension (first dim) can be symbolic, but if any OTHER dimension
     is symbolic (e.g., 'unk__35'), return None to indicate unknown shape.
 
-    :param shape: Shape tuple that may contain strings
+    :param shape: Shape tuple that may contain strings.
+
     :return: Shape with only integers, or None if any non-batch dimension is unknown
     """
     if shape is None:
@@ -48,9 +49,12 @@ def _build_node_ir(
 
     No semantic interpretation - just captures ONNX structure.
 
-    :param node: ONNX node
-    :param shapes: Tensor shape information
-    :param node_counter: Current node index (for name generation)
+    :param node: ONNX node.
+
+    :param shapes: Tensor shape information.
+
+    :param node_counter: Current node index (for name generation).
+
     :return: NodeIR representation
     """
     # Extract shapes for all inputs/outputs, clean them to remove symbolic dims
@@ -90,7 +94,8 @@ def build_model_ir(model: ModelProto) -> ModelIR:
     (PyTorch type mapping, parameter classification, argument extraction)
     is deferred to Stage 3.
 
-    :param model: ONNX model
+    :param model: ONNX model.
+
     :return: ModelIR representation (structural only)
     """
     extract_onnx_opset_version(model)  # For checking supported opset versions

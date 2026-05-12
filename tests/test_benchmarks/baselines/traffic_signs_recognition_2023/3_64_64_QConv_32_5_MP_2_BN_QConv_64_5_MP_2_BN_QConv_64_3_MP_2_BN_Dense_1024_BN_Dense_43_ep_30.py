@@ -6,6 +6,8 @@ Generated: 2025-12-22 03:36:23
 This module was automatically converted from an ONNX model.
 """
 
+__docformat__ = "restructuredtext"
+
 __all__ = [
     "TrafficSignsRecognition202336464Qconv325Mp2BnQconv645Mp2BnQconv643Mp2BnDense1024BnDense43Ep30"
 ]

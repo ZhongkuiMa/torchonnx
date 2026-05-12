@@ -6,6 +6,8 @@ Generated: 2025-12-22 03:36:18
 This module was automatically converted from an ONNX model.
 """
 
+__docformat__ = "restructuredtext"
+
 __all__ = ["Metaroom20236cnnTz8113NoCustomOp"]
 
 import torch.nn as nn

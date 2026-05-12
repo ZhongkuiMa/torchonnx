@@ -10,6 +10,8 @@ Tests cover:
 Target: Reach 90%+ overall coverage from current 88%
 """
 
+__docformat__ = "restructuredtext"
+
 import pytest
 
 from torchonnx.simplify._formatter import format_code

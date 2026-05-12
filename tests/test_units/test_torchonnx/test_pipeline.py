@@ -1,9 +1,9 @@
 """Tests for pipeline integration and stage-to-stage communication.
 
 This module tests how different stages of the compilation pipeline work together:
-- Normalize → Build stage integration
-- Build → Analyze stage (when semantic IR generation is fixed)
-- Analyze → Generate stage (when semantic IR generation is fixed)
+- Normalize -> Build stage integration
+- Build -> Analyze stage (when semantic IR generation is fixed)
+- Analyze -> Generate stage (when semantic IR generation is fixed)
 - Full pipeline end-to-end
 - Main convert() API end-to-end conversion
 
@@ -14,6 +14,8 @@ Test Coverage:
 - TestPipelineErrorPropagation: 2 tests - Error handling across stages
 - TestConvertAPI: 10 tests - Full convert() pipeline validation
 """
+
+__docformat__ = "restructuredtext"
 
 import importlib.util
 

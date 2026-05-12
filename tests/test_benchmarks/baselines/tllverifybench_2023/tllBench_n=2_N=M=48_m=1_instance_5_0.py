@@ -6,6 +6,8 @@ Generated: 2025-12-22 03:36:23
 This module was automatically converted from an ONNX model.
 """
 
+__docformat__ = "restructuredtext"
+
 __all__ = ["Tllverifybench2023TllbenchN2NM48M1Instance50"]
 
 import torch

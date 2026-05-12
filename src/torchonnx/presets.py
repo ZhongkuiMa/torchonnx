@@ -29,7 +29,8 @@ def if_has_batch_dim(onnx_path: str) -> bool:
     Checks both benchmark name and model filename in the path
     against known models without batch dimensions.
 
-    :param onnx_path: Path to ONNX model file
+    :param onnx_path: Path to ONNX model file.
+
     :return: True if model has batch dimension, False otherwise
     """
     return all(bname not in onnx_path for bname in BENCHMARKS_WITHOUT_BATCH_DIM)

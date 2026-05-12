@@ -25,14 +25,7 @@ def get_benchmark_models():
 
     # Return a skip marker if no models found (prevents pytest collection error)
     if not model_list:
-        return [
-            pytest.param(
-                None,
-                marks=pytest.mark.skip(
-                    reason="Benchmark data not available (run build_benchmarks.py)"
-                ),
-            )
-        ]
+        return [None]  # Will trigger assertion in test: Benchmark data not available
     return model_list
 
 
@@ -51,9 +44,10 @@ def results_dir():
 def test_conversion_baseline_exists(model_path, baselines_dir):
     """Verify baseline model exists for conversion test.
 
-    :param model_path: Path to ONNX model file
-    :param baselines_dir: Directory containing baseline models
+    :param model_path: Path to ONNX model file.
+    :param baselines_dir: Directory containing baseline models.
     """
+    assert model_path is not None, "Benchmark data not available (run build_benchmarks.py)"
     model_path_obj = Path(model_path)
     benchmark_name = model_path_obj.parent.name
     model_name = model_path_obj.stem
@@ -63,12 +57,8 @@ def test_conversion_baseline_exists(model_path, baselines_dir):
     baseline_pth = baselines_dir / benchmark_name / f"{model_name}.pth"
 
     # Skip if no baseline exists yet
-    if not baseline_py.exists() or not baseline_pth.exists():
-        pytest.skip(f"No baseline for {benchmark_name}/{model_name}")
-
-    # Verify both files exist
-    assert baseline_py.exists(), f"Missing baseline .py file: {baseline_py}"
-    assert baseline_pth.exists(), f"Missing baseline .pth file: {baseline_pth}"
+    assert baseline_py.exists(), f"No baseline for {benchmark_name}/{model_name}"
+    assert baseline_pth.exists(), f"No baseline for {benchmark_name}/{model_name}"
 
 
 @pytest.mark.parametrize("model_path", get_benchmark_models())
@@ -77,9 +67,12 @@ def test_conversion_results_match_baseline(model_path, baselines_dir, results_di
 
     Compares results/baselines/{benchmark}/ vs baselines/{benchmark}/
 
-    :param model_path: Path to ONNX model file
-    :param baselines_dir: Directory containing baseline models
-    :param results_dir: Directory containing converted results
+    :param model_path: Path to ONNX model file.
+
+    :param baselines_dir: Directory containing baseline models.
+
+    :param results_dir: Directory containing converted results.
+
     """
     model_path_obj = Path(model_path)
     benchmark_name = model_path_obj.parent.name
@@ -92,8 +85,8 @@ def test_conversion_results_match_baseline(model_path, baselines_dir, results_di
     results_pth = results_dir / benchmark_name / f"{model_name}.pth"
 
     # Skip if no baseline exists yet
-    if not baseline_py.exists() or not baseline_pth.exists():
-        pytest.skip(f"No baseline for {benchmark_name}/{model_name}")
+    assert baseline_py.exists(), f"No baseline for {benchmark_name}/{model_name}"
+    assert baseline_pth.exists(), f"No baseline for {benchmark_name}/{model_name}"
 
     # Skip if no results exist yet (need to run test_torchonnx.py first)
     if not results_py.exists() or not results_pth.exists():

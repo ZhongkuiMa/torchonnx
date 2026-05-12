@@ -62,7 +62,8 @@ def get_forward_gen_context() -> ForwardGenContext | None:
 def set_forward_gen_context(context: ForwardGenContext | None) -> None:
     """Set forward generation context.
 
-    :param context: Context to set or None to clear
+    :param context: Context to set or None to clear.
+
     """
     global _forward_gen_context
     _forward_gen_context = context
@@ -83,7 +84,8 @@ def _ensure_handlers_registered() -> None:
 def _build_io_code_names(semantic_ir: SemanticModelIR) -> tuple[list[str], list[str]]:
     """Build input and output code name mappings from semantic IR.
 
-    :param semantic_ir: Semantic IR from Stage 3
+    :param semantic_ir: Semantic IR from Stage 3.
+
     :return: Tuple of (input_code_names, output_code_names)
     """
     input_code_names: list[str] = []
@@ -120,7 +122,8 @@ def _initialize_forward_context(input_code_names: list[str]) -> None:
 
     Sets first input name for device inference in handlers.
 
-    :param input_code_names: List of input variable code names
+    :param input_code_names: List of input variable code names.
+
     """
     global _forward_gen_context
 
@@ -139,8 +142,10 @@ def _generate_forward_body(
 
     Handles vmap mode slice initialization and error handling for each layer.
 
-    :param semantic_ir: Semantic IR from Stage 3
-    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
+    :param semantic_ir: Semantic IR from Stage 3.
+
+    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
+
     :return: List of indented code lines
     """
     global _forward_gen_context
@@ -186,8 +191,10 @@ def generate_forward_method(
     Generates code for each layer using registered handlers, then assembles
     into complete forward method.
 
-    :param semantic_ir: Semantic IR from Stage 3
-    :param layer_name_mapping: Optional mapping of ONNX name -> clean name
+    :param semantic_ir: Semantic IR from Stage 3.
+
+    :param layer_name_mapping: Optional mapping of ONNX name -> clean name.
+
     :return: Generated forward method code
     """
     global _forward_gen_context
@@ -230,8 +237,10 @@ def generate_forward_method(
 def _generate_layer_code(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Generate code for a single layer using registered handler.
 
-    :param layer: Semantic layer IR
-    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
+    :param layer: Semantic layer IR.
+
+    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
+
     :return: Generated code line
     """
     # Get handler for this pytorch_type

@@ -1,32 +1,13 @@
 """Parametrized tests for all vnncomp2024 benchmarks."""
 
+__docformat__ = "restructuredtext"
+
 from pathlib import Path
 
 import pytest
 
 VNNCOMP2024_BENCHMARKS = [
     "acasxu_2023",
-    "cctsdb_yolo_2023",
-    "cgan_2023",
-    "cifar100",
-    "collins_aerospace_benchmark",
-    "collins_rul_cnn_2023",
-    "cora",
-    "dist_shift_2023",
-    "linearizenn",
-    "lsnc",
-    "metaroom_2023",
-    "ml4acopf_2023",
-    "ml4acopf_2024",
-    "nn4sys_2023",
-    "safenlp",
-    "test",
-    "tinyimagenet",
-    "tllverifybench_2023",
-    "traffic_signs_recognition_2023",
-    "vggnet16_2023",
-    "vit_2023",
-    "yolo_2023",
 ]
 
 

@@ -15,6 +15,8 @@ Test Coverage:
 - TestOptimizePreservation: 4 tests - Property preservation checks
 """
 
+__docformat__ = "restructuredtext"
+
 import pytest
 
 from torchonnx.analyze.builder import build_semantic_ir
@@ -41,7 +43,7 @@ class TestOptimizeBasics:
         assert hasattr(result, "output_names")
 
     def test_optimize_semantic_ir_is_deterministic(self, linear_model):
-        """Verify optimization is deterministic (same input → same output)."""
+        """Verify optimization is deterministic (same input -> same output)."""
         normalized = load_and_preprocess_onnx_model(linear_model)
         model_ir = build_model_ir(normalized)
         semantic_ir = build_semantic_ir(model_ir)

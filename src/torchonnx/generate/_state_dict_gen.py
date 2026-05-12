@@ -38,7 +38,8 @@ def _build_param_mappings(
 ) -> tuple[dict[str, list[str]], dict[tuple[str, str], str]]:
     """Build parameter-to-layer mappings.
 
-    :param semantic_ir: Semantic IR
+    :param semantic_ir: Semantic IR.
+
     :return: Tuple of (onnx_to_layers, param_role_mapping)
     """
     onnx_to_layers: dict[str, list[str]] = {}
@@ -62,8 +63,10 @@ def _find_layer_for_constant(
 ) -> tuple[str | None, str | None]:
     """Find layer that uses a constant, if any.
 
-    :param semantic_ir: Semantic IR
-    :param const_onnx_name: Constant ONNX name
+    :param semantic_ir: Semantic IR.
+
+    :param const_onnx_name: Constant ONNX name.
+
     :return: Tuple of (layer_name, layer_type) or (None, None)
     """
     for layer in semantic_ir.layers:
@@ -84,11 +87,16 @@ def _add_parameters_to_dict(
 ) -> None:
     """Add parameters to state_dict.
 
-    :param state_dict: State dict to update
-    :param semantic_ir: Semantic IR
-    :param layer_name_mapping: ONNX name -> clean name mapping
-    :param onnx_to_layers: Parameter ONNX name -> list of layer names
-    :param param_role_mapping: (ONNX name, layer name) -> PyTorch parameter name
+    :param state_dict: State dict to update.
+
+    :param semantic_ir: Semantic IR.
+
+    :param layer_name_mapping: ONNX name -> clean name mapping.
+
+    :param onnx_to_layers: Parameter ONNX name -> list of layer names.
+
+    :param param_role_mapping: (ONNX name, layer name) -> PyTorch parameter name.
+
     """
     for param in semantic_ir.parameters:
         if param.onnx_name in onnx_to_layers:
@@ -111,10 +119,14 @@ def _add_constants_to_dict(
 ) -> None:
     """Add constants (buffers) to state_dict.
 
-    :param state_dict: State dict to update
-    :param semantic_ir: Semantic IR
-    :param layer_name_mapping: ONNX name -> clean name mapping
-    :param used_constant_onnx_names: Set of constant ONNX names actually used
+    :param state_dict: State dict to update.
+
+    :param semantic_ir: Semantic IR.
+
+    :param layer_name_mapping: ONNX name -> clean name mapping.
+
+    :param used_constant_onnx_names: Set of constant ONNX names actually used.
+
     """
     for const in semantic_ir.constants:
         if const.onnx_name not in used_constant_onnx_names:
@@ -150,9 +162,12 @@ def build_state_dict(
 
     Only includes constants that are actually used in the forward method.
 
-    :param semantic_ir: Semantic IR from Stage 3
-    :param layer_name_mapping: Optional mapping of ONNX name -> clean name
-    :param used_constant_onnx_names: Set of constant ONNX names actually used in forward
+    :param semantic_ir: Semantic IR from Stage 3.
+
+    :param layer_name_mapping: Optional mapping of ONNX name -> clean name.
+
+    :param used_constant_onnx_names: Set of constant ONNX names actually used in forward.
+
     :return: PyTorch state_dict mapping
     """
     state_dict: dict[str, Tensor] = {}

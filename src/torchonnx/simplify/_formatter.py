@@ -17,7 +17,8 @@ def format_code(code: str) -> str:
     - One blank line between methods in a class
     - Trailing commas in multi-line function calls
 
-    :param code: Generated PyTorch code
+    :param code: Generated PyTorch code.
+
     :return: Formatted code
     """
     # Pass 1: Normalize blank lines first
@@ -44,7 +45,8 @@ def _wrap_long_line(line: str) -> list[str]:
     - self.layer = nn.Conv2d(arg1, arg2, arg3, ...)
     - x = func(arg1, arg2, arg3, ...)
 
-    :param line: Line to wrap
+    :param line: Line to wrap.
+
     :return: List of wrapped lines
     """
     # Get leading indentation
@@ -86,7 +88,8 @@ def _wrap_long_line(line: str) -> list[str]:
 def _split_args(args_str: str) -> list[str]:
     """Split arguments by comma, respecting nested parentheses and brackets.
 
-    :param args_str: Arguments string (without outer parentheses)
+    :param args_str: Arguments string (without outer parentheses).
+
     :return: List of argument strings
     """
     args = []
@@ -118,7 +121,8 @@ def _normalize_blank_lines(code: str) -> str:
     - Two blank lines before class/function definitions at module level
     - One blank line between methods in a class
 
-    :param code: Code to normalize
+    :param code: Code to normalize.
+
     :return: Code with normalized blank lines
     """
     lines = code.split("\n")
@@ -174,8 +178,10 @@ def _ensure_blank_lines_before(lines: list[str], count: int) -> None:
 
     Modifies the list in place.
 
-    :param lines: List of lines to modify
-    :param count: Number of blank lines to ensure
+    :param lines: List of lines to modify.
+
+    :param count: Number of blank lines to ensure.
+
     """
     if not lines:
         return

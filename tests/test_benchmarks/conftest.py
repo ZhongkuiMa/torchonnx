@@ -1,5 +1,7 @@
 """Pytest configuration and fixtures for torchonnx benchmark tests."""
 
+__docformat__ = "restructuredtext"
+
 from pathlib import Path
 
 import pytest

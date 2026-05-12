@@ -4,6 +4,8 @@ Generates test inputs and outputs for ONNX models to support the test_benchmarks
 conversion pipeline. This reduces model processing time by pre-computing reference outputs.
 """
 
+__docformat__ = "restructuredtext"
+
 import csv
 import time
 from pathlib import Path
@@ -17,8 +19,10 @@ import onnxruntime as ort
 def get_models_from_benchmarks(benchmark_dir: Path, max_models: int = 20):
     """Get list of ONNX models from benchmark directory.
 
-    :param benchmark_dir: Benchmark directory path
-    :param max_models: Maximum number of models to process
+    :param benchmark_dir: Benchmark directory path.
+
+    :param max_models: Maximum number of models to process.
+
     :return: List of ONNX model paths
     """
     instances_csv = benchmark_dir / "instances.csv"
@@ -54,7 +58,8 @@ def get_models_from_benchmarks(benchmark_dir: Path, max_models: int = 20):
 def _get_model_input_info(onnx_path: Path) -> tuple[str, list[int]] | None:
     """Get model input name and expected shape.
 
-    :param onnx_path: Path to ONNX model
+    :param onnx_path: Path to ONNX model.
+
     :return: Tuple of (input_name, expected_shape) or None if invalid
     """
     try:
@@ -91,9 +96,12 @@ def generate_test_data(
 ) -> bool:
     """Generate test data from ONNX model by running inference.
 
-    :param onnx_path: Path to ONNX model
-    :param output_dir: Output directory for .npz file
-    :param num_samples: Number of test samples to generate
+    :param onnx_path: Path to ONNX model.
+
+    :param output_dir: Output directory for .npz file.
+
+    :param num_samples: Number of test samples to generate.
+
     :return: True if successful, False otherwise
     """
     try:
@@ -157,8 +165,10 @@ def build_test_data(
     Data files are saved in vnncomp2024_benchmarks/benchmark_name/data/
     to match expected structure from load_test_inputs().
 
-    :param benchmarks_root: Root directory with benchmarks (symlink)
-    :param max_per_benchmark: Maximum models per benchmark
+    :param benchmarks_root: Root directory with benchmarks (symlink).
+
+    :param max_per_benchmark: Maximum models per benchmark.
+
     """
     benchmarks_path = Path(benchmarks_root)
 

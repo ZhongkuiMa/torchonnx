@@ -74,7 +74,8 @@ ONNX_TO_PYTORCH_OPERATIONS: dict[str, str] = {
 def is_operator(layer_type: str) -> bool:
     """Check if operation is a functional operation (not a layer).
 
-    :param layer_type: Operation type
+    :param layer_type: Operation type.
+
     :return: True if operation is functional
     """
     return layer_type in ONNX_TO_PYTORCH_OPERATORS
@@ -83,7 +84,8 @@ def is_operator(layer_type: str) -> bool:
 def is_operation(layer_type: str) -> bool:
     """Check if operation should be implemented as functional with arguments.
 
-    :param layer_type: PyTorch layer type
+    :param layer_type: PyTorch layer type.
+
     :return: True if operation is functional with arguments
     """
     return layer_type in ONNX_TO_PYTORCH_OPERATIONS
@@ -92,7 +94,8 @@ def is_operation(layer_type: str) -> bool:
 def convert_to_operator(layer_type: str) -> str:
     """Get Python operator for functional operation.
 
-    :param layer_type: Operation type
+    :param layer_type: Operation type.
+
     :return: Python operator string (e.g., "+", "-", "@")
     """
     if layer_type not in ONNX_TO_PYTORCH_OPERATORS:
@@ -103,7 +106,8 @@ def convert_to_operator(layer_type: str) -> str:
 def convert_to_operation(layer_type: str) -> str:
     """Get the template for generating functional operation code.
 
-    :param layer_type: PyTorch layer type
+    :param layer_type: PyTorch layer type.
+
     :return: Template string for code generation
     """
     if layer_type not in ONNX_TO_PYTORCH_OPERATIONS:
@@ -114,8 +118,10 @@ def convert_to_operation(layer_type: str) -> str:
 def _extract_pad_args(node: NodeProto, initializers: dict[str, TensorProto]) -> dict[str, Any]:
     """Extract arguments for Pad operation.
 
-    :param node: ONNX Pad node
-    :param initializers: All ONNX initializers
+    :param node: ONNX Pad node.
+
+    :param initializers: All ONNX initializers.
+
     :return: Arguments for F.pad call
     """
     attrs = extract_onnx_attrs(node, initializers)
@@ -170,7 +176,8 @@ def _simplify_homogeneous_values(
 ) -> int | tuple[int, ...]:
     """Simplify homogeneous values into scalar or tuple.
 
-    :param values: List of values
+    :param values: List of values.
+
     :return: Scalar if all same, tuple otherwise
     """
     if not values:
@@ -183,10 +190,13 @@ def _simplify_homogeneous_values(
 def _process_conv_padding(pads: list[int], operation: str) -> int | tuple[int, ...]:
     """Convert and validate ONNX padding to PyTorch format.
 
-    :param pads: ONNX padding values
-    :param operation: Operation name (Conv or ConvTranspose)
+    :param pads: ONNX padding values.
+
+    :param operation: Operation name (Conv or ConvTranspose).
+
     :return: PyTorch padding format
-    :raises ValueError: If padding is asymmetric
+    :raises ValueError: If padding is asymmetric.
+
     """
     ndims = len(pads) // 2
     symmetric = all(pads[i] == pads[i + ndims] for i in range(ndims))
@@ -336,9 +346,12 @@ def extract_operation_args(
 ) -> dict[str, Any]:
     """Extract arguments for functional operation.
 
-    :param node: ONNX node
-    :param initializers: All ONNX initializers
-    :param layer_type: PyTorch layer type
+    :param node: ONNX node.
+
+    :param initializers: All ONNX initializers.
+
+    :param layer_type: PyTorch layer type.
+
     :return: Arguments for functional call
     """
     extractor = _OPERATION_ARGS_EXTRACTORS.get(layer_type)

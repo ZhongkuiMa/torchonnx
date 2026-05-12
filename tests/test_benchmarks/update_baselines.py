@@ -15,6 +15,8 @@ Usage:
     python update_baselines.py --dry-run           # Show what would be copied
 """
 
+__docformat__ = "restructuredtext"
+
 import argparse
 import shutil
 import sys
@@ -26,9 +28,12 @@ def copy_baseline(
 ) -> tuple[bool, int]:
     """Copy a single result file/directory to baseline.
 
-    :param result_path: Source path in results/baselines/
-    :param baseline_path: Destination path in baselines/
-    :param dry_run: If True, only show what would be copied
+    :param result_path: Source path in results/baselines/.
+
+    :param baseline_path: Destination path in baselines/.
+
+    :param dry_run: If True, only show what would be copied.
+
     :return: Tuple of (success, file_count)
     """
     if dry_run:
@@ -73,10 +78,14 @@ def update_benchmark(
 ) -> tuple[int, int]:
     """Update baselines for one benchmark.
 
-    :param benchmark_name: Name of benchmark
-    :param results_dir: Root results directory (results/baselines/)
-    :param baselines_dir: Root baselines directory
-    :param dry_run: If True, only show what would be copied
+    :param benchmark_name: Name of benchmark.
+
+    :param results_dir: Root results directory (results/baselines/).
+
+    :param baselines_dir: Root baselines directory.
+
+    :param dry_run: If True, only show what would be copied.
+
     :return: Tuple of (success_count, total_count)
     """
     result_bench_dir = results_dir / benchmark_name
@@ -128,8 +137,10 @@ def _parse_arguments() -> argparse.Namespace:
 def _get_benchmarks_to_update(args: argparse.Namespace, results_dir: Path) -> list[str] | None:
     """Determine which benchmarks to update.
 
-    :param args: Parsed arguments
-    :param results_dir: Path to results directory
+    :param args: Parsed arguments.
+
+    :param results_dir: Path to results directory.
+
     :return: List of benchmark names or None if error
     """
     if args.benchmark:

@@ -17,6 +17,8 @@ the classify_inputs() bug in tensor_classifier.py. Tests handle this gracefully
 with pytest.skip().
 """
 
+__docformat__ = "restructuredtext"
+
 import ast
 import importlib.util
 import tempfile
@@ -41,7 +43,8 @@ class IntegrationTestHelper:
     def generate_model_code_and_state_dict(onnx_model_path):
         """Generate PyTorch code and state dict from ONNX model.
 
-        :param onnx_model_path: Path to ONNX model file
+        :param onnx_model_path: Path to ONNX model file.
+
         :return: Tuple of (module_code, state_dict) or raises if pipeline fails
         """
         normalized = load_and_preprocess_onnx_model(onnx_model_path)
@@ -55,9 +58,12 @@ class IntegrationTestHelper:
     def load_generated_model(module_code, state_dict, temp_dir=None):
         """Load generated PyTorch model from code string.
 
-        :param module_code: Generated Python code string
-        :param state_dict: State dictionary for model
-        :param temp_dir: Optional temp directory for file operations
+        :param module_code: Generated Python code string.
+
+        :param state_dict: State dictionary for model.
+
+        :param temp_dir: Optional temp directory for file operations.
+
         :return: Tuple of (model_instance, module)
         """
         if temp_dir is None:
@@ -87,8 +93,10 @@ class IntegrationTestHelper:
     def get_onnx_inputs(onnx_model_path, num_inputs=1):
         """Generate random inputs matching ONNX model signature.
 
-        :param onnx_model_path: Path to ONNX model
-        :param num_inputs: Number of input sets to generate
+        :param onnx_model_path: Path to ONNX model.
+
+        :param num_inputs: Number of input sets to generate.
+
         :return: List of input dictionaries
         """
         session = ort.InferenceSession(onnx_model_path, providers=["CPUExecutionProvider"])
@@ -111,8 +119,10 @@ class IntegrationTestHelper:
     def run_onnx_model(onnx_model_path, inputs):
         """Run ONNX model and return outputs.
 
-        :param onnx_model_path: Path to ONNX model
-        :param inputs: Input dictionary
+        :param onnx_model_path: Path to ONNX model.
+
+        :param inputs: Input dictionary.
+
         :return: List of output arrays
         """
         session = ort.InferenceSession(onnx_model_path, providers=["CPUExecutionProvider"])
@@ -122,10 +132,14 @@ class IntegrationTestHelper:
     def compare_outputs(onnx_output, pytorch_output, rtol=1e-5, atol=1e-6):
         """Compare ONNX and PyTorch outputs for numerical equivalence.
 
-        :param onnx_output: Output from ONNX model (numpy array or list)
-        :param pytorch_output: Output from PyTorch model (tensor or array)
-        :param rtol: Relative tolerance
-        :param atol: Absolute tolerance
+        :param onnx_output: Output from ONNX model (numpy array or list).
+
+        :param pytorch_output: Output from PyTorch model (tensor or array).
+
+        :param rtol: Relative tolerance.
+
+        :param atol: Absolute tolerance.
+
         :return: True if outputs match within tolerance
         """
         if isinstance(pytorch_output, torch.Tensor):

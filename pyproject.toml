@@ -104,6 +104,7 @@ warn_return_any = true
 warn_unused_configs = true
 warn_unused_ignores = true
 disallow_untyped_defs = false
+check_untyped_defs = true
 ignore_missing_imports = true
 files = ["src/torchonnx"]
 exclude = ["tests", "venv", ".venv", "build", "dist"]
@@ -136,6 +137,14 @@ source = [
     "src/torchonnx",
     "*/site-packages/torchonnx",
 ]
+
+[tool.pyright]
+pythonVersion = "3.11"
+pythonPlatform = "Linux"
+typeCheckingMode = "basic"
+include = ["src/torchonnx"]
+exclude = ["tests", "venv", ".venv", "build", "dist"]
+reportPrivateImportUsage = false
 
 [project.urls]
 Homepage = "https://github.com/ZhongkuiMa/torchonnx"

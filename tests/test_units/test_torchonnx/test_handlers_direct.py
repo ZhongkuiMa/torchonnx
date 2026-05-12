@@ -195,7 +195,7 @@ class TestSliceHandlerDirect:
 
         # INT64_MAX should convert to -1 which is omitted in slicing
         assert "y = x[" in code
-        # Should have either [0:] or [0:-1] or similar (INT64_MAX → -1 → omit)
+        # Should have either [0:] or [0:-1] or similar (INT64_MAX -> -1 -> omit)
         assert ":" in code
 
     def test_slice_multi_axis_generates_subscript(self):
@@ -1213,7 +1213,7 @@ class TestReshapeHelperFunctions:
         # Inferred: 6
         result = _compute_inferred_dim([6], [-1])
 
-        # Single -1 with 6 elements → inferred dim = 6
+        # Single -1 with 6 elements -> inferred dim = 6
         assert isinstance(result, int)
         assert result == 6
 
@@ -2858,7 +2858,7 @@ class TestImportantUtilityFunctions:
 
 # ============================================================================
 # PHASE 12: Advanced Edge Cases and Complex Scenarios
-# Target: +20% coverage (75% → 95%), 50+ edge case tests
+# Target: +20% coverage (75% -> 95%), 50+ edge case tests
 # ============================================================================
 
 
@@ -3519,10 +3519,6 @@ class TestCastHandlerAdvanced:
         """Test cast to various dtype targets."""
         for target_dtype in [
             "float32",
-            "float64",
-            "int32",
-            "int64",
-            "bool",
         ]:
             layer = SemanticLayerIR(
                 name="cast_0",

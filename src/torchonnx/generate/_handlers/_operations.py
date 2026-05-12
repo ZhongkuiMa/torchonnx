@@ -18,7 +18,8 @@ def _get_input_code_names(layer: SemanticLayerIR) -> list[str]:
     Adds self. prefix for parameters and constants (registered as buffers).
     Marks constants/parameters as used in the forward generation context.
 
-    :param layer: Semantic layer IR
+    :param layer: Semantic layer IR.
+
     :return: List of code names
     """
     from torchonnx.generate._forward_gen import get_forward_gen_context
@@ -45,7 +46,8 @@ def _get_input_code_name_selective(
 ) -> str:
     """Get code name for a single input, marking constants/parameters as used.
 
-    :param inp: Input info
+    :param inp: Input info.
+
     :return: Code name string (e.g., 'self.const_0', 'x1')
     """
     from torchonnx.generate._forward_gen import get_forward_gen_context
@@ -69,8 +71,10 @@ def _get_input_code_name_selective(
 def _format_args_with_inputs(layer: SemanticLayerIR, extra_inputs: list[str] | None = None) -> str:
     """Format function arguments (inputs + keyword args).
 
-    :param layer: Semantic layer IR
-    :param extra_inputs: Additional input names to prepend
+    :param layer: Semantic layer IR.
+
+    :param extra_inputs: Additional input names to prepend.
+
     :return: Formatted argument string
     """
     all_inputs = (extra_inputs or []) + _get_input_code_names(layer)
@@ -90,8 +94,10 @@ def _compute_inferred_dim(
 ) -> int | None:
     """Compute inferred dimension when shape contains -1.
 
-    :param input_shape: Input tensor shape (only concrete int dimensions are used)
-    :param shape_list: Target reshape shape with -1 placeholder
+    :param input_shape: Input tensor shape (only concrete int dimensions are used).
+
+    :param shape_list: Target reshape shape with -1 placeholder.
+
     :return: Inferred dimension or None if can't compute
     """
     import math
@@ -121,10 +127,14 @@ def _require_min_inputs(
 
     Raises ValueError with a descriptive message if validation fails.
 
-    :param layer: Semantic layer IR to validate
-    :param min_count: Minimum number of required inputs
-    :param operation_name: Optional operation name for error message (defaults to layer.name)
-    :raises ValueError: If layer has fewer than min_count inputs
+    :param layer: Semantic layer IR to validate.
+
+    :param min_count: Minimum number of required inputs.
+
+    :param operation_name: Optional operation name for error message (defaults to layer.name).
+
+    :raises ValueError: If layer has fewer than min_count inputs.
+
 
     COVERAGE NOTE: This error path is not tested because it requires malformed IR
     that earlier ONNX validation stages prevent. Keeping as defensive programming.
@@ -145,8 +155,10 @@ def _can_infer_reshape_statically(
     Returns True when input shape is known with all-integer dimensions
     and the target shape only contains integers and -1.
 
-    :param input_shape: Input tensor shape (may contain symbolic dimensions)
-    :param shape_list: Target reshape shape with possible -1 placeholder
+    :param input_shape: Input tensor shape (may contain symbolic dimensions).
+
+    :param shape_list: Target reshape shape with possible -1 placeholder.
+
     :return: True if reshape can be statically inferred
     """
     if not input_shape:
@@ -167,8 +179,10 @@ def _handle_reshape(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) 
     we need to compute what -1 resolves to, replace it with the computed value,
     then set the batch dimension to -1 for dynamic batching.
 
-    :param layer: Semantic layer IR
-    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
+    :param layer: Semantic layer IR.
+
+    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
+
     :return: Generated code line
     """
     output = layer.outputs[0].code_name
@@ -181,7 +195,7 @@ def _handle_reshape(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) 
     # If shape is a constant, use Python literal directly
     if isinstance(shape_input, ConstantInfo):
         shape_data = shape_input.data
-        shape_list = shape_data.tolist()
+        shape_list: list[int] = shape_data.tolist()  # pyright: ignore[reportAssignmentType]
         if not isinstance(shape_list, list):
             shape_list = [shape_list]
 
@@ -218,7 +232,8 @@ def _handle_transpose(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]
 
     Generates: output = input.permute(dims)
 
-    :param layer: Semantic layer IR
+    :param layer: Semantic layer IR.
+
     :return: Generated code line
     """
     inputs = _get_input_code_names(layer)
@@ -237,7 +252,8 @@ def _handle_transpose(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]
 def _handle_squeeze(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Handle squeeze operation.
 
-    :param layer: Semantic layer IR
+    :param layer: Semantic layer IR.
+
     :return: Generated code line
     """
     inputs = _get_input_code_names(layer)
@@ -258,8 +274,10 @@ def _handle_unsqueeze(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]
     In ONNX opset 13+, axes is the second input tensor.
     In older opsets, axes is an attribute.
 
-    :param layer: Semantic layer IR
-    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
+    :param layer: Semantic layer IR.
+
+    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
+
     :return: Generated code line
     """
     output = layer.outputs[0].code_name
@@ -297,7 +315,8 @@ def _prepare_concat_inputs(
     - Expands constants with batch dim = 1 when concatenating on non-batch axes
     - Returns list of input code strings and the concat axis
 
-    :param layer: Semantic layer IR
+    :param layer: Semantic layer IR.
+
     :return: Tuple of (input_codes: list[str], concat_axis: int)
     """
     from torchonnx.generate._forward_gen import get_forward_gen_context
@@ -365,8 +384,10 @@ def _handle_concat(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
     batch dimension = 1 need to be expanded to match the dynamic batch size
     of variable inputs.
 
-    :param layer: Semantic layer IR
-    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name (unused)
+    :param layer: Semantic layer IR.
+
+    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name (unused).
+
     :return: Generated code line
     """
     output = layer.outputs[0].code_name
@@ -389,7 +410,8 @@ def _handle_pad(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> s
 
     When pads is a constant, preprocess to Python literal for cleaner code.
 
-    :param layer: Semantic layer IR
+    :param layer: Semantic layer IR.
+
     :return: Generated code line
     """
     inputs = _get_input_code_names(layer)
@@ -449,9 +471,12 @@ def _handle_pad(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> s
 def _format_bound_arg(bound_name: str, bound_input, both_bounds_constant: bool) -> str | None:
     """Format a clamp bound argument (min or max).
 
-    :param bound_name: Name of bound ('min' or 'max')
-    :param bound_input: Input tensor info
-    :param both_bounds_constant: Whether both min and max are constant
+    :param bound_name: Name of bound ('min' or 'max').
+
+    :param bound_input: Input tensor info.
+
+    :param both_bounds_constant: Whether both min and max are constant.
+
     :return: Formatted argument string or None
     """
     if bound_input is None:
@@ -473,8 +498,10 @@ def _handle_clip(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> 
     Uses literals for constant min/max values when BOTH are constants.
     This ensures type consistency (PyTorch doesn't allow mixing scalar and tensor bounds).
 
-    :param layer: Semantic layer IR
-    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
+    :param layer: Semantic layer IR.
+
+    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
+
     :return: Generated code line
     """
     output = layer.outputs[0].code_name
@@ -530,8 +557,10 @@ def _handle_gather(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
     ONNX Gather: data[indices] along axis
     Uses bracket slicing for simple constant indices, otherwise index_select.
 
-    :param layer: Semantic layer IR
-    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
+    :param layer: Semantic layer IR.
+
+    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
+
     :return: Generated code line
     """
     output = layer.outputs[0].code_name
@@ -580,8 +609,10 @@ def _handle_constant_of_shape(layer: SemanticLayerIR, layer_name_mapping: dict[s
 
     Creates a tensor of given shape filled with a constant value.
 
-    :param layer: Semantic layer IR
-    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
+    :param layer: Semantic layer IR.
+
+    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
+
     :return: Generated code line
     """
     output = layer.outputs[0].code_name
@@ -638,8 +669,10 @@ def _handle_arange(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
     Uses literals for constant arguments to avoid buffer initialization.
     Creates arange on the same device as the model.
 
-    :param layer: Semantic layer IR
-    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
+    :param layer: Semantic layer IR.
+
+    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
+
     :return: Generated code line
     """
     output = layer.outputs[0].code_name
@@ -687,12 +720,18 @@ def _generate_literal_slice(
 ) -> str:
     """Generate Python literal slicing code.
 
-    :param data: Data variable name
-    :param starts: Start indices
-    :param ends: End indices
-    :param axes: Axes to slice
-    :param steps: Step sizes
-    :param output: Output variable name
+    :param data: Data variable name.
+
+    :param starts: Start indices.
+
+    :param ends: End indices.
+
+    :param axes: Axes to slice.
+
+    :param steps: Step sizes.
+
+    :param output: Output variable name.
+
     :return: Generated code
     """
     int64_max = 9223372036854775807
@@ -732,12 +771,18 @@ def _try_narrow_slice(
 ) -> str | None:
     """Try to use torch.narrow for single-axis constant slicing.
 
-    :param data: Data variable name
-    :param starts_input: Starts input (should be ConstantInfo)
-    :param ends_input: Ends input (should be ConstantInfo)
-    :param axes_input: Axes input
-    :param steps_input: Steps input
-    :param output: Output variable name
+    :param data: Data variable name.
+
+    :param starts_input: Starts input (should be ConstantInfo).
+
+    :param ends_input: Ends input (should be ConstantInfo).
+
+    :param axes_input: Axes input.
+
+    :param steps_input: Steps input.
+
+    :param output: Output variable name.
+
     :return: Generated code or None if narrow can't be used
     """
     # Get axes and steps values
@@ -784,8 +829,10 @@ def _normalize_int64_max(values):
 def _encode_slice_input(input_val, default: str) -> str:
     """Encode a slice input (constant or variable) as code.
 
-    :param input_val: Input value (ConstantInfo, VariableInfo, or None)
-    :param default: Default value if input is None
+    :param input_val: Input value (ConstantInfo, VariableInfo, or None).
+
+    :param default: Default value if input is None.
+
     :return: Code representation
     """
     if input_val is None:
@@ -807,8 +854,10 @@ def _handle_slice(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) ->
     When axes/steps are constant but starts/ends are dynamic, uses torch.narrow.
     Otherwise uses dynamic_slice helper for runtime slicing.
 
-    :param layer: Semantic layer IR
-    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
+    :param layer: Semantic layer IR.
+
+    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
+
     :return: Generated code line
     """
     from torchonnx.generate._forward_gen import get_forward_gen_context
@@ -894,7 +943,8 @@ def _handle_slice(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) ->
 def _handle_cast(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Handle Cast operation.
 
-    :param layer: Semantic layer IR
+    :param layer: Semantic layer IR.
+
     :return: Generated code line
     """
     inputs = _get_input_code_names(layer)
@@ -926,7 +976,8 @@ def _handle_shape(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) ->
 
     ONNX Shape returns int64 tensor on the same device as the input.
 
-    :param layer: Semantic layer IR
+    :param layer: Semantic layer IR.
+
     :return: Generated code line
     """
     inputs = _get_input_code_names(layer)
@@ -943,8 +994,10 @@ def _convert_expand_semantics(data_shape: tuple[int, ...], target_shape: list[in
     In ONNX: if target[i]==1 and data[i]!=1, expand keeps original dimension.
     This function converts to PyTorch format using -1 to indicate "keep original".
 
-    :param data_shape: Input data shape
-    :param target_shape: Target shape from constant
+    :param data_shape: Input data shape.
+
+    :param target_shape: Target shape from constant.
+
     :return: Converted shape with -1 for dimensions to keep
     """
     converted = []
@@ -974,15 +1027,19 @@ def _handle_expand_constant_shape(
 ) -> str:
     """Handle expand with constant shape input.
 
-    :param data: Code name for data input
-    :param shape_input: Constant shape input
-    :param data_shape: Data input shape if known (may contain symbolic dims), None otherwise
-    :param output: Output variable name
+    :param data: Code name for data input.
+
+    :param shape_input: Constant shape input.
+
+    :param data_shape: Data input shape if known (may contain symbolic dims), None otherwise.
+
+    :param output: Output variable name.
+
     :return: Generated code or None to defer to runtime helper
     """
     from torchonnx.generate._forward_gen import get_forward_gen_context
 
-    target_shape = shape_input.data.tolist()
+    target_shape: list[int] = shape_input.data.tolist()  # pyright: ignore[reportAssignmentType]
     if not isinstance(target_shape, list):
         target_shape = [target_shape]
 
@@ -1008,9 +1065,12 @@ def _handle_expand_runtime_shape(
 ) -> str:
     """Handle expand with runtime shape input.
 
-    :param data: Code name for data input
-    :param shape_input: Runtime shape input
-    :param output: Output variable name
+    :param data: Code name for data input.
+
+    :param shape_input: Runtime shape input.
+
+    :param output: Output variable name.
+
     :return: Generated code
     """
     from torchonnx.generate._forward_gen import get_forward_gen_context
@@ -1029,8 +1089,10 @@ def _handle_expand(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
     For constant shapes, use inline .expand() with ONNX->PyTorch semantics conversion.
     Otherwise, use dynamic_expand helper for runtime shapes.
 
-    :param layer: Semantic layer IR
-    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
+    :param layer: Semantic layer IR.
+
+    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
+
     :return: Generated code line
     """
     output = layer.outputs[0].code_name
@@ -1070,7 +1132,8 @@ def _handle_split(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) ->
     ONNX Split can have multiple outputs that need to be unpacked.
     Uses literals for constant split sizes.
 
-    :param layer: Semantic layer IR
+    :param layer: Semantic layer IR.
+
     :return: Generated code line
     """
     # Process data input (first input)
@@ -1115,7 +1178,8 @@ def _handle_scatter_nd(layer: SemanticLayerIR, layer_name_mapping: dict[str, str
     When validity is 0 (any slice was empty/out-of-bounds), scatter_nd returns
     the original data unchanged, matching standard mode's empty-tensor behavior.
 
-    :param layer: Semantic layer IR
+    :param layer: Semantic layer IR.
+
     :return: Generated code line
     """
     from torchonnx.generate._forward_gen import get_forward_gen_context
@@ -1145,7 +1209,8 @@ def _handle_reduce(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
     ONNX uses 'keepdims' but PyTorch uses 'keepdim' (no 's').
     ONNX passes axes as second input, PyTorch uses 'dim' keyword.
 
-    :param layer: Semantic layer IR
+    :param layer: Semantic layer IR.
+
     :return: Generated code line
     """
     inputs = _get_input_code_names(layer)
@@ -1186,7 +1251,8 @@ def _handle_linear(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
       - transB=1: weight shape = (out_features, in_features) → already correct
     PyTorch F.linear expects: weight shape = (out_features, in_features)
 
-    :param layer: Semantic layer IR
+    :param layer: Semantic layer IR.
+
     :return: Generated code line
     """
     inputs = _get_input_code_names(layer)
@@ -1218,7 +1284,8 @@ def _handle_linear(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
 def _get_conv_func_from_ndim(ndim: int) -> str | None:
     """Get conv function name from tensor dimensionality.
 
-    :param ndim: Number of dimensions (3=1d, 4=2d, 5=3d)
+    :param ndim: Number of dimensions (3=1d, 4=2d, 5=3d).
+
     :return: Conv function name or None if invalid
     """
     if ndim == 3:
@@ -1236,7 +1303,8 @@ def _determine_conv_func(layer: SemanticLayerIR) -> str:
     First tries weight shape (most reliable), then data shape.
     Raises error if neither can be determined.
 
-    :param layer: Semantic layer IR
+    :param layer: Semantic layer IR.
+
     :return: Conv function name (F.conv1d, F.conv2d, or F.conv3d)
     """
     # Try weight shape (most reliable)
@@ -1265,8 +1333,10 @@ def _handle_conv(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> 
 
     Determines whether to use F.conv1d, F.conv2d, or F.conv3d based on shape information.
 
-    :param layer: Semantic layer IR
-    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
+    :param layer: Semantic layer IR.
+
+    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
+
     :return: Generated code line
     """
     output = layer.outputs[0].code_name
@@ -1287,7 +1357,8 @@ def _handle_generic_torch_function(
 ) -> str:
     """Handle generic torch.* functions.
 
-    :param layer: Semantic layer IR
+    :param layer: Semantic layer IR.
+
     :return: Generated code line
     """
     output = layer.outputs[0].code_name
@@ -1298,7 +1369,8 @@ def _handle_generic_torch_function(
 def _handle_generic_method(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Handle generic tensor methods.
 
-    :param layer: Semantic layer IR
+    :param layer: Semantic layer IR.
+
     :return: Generated code line
     """
     inputs = _get_input_code_names(layer)

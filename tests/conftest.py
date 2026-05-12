@@ -1,5 +1,7 @@
 """Pytest configuration and shared fixtures for torchonnx tests."""
 
+__docformat__ = "restructuredtext"
+
 import onnx
 import onnx.helper as onnx_helper
 import pytest

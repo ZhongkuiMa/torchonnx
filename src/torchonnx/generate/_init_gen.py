@@ -41,7 +41,8 @@ def _extract_layer_base_type(pytorch_type: str) -> str:
         'nn.BatchNorm2d' -> 'batchnorm2d'
         'nn.Flatten' -> 'flatten'
 
-    :param pytorch_type: Full PyTorch type string
+    :param pytorch_type: Full PyTorch type string.
+
     :return: Lowercase base name with digits preserved
     """
     # Get the class name: "nn.Conv2d" -> "Conv2d"
@@ -55,7 +56,8 @@ def build_layer_name_mapping(semantic_ir: SemanticModelIR) -> dict[str, str]:
 
     Generates names like 'conv1', 'relu2', 'flatten1' based on layer type.
 
-    :param semantic_ir: Semantic IR from Stage 3
+    :param semantic_ir: Semantic IR from Stage 3.
+
     :return: Mapping of ONNX name -> clean Python name
     """
     layer_counters: dict[str, int] = {}
@@ -74,7 +76,8 @@ def build_layer_name_mapping(semantic_ir: SemanticModelIR) -> dict[str, str]:
 def _build_layer_io_sets(semantic_ir: SemanticModelIR) -> tuple[set[str], set[str]]:
     """Build sets of parameters and constants that belong to layers.
 
-    :param semantic_ir: Semantic IR from Stage 3
+    :param semantic_ir: Semantic IR from Stage 3.
+
     :return: Tuple of (layer_params, layer_consts)
     """
     layer_params: set[str] = set()
@@ -98,9 +101,12 @@ def _register_standalone_parameters(
 ) -> None:
     """Register standalone parameters (not used by any layer).
 
-    :param lines: List to append registration lines to
-    :param semantic_ir: Semantic IR from Stage 3
-    :param layer_params: Set of parameter ONNX names used by layers
+    :param lines: List to append registration lines to.
+
+    :param semantic_ir: Semantic IR from Stage 3.
+
+    :param layer_params: Set of parameter ONNX names used by layers.
+
     """
     lines.extend(
         [
@@ -121,10 +127,14 @@ def _register_standalone_buffers(
 ) -> None:
     """Register standalone buffer constants (not used by any layer).
 
-    :param lines: List to append registration lines to
-    :param semantic_ir: Semantic IR from Stage 3
-    :param layer_consts: Set of constant ONNX names used by layers
-    :param used_constant_onnx_names: Set of constant ONNX names used in forward
+    :param lines: List to append registration lines to.
+
+    :param semantic_ir: Semantic IR from Stage 3.
+
+    :param layer_consts: Set of constant ONNX names used by layers.
+
+    :param used_constant_onnx_names: Set of constant ONNX names used in forward.
+
     """
     for const in semantic_ir.constants:
         if const.onnx_name not in layer_consts and const.onnx_name in used_constant_onnx_names:
@@ -143,9 +153,12 @@ def _instantiate_layers(
 ) -> None:
     """Instantiate all layer objects with clean names.
 
-    :param lines: List to append instantiation lines to
-    :param semantic_ir: Semantic IR from Stage 3
-    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
+    :param lines: List to append instantiation lines to.
+
+    :param semantic_ir: Semantic IR from Stage 3.
+
+    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
+
     """
     for layer in semantic_ir.layers:
         if layer.operator_class == OperatorClass.LAYER:
@@ -171,9 +184,12 @@ def generate_init_method(
     2. Buffer registration for standalone constants (only those used in forward)
     3. Layer instantiation for LAYER operators
 
-    :param semantic_ir: Semantic IR from Stage 3
-    :param layer_name_mapping: Optional mapping of ONNX name -> clean name
-    :param used_constant_onnx_names: Set of constant ONNX names actually used in forward
+    :param semantic_ir: Semantic IR from Stage 3.
+
+    :param layer_name_mapping: Optional mapping of ONNX name -> clean name.
+
+    :param used_constant_onnx_names: Set of constant ONNX names actually used in forward.
+
     :return: Complete __init__ method code
     """
     lines: list[str] = []
@@ -210,7 +226,8 @@ def generate_init_method(
 def _format_layer_arguments(layer: SemanticLayerIR) -> str:
     """Format layer constructor arguments.
 
-    :param layer: Semantic layer IR
+    :param layer: Semantic layer IR.
+
     :return: Formatted argument string
     """
     args: list[str] = []

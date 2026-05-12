@@ -31,7 +31,8 @@ from torchonnx.build import ModelIR, NodeIR
 def _classify_operator_class(pytorch_type: str) -> OperatorClass:
     """Determine operator class from PyTorch type.
 
-    :param pytorch_type: PyTorch type string
+    :param pytorch_type: PyTorch type string.
+
     :return: Operator classification
     """
     if is_operator(pytorch_type):
@@ -54,10 +55,14 @@ def _build_semantic_layer_ir(
 ) -> SemanticLayerIR:
     """Convert raw NodeIR to semantic LayerIR with typed containers.
 
-    :param layer_ir: Raw node IR from Stage 2
-    :param model_ir: Complete model IR
-    :param code_name_counters: Shared counters for code name generation
-    :param variable_mapping: Shared mapping from onnx_name to code_name for variables
+    :param layer_ir: Raw node IR from Stage 2.
+
+    :param model_ir: Complete model IR.
+
+    :param code_name_counters: Shared counters for code name generation.
+
+    :param variable_mapping: Shared mapping from onnx_name to code_name for variables.
+
     :return: Semantic layer IR with typed inputs/outputs
     """
     # Get PyTorch type from ONNX node
@@ -143,7 +148,8 @@ def build_semantic_ir(model_ir: ModelIR) -> SemanticModelIR:
     - Resolves ONNX tensors to torch.Tensor
     - Removes ONNX dependencies (no ModelProto, no initializers)
 
-    :param model_ir: Raw model IR from Stage 2
+    :param model_ir: Raw model IR from Stage 2.
+
     :return: Semantic model IR with fully resolved PyTorch data
     """
     # Initialize global code name counters

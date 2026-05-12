@@ -33,7 +33,8 @@ _ONNX_TO_TORCH_DTYPE = {
 def _tensor_proto_to_torch(tensor: TensorProto) -> Tensor:
     """Convert ONNX TensorProto to PyTorch tensor.
 
-    :param tensor: ONNX TensorProto
+    :param tensor: ONNX TensorProto.
+
     :return: PyTorch tensor
     """
     # Use onnx.numpy_helper to convert to numpy first
@@ -46,7 +47,8 @@ def _tensor_proto_to_torch(tensor: TensorProto) -> Tensor:
 def _onnx_dtype_to_torch(onnx_dtype: int) -> torch.dtype:
     """Convert ONNX dtype code to PyTorch dtype.
 
-    :param onnx_dtype: ONNX data type code
+    :param onnx_dtype: ONNX data type code.
+
     :return: PyTorch dtype
     """
     return _ONNX_TO_TORCH_DTYPE.get(onnx_dtype, torch.float32)
@@ -55,7 +57,8 @@ def _onnx_dtype_to_torch(onnx_dtype: int) -> torch.dtype:
 def _get_conv_or_linear_role(idx: int) -> str | None:
     """Get parameter role for Conv/ConvTranspose/Linear layers.
 
-    :param idx: Input position index
+    :param idx: Input position index.
+
     :return: Parameter role or None
     """
     if idx == 1:
@@ -68,7 +71,8 @@ def _get_conv_or_linear_role(idx: int) -> str | None:
 def _get_batchnorm_role(idx: int) -> str | None:
     """Get parameter role for BatchNorm2d layers.
 
-    :param idx: Input position index
+    :param idx: Input position index.
+
     :return: Parameter role or None
     """
     roles = {1: "weight", 2: "bias", 3: "running_mean", 4: "running_var"}
@@ -82,9 +86,12 @@ def _get_parameter_role(
 ) -> str | None:
     """Determine PyTorch parameter role based on input position and layer type.
 
-    :param onnx_name: ONNX tensor name
-    :param input_names: All input names for this node
-    :param pytorch_type: PyTorch layer type (e.g., "nn.Conv2d" or "Conv2d")
+    :param onnx_name: ONNX tensor name.
+
+    :param input_names: All input names for this node.
+
+    :param pytorch_type: PyTorch layer type (e.g., "nn.Conv2d" or "Conv2d").
+
     :return: Parameter role ("weight", "bias", etc.) or None if not a parameter
     """
     # Find position in input list
@@ -120,13 +127,20 @@ def _process_parameter_input(
 ) -> ParameterInfo:
     """Process and create a parameter input.
 
-    :param onnx_name: ONNX tensor name
-    :param tensor: TensorProto object
-    :param param_role: Parameter role (weight, bias, etc.)
-    :param pytorch_type: PyTorch layer type
-    :param code_name_counters: Mutable counter dict
-    :param initializers: All initializers for attribute extraction
-    :param node: Optional NodeProto for attributes
+    :param onnx_name: ONNX tensor name.
+
+    :param tensor: TensorProto object.
+
+    :param param_role: Parameter role (weight, bias, etc.).
+
+    :param pytorch_type: PyTorch layer type.
+
+    :param code_name_counters: Mutable counter dict.
+
+    :param initializers: All initializers for attribute extraction.
+
+    :param node: Optional NodeProto for attributes.
+
     :return: ParameterInfo object
     """
     code_name = f"p{code_name_counters['param']}"
@@ -168,10 +182,14 @@ def _process_constant_input(
 ) -> ConstantInfo:
     """Process and create or reuse a constant input.
 
-    :param onnx_name: ONNX tensor name
-    :param tensor: TensorProto object
-    :param code_name_counters: Mutable counter dict
-    :param constant_mapping: Optional constant mapping dict
+    :param onnx_name: ONNX tensor name.
+
+    :param tensor: TensorProto object.
+
+    :param code_name_counters: Mutable counter dict.
+
+    :param constant_mapping: Optional constant mapping dict.
+
     :return: ConstantInfo object
     """
     if constant_mapping is not None and onnx_name in constant_mapping:
@@ -211,14 +229,22 @@ def classify_inputs(
     Converts Stage 2's input_names (list of strings) into Stage 3's typed containers.
     Preserves input order.
 
-    :param input_names: List of ONNX input tensor names (from Stage 2 NodeIR)
-    :param initializers: All ONNX initializers (from Stage 2 ModelIR)
-    :param pytorch_type: PyTorch layer type (to determine parameter roles)
-    :param shapes: Tensor shapes (from Stage 2 ModelIR)
-    :param code_name_counters: Mutable dict with keys 'var', 'param', 'const'
-    :param variable_mapping: Optional mapping from onnx_name to code_name for variables
-    :param constant_mapping: Optional mapping from onnx_name to ConstantInfo for constants
-    :param node: Optional ONNX NodeProto for extracting attributes (e.g., transB for Gemm)
+    :param input_names: List of ONNX input tensor names (from Stage 2 NodeIR).
+
+    :param initializers: All ONNX initializers (from Stage 2 ModelIR).
+
+    :param pytorch_type: PyTorch layer type (to determine parameter roles).
+
+    :param shapes: Tensor shapes (from Stage 2 ModelIR).
+
+    :param code_name_counters: Mutable dict with keys 'var', 'param', 'const'.
+
+    :param variable_mapping: Optional mapping from onnx_name to code_name for variables.
+
+    :param constant_mapping: Optional mapping from onnx_name to ConstantInfo for constants.
+
+    :param node: Optional ONNX NodeProto for extracting attributes (e.g., transB for Gemm).
+
     :return: Ordered list of typed input info objects
     """
     results: list[VariableInfo | ParameterInfo | ConstantInfo] = []
@@ -279,10 +305,14 @@ def classify_outputs(
     All outputs are runtime variables.
     Converts Stage 2's output_names (list of strings) into Stage 3's VariableInfo list.
 
-    :param output_names: List of ONNX output tensor names (from Stage 2 NodeIR)
-    :param shapes: Tensor shapes (from Stage 2 ModelIR)
-    :param code_name_counters: Mutable dict with key 'var'
-    :param variable_mapping: Optional mapping from onnx_name to code_name for variables
+    :param output_names: List of ONNX output tensor names (from Stage 2 NodeIR).
+
+    :param shapes: Tensor shapes (from Stage 2 ModelIR).
+
+    :param code_name_counters: Mutable dict with key 'var'.
+
+    :param variable_mapping: Optional mapping from onnx_name to code_name for variables.
+
     :return: Ordered list of VariableInfo objects
     """
     results = []

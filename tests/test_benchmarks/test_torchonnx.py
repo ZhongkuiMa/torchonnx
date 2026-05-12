@@ -13,11 +13,6 @@ To update baselines, run update_baselines.py after converting models.
 """
 
 __docformat__ = "restructuredtext"
-__all__ = [
-    "convert_all_models",
-    "convert_model",
-    "verify_benchmarks",
-]
 
 import importlib.util
 import sys
@@ -48,8 +43,10 @@ TOLERANCE_TIER3_ABS = 1e-4
 def _run_onnx_model(model_path: str, inputs: np.ndarray) -> dict:
     """Run ONNX model inference using ONNX Runtime.
 
-    :param model_path: Path to ONNX model file
-    :param inputs: input arrays
+    :param model_path: Path to ONNX model file.
+
+    :param inputs: input arrays.
+
     :return: Dictionary of output arrays
     """
     session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
@@ -68,11 +65,16 @@ def _run_pytorch_module(
 ) -> dict:
     """Run PyTorch module inference.
 
-    :param module_path: Path to PyTorch module file
-    :param state_dict_path: Path to state dict file
-    :param inputs: input arrays
-    :param dtype: Data type ("float32" or "float64")
-    :param device: Device to run on ("cpu" or "cuda")
+    :param module_path: Path to PyTorch module file.
+
+    :param state_dict_path: Path to state dict file.
+
+    :param inputs: input arrays.
+
+    :param dtype: Data type ("float32" or "float64").
+
+    :param device: Device to run on ("cpu" or "cuda").
+
     :return: Dictionary of output arrays
     """
     module_file = Path(module_path)
@@ -126,8 +128,10 @@ def _check_tolerance(max_abs: float, max_rel: float) -> str:
     - "TOLERANCE_MISMATCH": Exceeds strict tolerance but within acceptable precision band
     - "FAIL": Significant deviation beyond acceptable precision
 
-    :param max_abs: Maximum absolute error
-    :param max_rel: Maximum relative error
+    :param max_abs: Maximum absolute error.
+
+    :param max_rel: Maximum relative error.
+
     :return: Status string: "PASS", "TOLERANCE_MISMATCH", or "FAIL"
     """
     # Strict tolerance (should pass)
@@ -161,8 +165,10 @@ def _compute_errors(
 ) -> tuple[np.ndarray, np.ndarray, float, float]:
     """Compute absolute and relative errors between two arrays.
 
-    :param out1: First array
-    :param out2: Second array
+    :param out1: First array.
+
+    :param out2: Second array.
+
     :return: Tuple of (diff_array, rel_diff_array, max_abs, max_rel)
     """
     diff = np.abs(out1 - out2)
@@ -175,8 +181,10 @@ def _compute_errors(
 def _is_scalar_shape_mismatch(shape1: tuple, shape2: tuple) -> bool:
     """Check if shapes are scalar vs single-element mismatches.
 
-    :param shape1: First shape
-    :param shape2: Second shape
+    :param shape1: First shape.
+
+    :param shape2: Second shape.
+
     :return: True if mismatch is acceptable scalar difference
     """
     return (shape1 == () and shape2 == (1,)) or (shape1 == (1,) and shape2 == ())
@@ -190,10 +198,14 @@ def _compare_single_output(
 ) -> tuple[list, list, list]:
     """Compare single output pair and collect errors.
 
-    :param key1: First output name
-    :param key2: Second output name
-    :param out1: First output array
-    :param out2: Second output array
+    :param key1: First output name.
+
+    :param key2: Second output name.
+
+    :param out1: First output array.
+
+    :param out2: Second output array.
+
     :return: Tuple of (mismatches, diffs, rel_diffs)
     """
     mismatches: list[str] = []
@@ -231,8 +243,10 @@ def _compare_single_output(
 def _compute_statistics(all_diffs: list, all_rel_diffs: list) -> dict:
     """Compute error statistics from collected differences.
 
-    :param all_diffs: List of absolute differences
-    :param all_rel_diffs: List of relative differences
+    :param all_diffs: List of absolute differences.
+
+    :param all_rel_diffs: List of relative differences.
+
     :return: Dictionary of statistics
     """
     if not all_diffs:
@@ -251,10 +265,14 @@ def _compare_outputs(
 ) -> tuple[bool, list[str], dict]:
     """Compare outputs using three-tier tolerance.
 
-    :param outputs1: First model outputs
-    :param outputs2: Second model outputs
-    :param rtol: Relative tolerance (kept for compatibility)
-    :param atol: Absolute tolerance (kept for compatibility)
+    :param outputs1: First model outputs.
+
+    :param outputs2: Second model outputs.
+
+    :param rtol: Relative tolerance (kept for compatibility).
+
+    :param atol: Absolute tolerance (kept for compatibility).
+
     :return: Tuple of (all_match, mismatch_messages, statistics)
     """
     all_mismatches = []
@@ -280,9 +298,12 @@ def convert_model(
 ) -> dict:
     """Convert one ONNX model to PyTorch and save to results directory.
 
-    :param model_path: Path to source ONNX model file
-    :param output_dir: Directory to save converted PyTorch module
-    :param benchmarks_root: Path to benchmarks root directory
+    :param model_path: Path to source ONNX model file.
+
+    :param output_dir: Directory to save converted PyTorch module.
+
+    :param benchmarks_root: Path to benchmarks root directory.
+
     :return: Dictionary with conversion results
     """
     benchmark_name = get_model_benchmark_name(model_path)
@@ -345,14 +366,7 @@ def get_benchmark_models():
 
     # Return a skip marker if no models found (prevents pytest collection error)
     if not model_list:
-        return [
-            pytest.param(
-                None,
-                marks=pytest.mark.skip(
-                    reason="Benchmark data not available (run build_benchmarks.py)"
-                ),
-            )
-        ]
+        return [None]  # [REVIEW] Benchmark data not available (run build_benchmarks.py)
     return model_list
 
 
@@ -360,12 +374,11 @@ def get_benchmark_models():
 def test_convert_model(model_path, output_dir_baselines, benchmarks_root):
     """Convert one ONNX model to PyTorch.
 
-    Parametrized test that runs conversion for each benchmark model.
-
-    :param model_path: Path to source ONNX model
-    :param output_dir_baselines: Output directory (from conftest fixture)
-    :param benchmarks_root: Benchmarks root (from conftest fixture)
+    :param model_path: Path to source ONNX model.
+    :param output_dir_baselines: Output directory (from conftest fixture).
+    :param benchmarks_root: Benchmarks root (from conftest fixture).
     """
+    assert model_path is not None, "Benchmark data not available (run build_benchmarks.py)"
     model_path_obj = Path(model_path)
     result = convert_model(model_path_obj, output_dir_baselines, benchmarks_root)
 
@@ -416,8 +429,10 @@ def _format_status_line(
 def _handle_verification_status(status: str, error_msg: str | None) -> None:
     """Handle verification status and assert/skip as appropriate.
 
-    :param status: Verification status
-    :param error_msg: Error message if any
+    :param status: Verification status.
+
+    :param error_msg: Error message if any.
+
     """
     if status == "OK":
         pass  # Test passes
@@ -440,11 +455,16 @@ def test_verify_model_against_original(
 
     Parametrized test that verifies each model across dtypes and devices.
 
-    :param model_path: Path to original ONNX model
-    :param dtype: Data type to test (float32 or float64)
-    :param device: Device to test (cpu or cuda)
-    :param output_dir_baselines: Output directory (from conftest fixture)
-    :param benchmarks_root: Benchmarks root (from conftest fixture)
+    :param model_path: Path to original ONNX model.
+
+    :param dtype: Data type to test (float32 or float64).
+
+    :param device: Device to test (cpu or cuda).
+
+    :param output_dir_baselines: Output directory (from conftest fixture).
+
+    :param benchmarks_root: Benchmarks root (from conftest fixture).
+
     """
     # Skip if CUDA not available
     if device == "cuda" and not torch.cuda.is_available():
@@ -500,9 +520,12 @@ def convert_all_models(
 ) -> dict:
     """Convert all benchmark ONNX models to PyTorch and save to results directory.
 
-    :param benchmark_dir: Root directory of benchmarks
-    :param output_dir: Directory to save converted PyTorch modules
-    :param max_per_benchmark: Maximum models per benchmark to process
+    :param benchmark_dir: Root directory of benchmarks.
+
+    :param output_dir: Directory to save converted PyTorch modules.
+
+    :param max_per_benchmark: Maximum models per benchmark to process.
+
     :return: Dictionary with overall statistics
     """
     benchmarks_root = Path(benchmark_dir)
@@ -562,8 +585,10 @@ def convert_all_models(
 def _validate_verification_directories(results_path: Path, benchmarks_path: Path) -> None:
     """Validate that all required directories exist for verification.
 
-    :param results_path: Path to results directory
-    :param benchmarks_path: Path to benchmarks directory
+    :param results_path: Path to results directory.
+
+    :param benchmarks_path: Path to benchmarks directory.
+
     """
     if not results_path.exists():
         raise FileNotFoundError(f"Results directory not found: {results_path}")
@@ -574,7 +599,8 @@ def _validate_verification_directories(results_path: Path, benchmarks_path: Path
 def _load_test_data_from_npz(data_file: Path) -> list[np.ndarray]:
     """Load test inputs from npz data file.
 
-    :param data_file: Path to npz data file
+    :param data_file: Path to npz data file.
+
     :return: List of test input arrays
     """
     data = np.load(data_file, allow_pickle=True)
@@ -692,13 +718,20 @@ def _verify_one_benchmark(
     - "SKIP": Could not run test (missing files, etc.)
     - "ERROR": Unexpected error during verification
 
-    :param result_file: Path to converted PyTorch module file
-    :param result_state_dict: Path to converted state dict file
-    :param benchmark_onnx_file: Path to original ONNX model file
-    :param data_file: Path to test data npz file
-    :param rel_path: Relative path for reporting
-    :param dtype: Data type ("float32" or "float64")
-    :param device: Device to run on ("cpu" or "cuda")
+    :param result_file: Path to converted PyTorch module file.
+
+    :param result_state_dict: Path to converted state dict file.
+
+    :param benchmark_onnx_file: Path to original ONNX model file.
+
+    :param data_file: Path to test data npz file.
+
+    :param rel_path: Relative path for reporting.
+
+    :param dtype: Data type ("float32" or "float64").
+
+    :param device: Device to run on ("cpu" or "cuda").
+
     :return: Tuple of (status, error_message, statistics) where status is "OK",
         "TOLERANCE_MISMATCH", "NUMERICAL_MISMATCH", "SKIP", or "ERROR"
     """
@@ -756,10 +789,14 @@ def _print_verification_status(
 ) -> None:
     """Print verification status for a single model.
 
-    :param status: Verification status
-    :param error_msg: Error message if any
-    :param stats: Error statistics dictionary
-    :param print_errors: Whether to print detailed errors
+    :param status: Verification status.
+
+    :param error_msg: Error message if any.
+
+    :param stats: Error statistics dictionary.
+
+    :param print_errors: Whether to print detailed errors.
+
     """
     status_handlers = {
         "OK": lambda: _print_ok_status(stats, print_errors),
@@ -776,8 +813,10 @@ def _print_verification_status(
 def _print_ok_status(stats: dict, print_errors: bool) -> None:
     """Print OK status with optional error details.
 
-    :param stats: Error statistics dictionary
-    :param print_errors: Whether to print detailed errors
+    :param stats: Error statistics dictionary.
+
+    :param print_errors: Whether to print detailed errors.
+
     """
     if print_errors and stats:
         max_abs = stats.get("max_abs_diff", 0)
@@ -790,9 +829,12 @@ def _print_ok_status(stats: dict, print_errors: bool) -> None:
 def _print_mismatch_status(stats: dict, error_msg: str | None, print_errors: bool) -> None:
     """Print mismatch status with optional error details.
 
-    :param stats: Error statistics dictionary
-    :param error_msg: Error message
-    :param print_errors: Whether to print detailed errors
+    :param stats: Error statistics dictionary.
+
+    :param error_msg: Error message.
+
+    :param print_errors: Whether to print detailed errors.
+
     """
     if print_errors and stats:
         max_abs = stats.get("max_abs_diff", 0)
@@ -805,8 +847,10 @@ def _print_mismatch_status(stats: dict, error_msg: str | None, print_errors: boo
 def _update_verification_counts(status: str, counts: dict[str, int]) -> dict[str, int]:
     """Update verification counts based on status.
 
-    :param status: Verification status
-    :param counts: Dictionary of current counts
+    :param status: Verification status.
+
+    :param counts: Dictionary of current counts.
+
     :return: Updated counts dictionary
     """
     if status == "OK":
@@ -832,13 +876,20 @@ def _print_verification_summary(
 ) -> None:
     """Print verification summary statistics.
 
-    :param benchmark_models: List of benchmark models
-    :param counts: Dictionary of verification counts
-    :param max_abs_errors: List of maximum absolute errors
-    :param max_rel_errors: List of maximum relative errors
-    :param dtype: Data type ("float32" or "float64")
-    :param device: Device ("cpu" or "cuda")
-    :param print_errors: Whether to print detailed error statistics
+    :param benchmark_models: List of benchmark models.
+
+    :param counts: Dictionary of verification counts.
+
+    :param max_abs_errors: List of maximum absolute errors.
+
+    :param max_rel_errors: List of maximum relative errors.
+
+    :param dtype: Data type ("float32" or "float64").
+
+    :param device: Device ("cpu" or "cuda").
+
+    :param print_errors: Whether to print detailed error statistics.
+
     """
     print("\n" + "=" * 70)
     print(f"VERIFICATION SUMMARY ({dtype}, {device.upper()})")
@@ -874,12 +925,18 @@ def verify_benchmarks(
 ) -> dict:
     """Verify converted PyTorch modules against original ONNX benchmarks.
 
-    :param results_dir: Directory containing converted PyTorch modules
-    :param benchmarks_dir: Directory containing original ONNX benchmarks
-    :param max_per_benchmark: Maximum models per benchmark to test
-    :param dtype: Data type ("float32" or "float64")
-    :param device: Device to run on ("cpu" or "cuda")
-    :param print_errors: Print detailed error statistics
+    :param results_dir: Directory containing converted PyTorch modules.
+
+    :param benchmarks_dir: Directory containing original ONNX benchmarks.
+
+    :param max_per_benchmark: Maximum models per benchmark to test.
+
+    :param dtype: Data type ("float32" or "float64").
+
+    :param device: Device to run on ("cpu" or "cuda").
+
+    :param print_errors: Print detailed error statistics.
+
     :return: Dictionary with verification results
     """
     results_path = Path(results_dir)
@@ -968,9 +1025,7 @@ def main() -> None:
     exit_code = pytest.main(
         [
             __file__ + "::test_convert_model",
-            "-v",
-            "--tb=short",
-        ]
+        ],
     )
 
     if exit_code != 0:
@@ -983,9 +1038,7 @@ def main() -> None:
     exit_code = pytest.main(
         [
             __file__ + "::test_verify_model_against_original",
-            "-v",
-            "--tb=short",
-        ]
+        ],
     )
 
     sys.exit(exit_code)

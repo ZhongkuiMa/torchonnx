@@ -1,22 +1,6 @@
-"""Stage 3 (Analyze) Tests - Semantic IR, Type Mapping, and Attribute Extraction.
+"""Semantic IR, type mapping, and attribute extraction tests for Stage 3 (Analyze)."""
 
-This module tests the core analysis functionality:
-- Building semantic IR from structural IR (blocked by tensor_classifier.py bug)
-- Tensor classification (Variables, Parameters, Constants) - BLOCKED
-- Type mapping (ONNX operators to PyTorch types)
-- Attribute extraction and validation
-
-NOTE: classify_inputs() has a bug (missing return statement in line 266),
-which prevents most semantic IR tests from working. Tests are written to work
-around this until the bug is fixed.
-
-Test Coverage:
-- TestBuildSemanticIR: 7 tests - Semantic IR construction (BLOCKED)
-- TestTensorClassification: 9 tests - Input/output/parameter classification (BLOCKED)
-- TestTypeMappingLayers: 8 tests - Layer type inference and arguments
-- TestTypeMappingOperations: 7 tests - Operation type inference
-- TestAttributeExtraction: 4 tests - Attribute validation
-"""
+__docformat__ = "restructuredtext"
 
 import onnx
 import pytest

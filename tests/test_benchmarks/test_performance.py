@@ -4,9 +4,10 @@ Slow performance tests marked as benchmarks.
 Run with: pytest tests/test_benchmarks/ -v or pytest -m benchmark
 """
 
+__docformat__ = "restructuredtext"
+
 import onnx
 import onnx.helper as onnx_helper
-import pytest
 
 from torchonnx.build import build_model_ir
 from torchonnx.normalize import load_and_preprocess_onnx_model
@@ -20,8 +21,10 @@ class TestSynthesisONNXModels:
     def create_identity_model(input_shape=(1, 3), output_shape=(1, 3)):
         """Create minimal Identity ONNX model (pass-through).
 
-        :param input_shape: Input tensor shape
-        :param output_shape: Output tensor shape
+        :param input_shape: Input tensor shape.
+
+        :param output_shape: Output tensor shape.
+
         :return: ONNX ModelProto
         """
         X = onnx_helper.make_tensor_value_info(  # noqa: N806
@@ -43,9 +46,8 @@ class TestSynthesisONNXModels:
         return onnx_helper.make_model(graph, opset_imports=[onnx_helper.make_opsetid("", 13)])
 
 
-@pytest.mark.benchmark
 class TestPerformance:
-    """Performance tests for core operations (marked as benchmark)."""
+    """Performance tests for core operations."""
 
     def test_normalize_performance(self, identity_model):
         """Benchmark model loading."""

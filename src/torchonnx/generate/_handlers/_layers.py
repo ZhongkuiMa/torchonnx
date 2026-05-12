@@ -16,8 +16,10 @@ def _handle_generic_layer(layer: SemanticLayerIR, layer_name_mapping: dict[str, 
 
     Produces: output = self.layer_name(input)
 
-    :param layer: Semantic layer IR
-    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
+    :param layer: Semantic layer IR.
+
+    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
+
     :return: Generated code line
     """
     # Get input code names (should be VariableInfo)
@@ -43,8 +45,10 @@ def _handle_batchnorm2d(layer: SemanticLayerIR, layer_name_mapping: dict[str, st
     BatchNorm2d expects 4D input (N, C, H, W). For 3D ONNX inputs (N, C, L),
     reshape to (N, C, 1, L) using unsqueeze(2), then squeeze(2) back.
 
-    :param layer: Semantic layer IR
-    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name
+    :param layer: Semantic layer IR.
+
+    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
+
     :return: Generated code line
     """
     # Get input code names (should be VariableInfo)

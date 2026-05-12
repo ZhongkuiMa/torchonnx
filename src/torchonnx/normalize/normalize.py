@@ -18,7 +18,8 @@ SLIMONNX_VERSION = "1.0.0"
 def _clear_docstrings(model: ModelProto) -> ModelProto:
     """Clear all docstrings from ONNX model nodes.
 
-    :param model: Input ONNX model
+    :param model: Input ONNX model.
+
     :return: Model with cleared docstrings
     """
     for node in model.graph.node:
@@ -29,8 +30,10 @@ def _clear_docstrings(model: ModelProto) -> ModelProto:
 def _check_model(model: ModelProto) -> None:
     """Check ONNX model validity using onnx.checker.
 
-    :param model: Input ONNX model
-    :raises ValueError: If model is invalid
+    :param model: Input ONNX model.
+
+    :raises ValueError: If model is invalid.
+
     """
     try:
         onnx.checker.check_model(model)
@@ -45,9 +48,12 @@ def _convert_version(
 ) -> ModelProto:
     """Convert ONNX model to specified opset version.
 
-    :param model: Input ONNX model
-    :param target_opset: Target opset version
-    :param warn_on_diff: Warn if target differs from recommended
+    :param model: Input ONNX model.
+
+    :param target_opset: Target opset version.
+
+    :param warn_on_diff: Warn if target differs from recommended.
+
     :return: Converted model (IR version set automatically by ONNX)
     """
     current_opset = model.opset_import[0].version if model.opset_import else 0
@@ -81,8 +87,10 @@ def _convert_version(
 def _apply_shapeonnx_inference(model: ModelProto, shapes: dict) -> None:
     """Apply inferred shapes from shapeonnx to model value_info.
 
-    :param model: ONNX model to update
-    :param shapes: Dictionary of inferred shapes from shapeonnx
+    :param model: ONNX model to update.
+
+    :param shapes: Dictionary of inferred shapes from shapeonnx.
+
     """
     for node in model.graph.node:
         for output in node.output:
@@ -112,8 +120,10 @@ def _apply_shapeonnx_inference(model: ModelProto, shapes: dict) -> None:
 def _infer_shapes(model: ModelProto, use_shapeonnx: bool = False) -> ModelProto:
     """Run shape inference with error handling.
 
-    :param model: Input ONNX model
-    :param use_shapeonnx: Use shapeonnx library instead of ONNX's built-in inference
+    :param model: Input ONNX model.
+
+    :param use_shapeonnx: Use shapeonnx library instead of ONNX's built-in inference.
+
     :return: Model with inferred shapes (if successful)
     """
     if use_shapeonnx:
@@ -163,7 +173,8 @@ def _convert_onnx_constants_to_initializers(model: ModelProto) -> ModelProto:
     This function extracts these constants and adds them as initializers, then
     removes the Constant nodes from the graph.
 
-    :param model: Input ONNX model
+    :param model: Input ONNX model.
+
     :return: Modified ONNX model with Constant nodes converted to initializers
     """
     new_initializers = []
@@ -225,13 +236,20 @@ def load_and_preprocess_onnx_model(
     5. Convert Constant nodes to initializers (if enabled)
     6. Clear node docstrings (if enabled)
 
-    :param onnx_path: Path to ONNX file
-    :param target_opset: Target opset version (None = keep original)
-    :param infer_shapes: Whether to run shape inference
-    :param check_model: Whether to validate model with onnx.checker
-    :param clear_docstrings: Whether to clear node docstrings
-    :param eliminate_constants: Whether to convert Constant nodes to initializers
-    :param use_shapeonnx: Use shapeonnx library for shape inference instead of ONNX
+    :param onnx_path: Path to ONNX file.
+
+    :param target_opset: Target opset version (None = keep original).
+
+    :param infer_shapes: Whether to run shape inference.
+
+    :param check_model: Whether to validate model with onnx.checker.
+
+    :param clear_docstrings: Whether to clear node docstrings.
+
+    :param eliminate_constants: Whether to convert Constant nodes to initializers.
+
+    :param use_shapeonnx: Use shapeonnx library for shape inference instead of ONNX.
+
     :return: Preprocessed model
     """
     model = onnx.load(onnx_path)

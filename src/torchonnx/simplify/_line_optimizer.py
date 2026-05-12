@@ -18,7 +18,8 @@ from torchonnx.simplify._rules import (
 def optimize_line(line: str) -> str:
     """Optimize a single line of code.
 
-    :param line: Line of code to optimize
+    :param line: Line of code to optimize.
+
     :return: Optimized line
     """
     stripped = line.strip()
@@ -57,7 +58,8 @@ def _optimize_layer_instantiation(line: str) -> str:
     Handles:
     - self.xxx = nn.LayerType(args)
 
-    :param line: Line to optimize
+    :param line: Line to optimize.
+
     :return: Optimized line
     """
     # Match pattern: self.xxx = nn.LayerType(args)
@@ -84,7 +86,8 @@ def _optimize_layer_instantiation(line: str) -> str:
 def _parse_args(args_str: str) -> list[str]:
     """Parse comma-separated arguments, respecting nested parentheses.
 
-    :param args_str: Arguments string
+    :param args_str: Arguments string.
+
     :return: List of individual arguments
     """
     if not args_str.strip():
@@ -116,8 +119,10 @@ def _parse_args(args_str: str) -> list[str]:
 def _convert_to_positional(layer_type: str, args: list[str]) -> list[str]:
     """Convert named arguments to positional where appropriate.
 
-    :param layer_type: Layer type name
-    :param args: List of arguments
+    :param layer_type: Layer type name.
+
+    :param args: List of arguments.
+
     :return: Modified arguments list
     """
     if layer_type not in POSITIONAL_ONLY_ARGS:
@@ -146,8 +151,10 @@ def _convert_to_positional(layer_type: str, args: list[str]) -> list[str]:
 def _remove_defaults(layer_type: str, args: list[str]) -> list[str]:
     """Remove arguments that match default values.
 
-    :param layer_type: Layer type name
-    :param args: List of arguments
+    :param layer_type: Layer type name.
+
+    :param args: List of arguments.
+
     :return: Modified arguments list
     """
     if layer_type not in LAYER_DEFAULTS:
@@ -178,7 +185,8 @@ def _optimize_function_call(line: str) -> str:
     - xxx = F.function(args)
     - xxx = torch.function(args)
 
-    :param line: Line to optimize
+    :param line: Line to optimize.
+
     :return: Optimized line
     """
     # Match pattern: xxx = F.function(args) or xxx = torch.function(args)
@@ -204,8 +212,10 @@ def _optimize_function_call(line: str) -> str:
 def _remove_function_defaults(function_name: str, args: list[str]) -> list[str]:
     """Remove function arguments that match default values.
 
-    :param function_name: Function name (e.g., "F.relu", "torch.cat")
-    :param args: List of arguments
+    :param function_name: Function name (e.g., "F.relu", "torch.cat").
+
+    :param args: List of arguments.
+
     :return: Modified arguments list
     """
     if function_name not in FUNCTION_DEFAULTS:

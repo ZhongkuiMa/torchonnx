@@ -23,7 +23,8 @@ def optimize_semantic_ir(semantic_ir: SemanticModelIR) -> SemanticModelIR:
     For now, this function simply returns the input unchanged to maintain
     pipeline structure while allowing future optimization implementations.
 
-    :param semantic_ir: Semantic IR from Stage 3
+    :param semantic_ir: Semantic IR from Stage 3.
+
     :return: Optimized semantic IR (currently unchanged)
     """
     # Pass-through implementation

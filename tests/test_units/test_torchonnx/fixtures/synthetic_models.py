@@ -4,6 +4,8 @@ This module provides factory methods for creating various ONNX models
 for testing different components of the torchonnx pipeline.
 """
 
+__docformat__ = "restructuredtext"
+
 import numpy as np
 import onnx
 import onnx.helper as onnx_helper
@@ -18,8 +20,10 @@ class SyntheticONNXModels:
     def create_identity_model(input_shape=(1, 3), output_shape=(1, 3)):
         """Create minimal Identity ONNX model (pass-through).
 
-        :param input_shape: Input tensor shape
-        :param output_shape: Output tensor shape
+        :param input_shape: Input tensor shape.
+
+        :param output_shape: Output tensor shape.
+
         :return: ONNX ModelProto
         """
         X = onnx_helper.make_tensor_value_info(  # noqa: N806
@@ -46,7 +50,8 @@ class SyntheticONNXModels:
     def create_add_model(shape=(2, 3)):
         """Create Add ONNX model with two inputs.
 
-        :param shape: Tensor shape
+        :param shape: Tensor shape.
+
         :return: ONNX ModelProto
         """
         X = onnx_helper.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape)  # noqa: N806
@@ -70,8 +75,10 @@ class SyntheticONNXModels:
     def create_linear_model(input_size=3, output_size=2):
         """Create Linear (Gemm) ONNX model.
 
-        :param input_size: Input size
-        :param output_size: Output size
+        :param input_size: Input size.
+
+        :param output_size: Output size.
+
         :return: ONNX ModelProto
         """
         rng = np.random.default_rng(42)
@@ -192,11 +199,16 @@ class SyntheticONNXModels:
     def create_conv2d_model(in_channels=3, out_channels=16, kernel_size=3, stride=1, pads=1):
         """Create Conv2d ONNX model with padding, stride, dilation.
 
-        :param in_channels: Input channels
-        :param out_channels: Output channels
-        :param kernel_size: Kernel size
-        :param stride: Stride
-        :param pads: Padding (symmetric)
+        :param in_channels: Input channels.
+
+        :param out_channels: Output channels.
+
+        :param kernel_size: Kernel size.
+
+        :param stride: Stride.
+
+        :param pads: Padding (symmetric).
+
         :return: ONNX ModelProto
         """
         rng = np.random.default_rng(42)
@@ -255,8 +267,10 @@ class SyntheticONNXModels:
     def create_batchnorm_model(num_channels=16, spatial_dims=2):
         """Create BatchNorm ONNX model with running statistics.
 
-        :param num_channels: Number of channels
-        :param spatial_dims: Number of spatial dimensions (2 for 2D, 3 for 3D)
+        :param num_channels: Number of channels.
+
+        :param spatial_dims: Number of spatial dimensions (2 for 2D, 3 for 3D).
+
         :return: ONNX ModelProto
         """
         rng = np.random.default_rng(42)
@@ -326,8 +340,10 @@ class SyntheticONNXModels:
     def create_maxpool_model(kernel_size=2, stride=2):
         """Create MaxPool2d ONNX model.
 
-        :param kernel_size: Kernel size
-        :param stride: Stride
+        :param kernel_size: Kernel size.
+
+        :param stride: Stride.
+
         :return: ONNX ModelProto
         """
         X = onnx_helper.make_tensor_value_info(  # noqa: N806
@@ -360,7 +376,8 @@ class SyntheticONNXModels:
     def create_avgpool_model(kernel_size=7):
         """Create AvgPool ONNX model.
 
-        :param kernel_size: Kernel size
+        :param kernel_size: Kernel size.
+
         :return: ONNX ModelProto
         """
         X = onnx_helper.make_tensor_value_info(  # noqa: N806
@@ -633,7 +650,8 @@ class SyntheticONNXModels:
     def create_sub_model(shape=(2, 3)):
         """Create Sub ONNX model with two inputs.
 
-        :param shape: Tensor shape
+        :param shape: Tensor shape.
+
         :return: ONNX ModelProto
         """
         X = onnx_helper.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape)  # noqa: N806
@@ -657,7 +675,8 @@ class SyntheticONNXModels:
     def create_div_model(shape=(2, 3)):
         """Create Div ONNX model with two inputs.
 
-        :param shape: Tensor shape
+        :param shape: Tensor shape.
+
         :return: ONNX ModelProto
         """
         X = onnx_helper.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape)  # noqa: N806
@@ -681,7 +700,8 @@ class SyntheticONNXModels:
     def create_pow_model(shape=(2, 3)):
         """Create Pow ONNX model with two inputs.
 
-        :param shape: Tensor shape
+        :param shape: Tensor shape.
+
         :return: ONNX ModelProto
         """
         X = onnx_helper.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape)  # noqa: N806
@@ -705,7 +725,8 @@ class SyntheticONNXModels:
     def create_neg_model(shape=(2, 3)):
         """Create Neg ONNX model (unary negation).
 
-        :param shape: Tensor shape
+        :param shape: Tensor shape.
+
         :return: ONNX ModelProto
         """
         X = onnx_helper.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape)  # noqa: N806
@@ -728,7 +749,8 @@ class SyntheticONNXModels:
     def create_equal_model(shape=(2, 3)):
         """Create Equal ONNX model with two inputs.
 
-        :param shape: Tensor shape
+        :param shape: Tensor shape.
+
         :return: ONNX ModelProto
         """
         X = onnx_helper.make_tensor_value_info("X", onnx.TensorProto.FLOAT, shape)  # noqa: N806
@@ -1354,7 +1376,8 @@ class SyntheticONNXModels:
     def create_cast_model(to_dtype=onnx.TensorProto.FLOAT):
         """Create Cast ONNX model for dtype conversion.
 
-        :param to_dtype: Target dtype for Cast operation
+        :param to_dtype: Target dtype for Cast operation.
+
         :return: ONNX ModelProto
         """
         X = onnx_helper.make_tensor_value_info(  # noqa: N806
@@ -1386,8 +1409,10 @@ class SyntheticONNXModels:
     def create_argmax_model(axis=1, keepdims=1):
         """Create ArgMax ONNX model for reduction.
 
-        :param axis: Axis for ArgMax
-        :param keepdims: Whether to keep dimension
+        :param axis: Axis for ArgMax.
+
+        :param keepdims: Whether to keep dimension.
+
         :return: ONNX ModelProto
         """
         X = onnx_helper.make_tensor_value_info(  # noqa: N806
@@ -1420,11 +1445,16 @@ class SyntheticONNXModels:
     def create_convtranspose_model(in_channels=3, out_channels=16, kernel_size=3, stride=2, pad=1):
         """Create ConvTranspose ONNX model.
 
-        :param in_channels: Input channels
-        :param out_channels: Output channels
-        :param kernel_size: Kernel size
-        :param stride: Stride
-        :param pad: Padding
+        :param in_channels: Input channels.
+
+        :param out_channels: Output channels.
+
+        :param kernel_size: Kernel size.
+
+        :param stride: Stride.
+
+        :param pad: Padding.
+
         :return: ONNX ModelProto
         """
         rng = np.random.default_rng(42)
@@ -1469,8 +1499,10 @@ class SyntheticONNXModels:
     def create_constantofshape_model(shape=(1, 10), value=1.0):
         """Create ConstantOfShape ONNX model.
 
-        :param shape: Output shape
-        :param value: Constant value
+        :param shape: Output shape.
+
+        :param value: Constant value.
+
         :return: ONNX ModelProto
         """
         # Create shape tensor

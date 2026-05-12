@@ -14,6 +14,8 @@ Test Coverage:
 - TestCodeQuality: 2 tests - Code quality checks
 """
 
+__docformat__ = "restructuredtext"
+
 import torch
 
 from torchonnx.simplify import add_file_header, format_code, optimize_generated_code

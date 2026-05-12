@@ -70,7 +70,8 @@ LAYERS_WITH_ARGS: set[str] = {
 def is_layer_with_args(layer_type: str) -> bool:
     """Check if layer type has learnable parameters.
 
-    :param layer_type: PyTorch layer type (e.g., "nn.Conv2d" or "Conv2d")
+    :param layer_type: PyTorch layer type (e.g., "nn.Conv2d" or "Conv2d").
+
     :return: True if layer has learnable parameters
     """
     # Strip nn. prefix if present
@@ -81,7 +82,8 @@ def is_layer_with_args(layer_type: str) -> bool:
 def _simplify_tuple(arg: tuple[int, ...] | int) -> tuple[int, ...] | int:
     """Simplify tuple argument if all elements are equal.
 
-    :param arg: Tuple or int argument
+    :param arg: Tuple or int argument.
+
     :return: Simplified argument (int if all elements equal, otherwise tuple)
     """
     if isinstance(arg, tuple):
@@ -95,7 +97,8 @@ def _simplify_tuple(arg: tuple[int, ...] | int) -> tuple[int, ...] | int:
 def _check_symmetric_padding(pads: tuple[int, ...]) -> None:
     """Check that padding is symmetric.
 
-    :param pads: ONNX padding in format [start_h, start_w, end_h, end_w]
+    :param pads: ONNX padding in format [start_h, start_w, end_h, end_w].
+
     """
     length = len(pads)
     dims = length // 2
@@ -112,8 +115,10 @@ def _extract_conv_args(
 ) -> dict[str, Any]:
     """Map ONNX Conv attributes to PyTorch Conv2d constructor arguments.
 
-    :param node: ONNX Conv node
-    :param initializers: All ONNX initializers
+    :param node: ONNX Conv node.
+
+    :param initializers: All ONNX initializers.
+
     :return: PyTorch Conv2d constructor arguments (empty dict for dynamic Conv)
     """
     if len(node.input) < 2 or node.input[1] not in initializers:
@@ -163,8 +168,10 @@ def _extract_batchnorm_args(
 ) -> dict[str, Any]:
     """Map ONNX BatchNormalization attributes to PyTorch BatchNorm2d arguments.
 
-    :param node: ONNX BatchNormalization node
-    :param initializers: All ONNX initializers
+    :param node: ONNX BatchNormalization node.
+
+    :param initializers: All ONNX initializers.
+
     :return: PyTorch BatchNorm2d constructor arguments
     """
     attrs = extract_onnx_attrs(node, initializers)
@@ -193,8 +200,10 @@ def _extract_gemm_args(
 ) -> dict[str, Any]:
     """Map ONNX Gemm attributes to PyTorch Linear constructor arguments.
 
-    :param node: ONNX Gemm node
-    :param initializers: All ONNX initializers
+    :param node: ONNX Gemm node.
+
+    :param initializers: All ONNX initializers.
+
     :return: PyTorch Linear constructor arguments (empty dict for dynamic Gemm)
     """
     if any(inp not in initializers for inp in node.input[1:]):
@@ -229,8 +238,10 @@ def _extract_convtranspose_args(
 ) -> dict[str, Any]:
     """Map ONNX ConvTranspose attributes to PyTorch ConvTranspose2d arguments.
 
-    :param node: ONNX ConvTranspose node
-    :param initializers: All ONNX initializers
+    :param node: ONNX ConvTranspose node.
+
+    :param initializers: All ONNX initializers.
+
     :return: PyTorch ConvTranspose2d constructor arguments
     """
     if any(inp not in initializers for inp in node.input[1:]):
@@ -285,8 +296,10 @@ def _extract_relu_args(
 ) -> dict[str, Any]:
     """Map ONNX Relu to PyTorch ReLU arguments.
 
-    :param node: ONNX Relu node
-    :param initializers: All ONNX initializers
+    :param node: ONNX Relu node.
+
+    :param initializers: All ONNX initializers.
+
     :return: PyTorch ReLU constructor arguments (empty dict)
     """
     return {}
@@ -298,8 +311,10 @@ def _extract_averagepool_args(
 ) -> dict[str, Any]:
     """Map ONNX AveragePool attributes to PyTorch AvgPool2d arguments.
 
-    :param node: ONNX AveragePool node
-    :param initializers: All ONNX initializers
+    :param node: ONNX AveragePool node.
+
+    :param initializers: All ONNX initializers.
+
     :return: PyTorch AvgPool2d constructor arguments
     """
     attrs = extract_onnx_attrs(node, initializers)
@@ -334,7 +349,7 @@ def _extract_averagepool_args(
     if simplified_strides != simplified_kernel:
         torch_args["stride"] = simplified_strides
 
-    simplified_pads = _simplify_tuple(pads[: len(kernel_shape)])
+    simplified_pads = _simplify_tuple(pads[: len(kernel_shape)])  # pyright: ignore[reportArgumentType]
     if simplified_pads != 0:
         torch_args["padding"] = simplified_pads
 
@@ -353,8 +368,10 @@ def _extract_maxpool_args(
 ) -> dict[str, Any]:
     """Map ONNX MaxPool attributes to PyTorch MaxPool2d arguments.
 
-    :param node: ONNX MaxPool node
-    :param initializers: All ONNX initializers
+    :param node: ONNX MaxPool node.
+
+    :param initializers: All ONNX initializers.
+
     :return: PyTorch MaxPool2d constructor arguments
     """
     attrs = extract_onnx_attrs(node, initializers)
@@ -394,8 +411,10 @@ def _extract_dropout_args(
 
     Handles both opset < 12 (ratio as attribute) and opset >= 12 (ratio as input).
 
-    :param node: ONNX Dropout node
-    :param initializers: All ONNX initializers
+    :param node: ONNX Dropout node.
+
+    :param initializers: All ONNX initializers.
+
     :return: PyTorch Dropout constructor arguments
     """
     from onnx import numpy_helper
@@ -415,8 +434,10 @@ def _extract_elu_args(
 ) -> dict[str, Any]:
     """Map ONNX Elu attributes to PyTorch ELU arguments.
 
-    :param node: ONNX Elu node
-    :param initializers: All ONNX initializers
+    :param node: ONNX Elu node.
+
+    :param initializers: All ONNX initializers.
+
     :return: PyTorch ELU constructor arguments
     """
     attrs = extract_onnx_attrs(node, initializers)
@@ -430,8 +451,10 @@ def _extract_leakyrelu_args(
 ) -> dict[str, Any]:
     """Map ONNX LeakyRelu attributes to PyTorch LeakyReLU arguments.
 
-    :param node: ONNX LeakyRelu node
-    :param initializers: All ONNX initializers
+    :param node: ONNX LeakyRelu node.
+
+    :param initializers: All ONNX initializers.
+
     :return: PyTorch LeakyReLU constructor arguments
     """
     attrs = extract_onnx_attrs(node, initializers)
@@ -445,8 +468,10 @@ def _extract_softmax_args(
 ) -> dict[str, Any]:
     """Map ONNX Softmax attributes to PyTorch Softmax arguments.
 
-    :param node: ONNX Softmax node
-    :param initializers: All ONNX initializers
+    :param node: ONNX Softmax node.
+
+    :param initializers: All ONNX initializers.
+
     :return: PyTorch Softmax constructor arguments
     """
     attrs = extract_onnx_attrs(node, initializers)
@@ -460,8 +485,10 @@ def _extract_gelu_args(
 ) -> dict[str, Any]:
     """Map ONNX Gelu attributes to PyTorch GELU arguments.
 
-    :param node: ONNX Gelu node
-    :param initializers: All ONNX initializers
+    :param node: ONNX Gelu node.
+
+    :param initializers: All ONNX initializers.
+
     :return: PyTorch GELU constructor arguments
     """
     attrs = extract_onnx_attrs(node, initializers)
@@ -475,8 +502,10 @@ def _extract_upsample_args(
 ) -> dict[str, Any]:
     """Map ONNX Upsample attributes to PyTorch Upsample arguments.
 
-    :param node: ONNX Upsample node
-    :param initializers: All ONNX initializers
+    :param node: ONNX Upsample node.
+
+    :param initializers: All ONNX initializers.
+
     :return: PyTorch Upsample constructor arguments
     """
     from onnx import numpy_helper
@@ -513,8 +542,10 @@ def _extract_sigmoid_args(
 ) -> dict[str, Any]:
     """Map ONNX Sigmoid to PyTorch Sigmoid arguments.
 
-    :param node: ONNX Sigmoid node
-    :param initializers: All ONNX initializers
+    :param node: ONNX Sigmoid node.
+
+    :param initializers: All ONNX initializers.
+
     :return: PyTorch Sigmoid constructor arguments (empty dict)
     """
     return {}
@@ -526,8 +557,10 @@ def _extract_tanh_args(
 ) -> dict[str, Any]:
     """Map ONNX Tanh to PyTorch Tanh arguments.
 
-    :param node: ONNX Tanh node
-    :param initializers: All ONNX initializers
+    :param node: ONNX Tanh node.
+
+    :param initializers: All ONNX initializers.
+
     :return: PyTorch Tanh constructor arguments (empty dict)
     """
     return {}
@@ -539,8 +572,10 @@ def _extract_globalavgpool_args(
 ) -> dict[str, Any]:
     """Map ONNX GlobalAveragePool to PyTorch AdaptiveAvgPool2d arguments.
 
-    :param node: ONNX GlobalAveragePool node
-    :param initializers: All ONNX initializers
+    :param node: ONNX GlobalAveragePool node.
+
+    :param initializers: All ONNX initializers.
+
     :return: PyTorch AdaptiveAvgPool2d constructor arguments
     """
     return {"output_size": (1, 1)}
@@ -552,8 +587,10 @@ def _extract_flatten_args(
 ) -> dict[str, Any]:
     """Map ONNX Flatten attributes to PyTorch Flatten arguments.
 
-    :param node: ONNX Flatten node
-    :param initializers: All ONNX initializers
+    :param node: ONNX Flatten node.
+
+    :param initializers: All ONNX initializers.
+
     :return: PyTorch Flatten constructor arguments
     """
     attrs = extract_onnx_attrs(node, initializers)
@@ -593,8 +630,10 @@ def extract_layer_args(
 ) -> dict[str, Any]:
     """Map ONNX node attributes to PyTorch constructor arguments.
 
-    :param node: ONNX node
-    :param initializers: All ONNX initializers
+    :param node: ONNX node.
+
+    :param initializers: All ONNX initializers.
+
     :return: PyTorch layer constructor arguments
     """
     mapping_func = _ONNX_TO_PYTORCH_ARGS.get(node.op_type)

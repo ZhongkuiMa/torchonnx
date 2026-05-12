@@ -12,6 +12,8 @@ Tests cover:
 Target: _operations.py coverage improvement from 44.9% to 67%+
 """
 
+__docformat__ = "restructuredtext"
+
 import numpy as np
 import pytest
 from onnx import TensorProto

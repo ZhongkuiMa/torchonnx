@@ -6,6 +6,8 @@ This module provides:
 - Test helpers
 """
 
+__docformat__ = "restructuredtext"
+
 import importlib.util
 import tempfile
 from pathlib import Path
@@ -609,8 +611,10 @@ def onnx_runner():
     def _run(model_path, inputs):
         """Run ONNX model with given inputs.
 
-        :param model_path: Path to ONNX model file
-        :param inputs: Dictionary of input names to numpy arrays
+        :param model_path: Path to ONNX model file.
+
+        :param inputs: Dictionary of input names to numpy arrays.
+
         :return: List of output arrays
         """
         session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
@@ -629,8 +633,10 @@ def model_input_generator(onnx_runner):
     def _generate(model_path, seed=42):
         """Generate inputs for an ONNX model.
 
-        :param model_path: Path to ONNX model file
-        :param seed: Random seed
+        :param model_path: Path to ONNX model file.
+
+        :param seed: Random seed.
+
         :return: Dictionary of input names to numpy arrays
         """
         session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
@@ -662,7 +668,8 @@ def code_validator():
     def _validate_syntax(code):
         """Validate Python syntax.
 
-        :param code: Python code as string
+        :param code: Python code as string.
+
         :return: True if valid, raises SyntaxError otherwise
         """
         compile(code, "<string>", "exec")
@@ -671,7 +678,8 @@ def code_validator():
     def _import_module(py_path):
         """Import a Python module from file path.
 
-        :param py_path: Path to Python file
+        :param py_path: Path to Python file.
+
         :return: Imported module
         """
         spec = importlib.util.spec_from_file_location("generated_model", py_path)
@@ -684,7 +692,8 @@ def code_validator():
     def _instantiate_model(module):
         """Instantiate model class from module.
 
-        :param module: Imported module
+        :param module: Imported module.
+
         :return: Model instance
         """
         if not hasattr(module, "__all__"):
@@ -710,11 +719,16 @@ def numerical_validator():
     def _compare(onnx_output, pytorch_output, rtol=1e-5, atol=1e-6, name=""):
         """Compare ONNX and PyTorch outputs.
 
-        :param onnx_output: Output from ONNX model
-        :param pytorch_output: Output from PyTorch model
-        :param rtol: Relative tolerance
-        :param atol: Absolute tolerance
-        :param name: Name of the test (for error messages)
+        :param onnx_output: Output from ONNX model.
+
+        :param pytorch_output: Output from PyTorch model.
+
+        :param rtol: Relative tolerance.
+
+        :param atol: Absolute tolerance.
+
+        :param name: Name of the test (for error messages).
+
         :return: True if outputs match within tolerance
         """
         if isinstance(pytorch_output, torch.Tensor):
@@ -747,8 +761,10 @@ def state_dict_validator():
     def _validate(model, state_dict):
         """Validate state_dict for a PyTorch model.
 
-        :param model: PyTorch model
-        :param state_dict: State dictionary loaded from file
+        :param model: PyTorch model.
+
+        :param state_dict: State dictionary loaded from file.
+
         :return: True if valid, raises AssertionError otherwise
         """
         model_keys = set(model.state_dict().keys())
@@ -790,9 +806,12 @@ def model_executor():
     def _run(model, input_data, eval_mode=True):
         """Run a PyTorch model.
 
-        :param model: PyTorch model
-        :param input_data: Input tensor or dictionary of tensors
-        :param eval_mode: If True, set model to eval mode
+        :param model: PyTorch model.
+
+        :param input_data: Input tensor or dictionary of tensors.
+
+        :param eval_mode: If True, set model to eval mode.
+
         :return: Model output
         """
         if eval_mode:
@@ -820,7 +839,8 @@ def temp_file_manager():
     def _create_temp_file(suffix=""):
         """Create a temporary file.
 
-        :param suffix: File suffix
+        :param suffix: File suffix.
+
         :return: Path to temporary file
         """
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:

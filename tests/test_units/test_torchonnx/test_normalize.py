@@ -14,6 +14,8 @@ Test Coverage:
 - TestValidation: 4 tests - Model validation and error cases
 """
 
+__docformat__ = "restructuredtext"
+
 import tempfile
 from pathlib import Path
 

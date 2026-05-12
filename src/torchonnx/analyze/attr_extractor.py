@@ -30,8 +30,10 @@ def _scan_attrs(default_attrs: dict[str, Any], attrs) -> dict[str, Any]:
     """
     Scan and extract ONNX node attributes.
 
-    :param default_attrs: Default attribute values
-    :param attrs: ONNX node attributes
+    :param default_attrs: Default attribute values.
+
+    :param attrs: ONNX node attributes.
+
     :return: Extracted attributes merged with defaults
     """
     result = default_attrs.copy()
@@ -49,7 +51,8 @@ def _check_pads_symmetric(pads: tuple[int, ...]) -> None:
     """
     Verify that padding is symmetric.
 
-    :param pads: Padding tuple
+    :param pads: Padding tuple.
+
     """
     dims = len(pads) // 2
     for i in range(dims):
@@ -63,8 +66,10 @@ def _infer_kernel_defaults(attrs: dict[str, Any], kernel_shape: tuple[int, ...])
     """
     Infer default values for dilations, strides, and pads.
 
-    :param attrs: Attribute dictionary
-    :param kernel_shape: Kernel dimensions
+    :param attrs: Attribute dictionary.
+
+    :param kernel_shape: Kernel dimensions.
+
     :return: Updated attributes with inferred defaults
     """
     kernel_dims = len(kernel_shape)
@@ -81,8 +86,10 @@ def _validate_auto_pad(auto_pad: str, op_name: str) -> None:
     """
     Validate auto_pad attribute is NOTSET.
 
-    :param auto_pad: auto_pad value
-    :param op_name: Operator name for error message
+    :param auto_pad: auto_pad value.
+
+    :param op_name: Operator name for error message.
+
     """
     if auto_pad != "NOTSET":
         raise ValueError(f"{op_name} with auto_pad={auto_pad} is not supported")
@@ -225,7 +232,8 @@ def _get_attrs_simple(defaults: dict[str, Any]) -> Callable:
     """
     Create a simple attribute extractor for operators with only defaults.
 
-    :param defaults: Default attribute values
+    :param defaults: Default attribute values.
+
     :return: Attribute extraction function
     """
 
@@ -266,7 +274,8 @@ def _get_attrs_reduce(op_name: str) -> Callable:
     """
     Create attribute extractor for reduce operators.
 
-    :param op_name: Operator name for error messages
+    :param op_name: Operator name for error messages.
+
     :return: Attribute extraction function
     """
 
@@ -405,8 +414,10 @@ def extract_onnx_attrs(node: NodeProto, initializers: dict[str, TensorProto]) ->
     """
     Extract attributes from an ONNX node.
 
-    :param node: ONNX node
-    :param initializers: Model initializers
+    :param node: ONNX node.
+
+    :param initializers: Model initializers.
+
     :return: Dictionary of extracted attributes
     """
     extractor = EXTRACT_ATTRS_MAP.get(node.op_type)

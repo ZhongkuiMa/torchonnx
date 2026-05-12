@@ -12,6 +12,8 @@ Tests cover:
 Target: _line_optimizer.py coverage improvement from 74.3% to 88%+
 """
 
+__docformat__ = "restructuredtext"
+
 import pytest
 
 from torchonnx.simplify._line_optimizer import (

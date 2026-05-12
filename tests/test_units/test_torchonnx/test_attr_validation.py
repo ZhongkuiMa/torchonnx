@@ -11,6 +11,8 @@ Tests cover:
 Target: attr_extractor.py coverage improvement from 74.5% to 90%+
 """
 
+__docformat__ = "restructuredtext"
+
 import onnx
 import pytest
 from onnx import TensorProto

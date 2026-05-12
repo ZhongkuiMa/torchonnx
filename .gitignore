@@ -12,7 +12,7 @@ ENV/
 .eggs/
 
 # === Distribution / packaging ===
-# build/
+build/
 dist/
 *.egg
 *.whl
@@ -41,9 +41,10 @@ tests/.pytest_cache/
 tests/results/
 tests/__pycache__/
 
-# === mypy, pylint, etc ===
+# === mypy, pylint, ruff ===
 .mypy_cache/
 .dmypy.json
+.ruff_cache/
 .pyre/
 .pytype/
 
@@ -60,23 +61,17 @@ tests/__pycache__/
 .DS_Store
 Thumbs.db
 
-# === Model or data files ===
-#*.onnx
-#*.pt
-#*.pb
-#*.ckpt
-#*.pkl
-#*.pickle
-#*.npz
-#*.npy
-
 # === Logs and temporary files ===
+.tmp/
 *.log
 *.tmp
 *.bak
 
 # === GitHub Codespaces ===
 .devcontainer/
+
+# === Claude Code / Serena tool cache ===
+.serena/
 
 # === Test directories (large files) ===
 tests/vnncomp2024_benchmarks/
@@ -87,5 +82,4 @@ tests/temp/
 # === Test baselines - commit .py files (golden references), ignore .pth files (large) ===
 tests/baselines/**/*.pth
 
-# === Claude Code / Serena tool cache ===
-.serena/
+.import_linter_cache/
