@@ -235,8 +235,9 @@ class TestConvertAPI:
 
         # Load the generated module
         spec = importlib.util.spec_from_file_location("generated_module", output_py)
+        assert spec is not None
         module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        spec.loader.exec_module(module)  # type: ignore[union-attr]
 
         # Get the class (should be the only class in the module)
         classes = [
@@ -265,8 +266,9 @@ class TestConvertAPI:
 
         # Load generated module
         spec = importlib.util.spec_from_file_location("gen_module", output_py)
+        assert spec is not None
         module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        spec.loader.exec_module(module)  # type: ignore[union-attr]
 
         # Instantiate and load state dict
         classes = [
@@ -309,8 +311,9 @@ class TestConvertAPI:
 
         # Load generated module
         spec = importlib.util.spec_from_file_location("stdict_module", output_py)
+        assert spec is not None
         module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        spec.loader.exec_module(module)  # type: ignore[union-attr]
 
         # Instantiate model
         classes = [

@@ -511,7 +511,7 @@ class TestExpandHandlerDirect:
                 make_variable("X", shape=(1, 10)),
                 make_variable("shape", shape=(3,)),  # Dynamic shape
             ],
-            outputs=[make_variable("Y", shape=(None, None, None))],
+            outputs=[make_variable("Y", shape=("?", "?", "?"))],
             arguments=[],
         )
 
@@ -1146,7 +1146,7 @@ class TestCodeGeneratorAnalysisAdvanced:
             arguments=[],
         )
 
-        producer_map = {}
+        producer_map: dict[str, tuple] = {}
         result = _detect_static_slice_lengths(
             layer,
             layer.inputs[1],
@@ -1228,7 +1228,7 @@ class TestExpandHelperFunctions:
         onnx_shape = [5, 1, 10]
         data_shape = (1, 10)
 
-        result = _convert_expand_semantics(onnx_shape, data_shape)
+        result = _convert_expand_semantics(data_shape, onnx_shape)
 
         # Should convert ONNX semantics to PyTorch expand args
         assert isinstance(result, list)
@@ -1951,7 +1951,7 @@ class TestGraphTraversalFunctions:
     def test_trace_to_source_with_no_producer_map_entry(self):
         """Test tracing variable with no producer in map."""
         var = make_variable("x", shape=(3,))
-        producer_map = {}
+        producer_map: dict[str, tuple] = {}
 
         result = _trace_to_source(var, producer_map)
 
@@ -2946,7 +2946,7 @@ class TestSliceHandlerAdvanced:
                 make_constant("ends", [15], torch.int64),
                 make_constant("axes", [1], torch.int64),
             ],
-            outputs=[make_variable("y", shape=(1, None))],
+            outputs=[make_variable("y", shape=(1, "?"))],
             arguments=[],
         )
 
@@ -3359,7 +3359,7 @@ class TestClipHandlerAdvanced:
             operator_class=OperatorClass.OPERATION,
             inputs=[
                 make_variable("x", shape=(3, 4)),
-                None,  # No min
+                None,  # type: ignore[list-item]  # absent optional input
                 make_constant("max", [1.0], torch.float32),
             ],
             outputs=[make_variable("y", shape=(3, 4))],
@@ -3406,7 +3406,7 @@ class TestArangeHandlerAdvanced:
                 make_variable("stop", shape=()),
                 make_constant("step", [1.0], torch.float32),
             ],
-            outputs=[make_variable("y", shape=(None,))],
+            outputs=[make_variable("y", shape=("?",))],
             arguments=[],
         )
 
@@ -3721,7 +3721,7 @@ class TestSliceHandlerVmapMode:
                 make_variable("ends", shape=()),
                 make_constant("axes", [1], torch.int64),
             ],
-            outputs=[make_variable("y", shape=(1, None))],
+            outputs=[make_variable("y", shape=(1, "?"))],
             arguments=[],
         )
 

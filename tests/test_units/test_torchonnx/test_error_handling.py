@@ -22,6 +22,7 @@ import math
 import tempfile
 import warnings
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import onnx
@@ -114,19 +115,19 @@ class TestAnalyzeErrors:
     def test_build_semantic_ir_from_none(self):
         """Verify error when semantic IR is built from None."""
         with pytest.raises((TypeError, AttributeError)):
-            build_semantic_ir(None)
+            build_semantic_ir(None)  # type: ignore[arg-type]
 
     def test_analyze_invalid_model_ir_structure(self):
         """Verify error handling for malformed ModelIR."""
         with pytest.raises((TypeError, AttributeError)):
-            build_semantic_ir({"invalid": "ir"})
+            build_semantic_ir({"invalid": "ir"})  # type: ignore[arg-type]
 
     def test_analyze_missing_required_fields(self):
         """Verify error when ModelIR is missing required fields."""
         # Create incomplete ModelIR
-        incomplete_ir = {"layers": []}
+        incomplete_ir: dict[str, Any] = {"layers": []}
         with pytest.raises((TypeError, AttributeError, KeyError)):
-            build_semantic_ir(incomplete_ir)
+            build_semantic_ir(incomplete_ir)  # type: ignore[arg-type]
 
     def test_analyze_unsupported_operator(self, unsupported_op_model):
         """Verify error for unsupported ONNX operators."""
@@ -150,7 +151,7 @@ class TestAnalyzeErrors:
         # For now, test with invalid structure
         invalid_ir = {"layers": [{"node": {"input": ["missing_init"]}}], "initializers": {}}
         with pytest.raises((TypeError, AttributeError, KeyError)):
-            build_semantic_ir(invalid_ir)
+            build_semantic_ir(invalid_ir)  # type: ignore[arg-type]
 
     def test_analyze_constant_node_handling(self, constant_node_model):
         """Verify handling of constant nodes."""
@@ -170,18 +171,18 @@ class TestGenerateErrors:
     def test_generate_from_none_semantic_ir(self):
         """Verify error when generating from None semantic IR."""
         with pytest.raises((TypeError, AttributeError)):
-            generate_pytorch_module(None)
+            generate_pytorch_module(None)  # type: ignore[arg-type]
 
     def test_generate_from_invalid_semantic_ir(self):
         """Verify error when semantic IR structure is invalid."""
         with pytest.raises((TypeError, AttributeError)):
-            generate_pytorch_module({"invalid": "ir"})
+            generate_pytorch_module({"invalid": "ir"})  # type: ignore[arg-type]
 
     def test_generate_with_missing_required_fields(self):
         """Verify error when semantic IR missing required fields."""
-        incomplete_ir = {"layers": []}
+        incomplete_ir: dict[str, Any] = {"layers": []}
         with pytest.raises((TypeError, AttributeError, KeyError)):
-            generate_pytorch_module(incomplete_ir)
+            generate_pytorch_module(incomplete_ir)  # type: ignore[arg-type]
 
     def test_generate_with_invalid_module_name(self, linear_model):
         """Verify error handling for invalid module names."""
@@ -200,7 +201,7 @@ class TestGenerateErrors:
 
     def test_generate_with_empty_semantic_ir(self):
         """Verify handling of empty semantic IR."""
-        empty_ir = {
+        empty_ir: dict[str, Any] = {
             "layers": [],
             "parameters": [],
             "constants": [],
@@ -213,7 +214,7 @@ class TestGenerateErrors:
         # Could raise or produce minimal code - both acceptable
         raised = False
         try:
-            code, _state_dict = generate_pytorch_module(empty_ir)
+            code, _state_dict = generate_pytorch_module(empty_ir)  # type: ignore[arg-type]
             assert isinstance(code, str)
         except (ValueError, TypeError, AttributeError):
             raised = True
@@ -260,13 +261,13 @@ class TestPipelineErrors:
         # Invalid ModelIR should cause semantic IR build to fail
         invalid_model_ir = None
         with pytest.raises((TypeError, AttributeError, KeyError)):
-            build_semantic_ir(invalid_model_ir)
+            build_semantic_ir(invalid_model_ir)  # type: ignore[arg-type]
 
     def test_error_propagation_through_generate(self):
         """Verify errors from Stage 3 propagate to Stage 5."""
-        invalid_semantic_ir = {}
+        invalid_semantic_ir: dict[str, Any] = {}
         with pytest.raises((TypeError, AttributeError)):
-            generate_pytorch_module(invalid_semantic_ir)
+            generate_pytorch_module(invalid_semantic_ir)  # type: ignore[arg-type]
 
     def test_partial_pipeline_failure_handling(self):
         """Verify graceful handling when part of pipeline fails."""
@@ -341,7 +342,7 @@ class TestTypeErrors:
         """Verify error when non-path is passed to normalize."""
         # Passing integer to onnx.load() results in OSError (bad file descriptor)
         with pytest.raises((TypeError, AttributeError, OSError)):
-            load_and_preprocess_onnx_model(12345)  # Invalid type
+            load_and_preprocess_onnx_model(12345)  # type: ignore[arg-type]  # invalid type for error test
 
     def test_invalid_model_type_to_build(self):
         """Verify error when invalid type is passed to build."""
@@ -360,7 +361,7 @@ class TestTypeErrors:
         # Should handle non-string module names (convert or error)
         raised = False
         try:
-            code, _ = generate_pytorch_module(semantic_ir, module_name=12345)
+            code, _ = generate_pytorch_module(semantic_ir, module_name=12345)  # type: ignore[arg-type]  # invalid type for error test
             # If it succeeds, module name was converted
             assert isinstance(code, str)
         except (TypeError, AttributeError):
@@ -375,7 +376,7 @@ class TestAttributeErrors:
     def test_missing_node_attributes(self):
         """Verify handling of node with missing attributes."""
         # getattr with default returns None, doesn't raise
-        invalid_node = {}
+        invalid_node: dict[str, Any] = {}
         # Try to access required attributes - returns default, no error
         result = getattr(invalid_node, "op_type", None)
         assert result is None, "getattr with default should return None for missing attr"
@@ -389,7 +390,7 @@ class TestAttributeErrors:
         # Try to use invalid values - this will raise TypeError
         invalid_value = None
         with pytest.raises((ValueError, TypeError)):
-            int(invalid_value)
+            int(invalid_value)  # type: ignore[call-overload]  # invalid type for error test
 
     def test_missing_input_output_names(self):
         """Verify error when input/output names are missing."""

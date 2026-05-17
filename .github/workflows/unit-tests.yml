@@ -37,17 +37,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Lint with Ruff
-        run: |
-          echo "Running Ruff check..."
-          ruff check src/torchonnx tests
-          echo "Running Ruff format check..."
-          ruff format --check src/torchonnx tests
-
-      - name: Type check with mypy
-        run: |
-          echo "Running mypy..."
-          mypy src/torchonnx
+      - name: Pre-commit checks
+        uses: pre-commit/action@v3.0.1
 
       - name: Run unit tests with coverage (Python 3.11 only)
         if: matrix.python-version == '3.11'
