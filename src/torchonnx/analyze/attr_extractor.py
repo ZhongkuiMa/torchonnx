@@ -31,7 +31,6 @@ def _scan_attrs(default_attrs: dict[str, Any], attrs) -> dict[str, Any]:
     Scan and extract ONNX node attributes.
 
     :param default_attrs: Default attribute values.
-
     :param attrs: ONNX node attributes.
 
     :return: Extracted attributes merged with defaults
@@ -67,7 +66,6 @@ def _infer_kernel_defaults(attrs: dict[str, Any], kernel_shape: tuple[int, ...])
     Infer default values for dilations, strides, and pads.
 
     :param attrs: Attribute dictionary.
-
     :param kernel_shape: Kernel dimensions.
 
     :return: Updated attributes with inferred defaults
@@ -87,7 +85,6 @@ def _validate_auto_pad(auto_pad: str, op_name: str) -> None:
     Validate auto_pad attribute is NOTSET.
 
     :param auto_pad: auto_pad value.
-
     :param op_name: Operator name for error message.
 
     """
@@ -415,7 +412,6 @@ def extract_onnx_attrs(node: NodeProto, initializers: dict[str, TensorProto]) ->
     Extract attributes from an ONNX node.
 
     :param node: ONNX node.
-
     :param initializers: Model initializers.
 
     :return: Dictionary of extracted attributes

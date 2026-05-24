@@ -6,6 +6,8 @@ Main forward generation logic with handler dispatch.
 __docformat__ = "restructuredtext"
 __all__ = ["ForwardGenContext", "generate_forward_method", "set_forward_gen_context"]
 
+import warnings
+
 from torchonnx.analyze import SemanticLayerIR, SemanticModelIR
 from torchonnx.generate._handlers import (
     HANDLERS,
@@ -67,6 +69,24 @@ def set_forward_gen_context(context: ForwardGenContext | None) -> None:
     """
     global _forward_gen_context
     _forward_gen_context = context
+
+
+def _get_ctx() -> ForwardGenContext:
+    """Get current context, asserting it is set.
+
+    Use from handlers that expect the context to be initialized.
+    Raises RuntimeError if context is not set.
+
+    :return: Current forward generation context.
+    :raises RuntimeError: If context is not initialized.
+
+    """
+    if _forward_gen_context is None:
+        raise RuntimeError(
+            "ForwardGenContext not initialized. "
+            "Set context via set_forward_gen_context() before calling handlers."
+        )
+    return _forward_gen_context
 
 
 def _ensure_handlers_registered() -> None:
@@ -143,7 +163,6 @@ def _generate_forward_body(
     Handles vmap mode slice initialization and error handling for each layer.
 
     :param semantic_ir: Semantic IR from Stage 3.
-
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
 
     :return: List of indented code lines
@@ -170,11 +189,15 @@ def _generate_forward_body(
             code_line = _generate_layer_code(layer, layer_name_mapping)
             body_lines.append(f"{INDENT}{INDENT}{code_line}")
         except (KeyError, RuntimeError, ValueError, AttributeError) as error:
-            # Add comment for failed layer
+            # Emit warning so callers know code generation is incomplete
+            warnings.warn(
+                f"Failed to generate code for layer {layer.name!r} ({layer.pytorch_type}): {error}",
+                stacklevel=2,
+            )
+            # Add comment and placeholder for failed layer
             body_lines.append(
                 f"{INDENT}{INDENT}# ERROR generating {layer.name} ({layer.pytorch_type}): {error}"
             )
-            # Add placeholder
             if layer.outputs:
                 output_name = layer.outputs[0].code_name
                 body_lines.append(f"{INDENT}{INDENT}{output_name} = None  # Placeholder")
@@ -192,7 +215,6 @@ def generate_forward_method(
     into complete forward method.
 
     :param semantic_ir: Semantic IR from Stage 3.
-
     :param layer_name_mapping: Optional mapping of ONNX name -> clean name.
 
     :return: Generated forward method code
@@ -238,7 +260,6 @@ def _generate_layer_code(layer: SemanticLayerIR, layer_name_mapping: dict[str, s
     """Generate code for a single layer using registered handler.
 
     :param layer: Semantic layer IR.
-
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
 
     :return: Generated code line

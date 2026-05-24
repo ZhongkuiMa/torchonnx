@@ -14,9 +14,7 @@ def add_file_header(
     """Add file header with copyright, metadata, and __all__ to generated code.
 
     :param code: Generated PyTorch code.
-
     :param class_name: Name of the generated class.
-
     :param source_onnx: Path to source ONNX file.
 
     :return: Code with header prepended

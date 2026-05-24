@@ -50,10 +50,8 @@ def _build_node_ir(
     No semantic interpretation - just captures ONNX structure.
 
     :param node: ONNX node.
-
-    :param shapes: Tensor shape information.
-
-    :param node_counter: Current node index (for name generation).
+:param shapes: Tensor shape information.
+:param node_counter: Current node index (for name generation).
 
     :return: NodeIR representation
     """

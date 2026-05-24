@@ -19,6 +19,23 @@ import pytest
 import torch
 
 from tests.test_units.test_torchonnx.fixtures.synthetic_models import SyntheticONNXModels
+from torchonnx.generate._forward_gen import ForwardGenContext, set_forward_gen_context
+
+
+@pytest.fixture(autouse=True)
+def _forward_gen_context():
+    """Provide ForwardGenContext for handler tests that need it.
+
+    Autouse fixture ensures every test has a valid context, even when
+    handlers access it via _get_ctx() which does not accept None.
+    Tests that set their own context override this one.
+    """
+    ctx = ForwardGenContext()
+    ctx.vmap_mode = False
+    set_forward_gen_context(ctx)
+    yield
+    set_forward_gen_context(None)
+
 
 # ===== Basic Model Fixtures (Migrated) =====
 

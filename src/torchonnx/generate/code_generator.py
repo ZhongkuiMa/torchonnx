@@ -35,9 +35,7 @@ def generate_pytorch_module(
     - state_dict
 
     :param semantic_ir: Semantic IR from Stage 3/4.
-
     :param module_name: Name for the generated class.
-
     :param vmap_mode: If True, generate vmap-compatible helper functions that.
 
         avoid .item() calls and in-place operations. Default False preserves
@@ -87,9 +85,7 @@ def _generate_forward_with_context(
     """Generate forward method and return the context with helper usage info.
 
     :param semantic_ir: Semantic IR.
-
     :param layer_name_mapping: Layer name mapping.
-
     :param vmap_mode: If True, analyze for vmap-compatible code generation.
 
     :return: Tuple of (forward_method_code, context)
@@ -113,11 +109,8 @@ def _check_slice_needs_helper(
     """Check if Slice operation needs dynamic_slice helper.
 
     :param layer: Slice layer.
-
     :param producer_map: Producer mapping for slice length detection.
-
     :param vmap_mode: If True, detect static slice lengths.
-
     :param ctx: Context to update with helper needs.
 
     :return: True if helper is needed, False otherwise
@@ -234,7 +227,6 @@ def _get_helper_needs_from_ir(
     analyzes Slice operations to detect static slice lengths.
 
     :param semantic_ir: Semantic IR.
-
     :param vmap_mode: If True, detect static slice lengths for vmap compatibility.
 
     :return: Context with helper needs flags
@@ -273,15 +265,10 @@ def _detect_static_slice_lengths(
     ends = starts + constant → slice_length = constant
 
     :param layer: Slice layer.
-
     :param starts_input: Starts tensor info.
-
     :param ends_input: Ends tensor info.
-
     :param axes_input: Axes tensor info (may be None or ConstantInfo).
-
     :param steps_input: Steps tensor info (may be None or ConstantInfo).
-
     :param producer_map: Maps onnx_name -> (producer_layer, output_index).
 
     :return: List of static slice lengths, or None if can't determine
@@ -330,7 +317,6 @@ def _extract_value_at_index(data, axis_idx: int):
     """Extract scalar value from data at given axis index.
 
     :param data: Converted data (list or scalar).
-
     :param axis_idx: Index into array.
 
     :return: Scalar value
@@ -344,11 +330,8 @@ def _try_constant_case(starts_input, ends_input, axis_idx: int, step: int) -> in
     """Try to determine length when both starts and ends are constants.
 
     :param starts_input: Starts input (should be ConstantInfo).
-
     :param ends_input: Ends input (should be ConstantInfo).
-
     :param axis_idx: Axis index.
-
     :param step: Step size.
 
     :return: Slice length or None
@@ -373,13 +356,9 @@ def _try_add_pattern_case(
     """Try to detect ends = starts + constant pattern.
 
     :param starts_input: Starts input.
-
     :param ends_input: Ends input.
-
     :param axis_idx: Axis index (unused but kept for symmetry).
-
     :param step: Step size.
-
     :param producer_map: Producer mapping.
 
     :return: Slice length or None
@@ -431,13 +410,9 @@ def _get_static_slice_length(
     """Get static slice length for a single axis.
 
     :param starts_input: Starts tensor info.
-
     :param ends_input: Ends tensor info.
-
     :param axis_idx: Index into starts/ends arrays.
-
     :param step: Step size (assumed constant).
-
     :param producer_map: Maps onnx_name -> (producer_layer, output_index).
 
     :return: Static slice length, or None if can't determine
@@ -459,9 +434,7 @@ def _find_producer_through_shape_ops(onnx_name: str, producer_map, depth: int = 
     """Find the actual producer by tracing through shape-preserving operations.
 
     :param onnx_name: Starting variable onnx_name.
-
     :param producer_map: Producer mapping.
-
     :param depth: Max depth to trace.
 
     :return: Producer layer, or None if can't find
@@ -518,9 +491,7 @@ def _trace_to_source(var, producer_map, depth: int = 5) -> str | None:
     """Trace a variable back to its source, skipping shape-preserving ops.
 
     :param var: Variable to trace.
-
     :param producer_map: Producer mapping.
-
     :param depth: Max depth to trace.
 
     :return: Source onnx_name, or None if can't trace
@@ -591,7 +562,6 @@ def _generate_helpers_from_context(ctx: ForwardGenContext, vmap_mode: bool = Tru
     not just based on ONNX op type existence.
 
     :param ctx: Forward generation context with helper usage flags.
-
     :param vmap_mode: If True, use vmap-compatible helpers that avoid .item().
 
         and in-place operations.
@@ -719,7 +689,6 @@ def dynamic_expand(data, target_shape):
                 converted_shape.append(int(target_shape[i]))
 
     return data.expand(converted_shape)'''
-
 
 # =============================================================================
 # VMAP-COMPATIBLE HELPER TEMPLATES

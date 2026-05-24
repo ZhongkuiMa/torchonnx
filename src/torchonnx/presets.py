@@ -7,7 +7,7 @@ including batch dimension detection and other benchmark properties.
 __docformat__ = "restructuredtext"
 __all__ = [
     "BENCHMARKS_WITHOUT_BATCH_DIM",
-    "if_has_batch_dim",
+    "has_batch_dim",
 ]
 
 
@@ -23,7 +23,7 @@ BENCHMARKS_WITHOUT_BATCH_DIM = (
 )
 
 
-def if_has_batch_dim(onnx_path: str) -> bool:
+def has_batch_dim(onnx_path: str) -> bool:
     """Determine if model has batch dimension by checking full path.
 
     Checks both benchmark name and model filename in the path

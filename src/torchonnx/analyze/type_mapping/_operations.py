@@ -96,6 +96,8 @@ def convert_to_operator(layer_type: str) -> str:
 
     :param layer_type: Operation type.
 
+
+
     :return: Python operator string (e.g., "+", "-", "@")
     """
     if layer_type not in ONNX_TO_PYTORCH_OPERATORS:
@@ -119,7 +121,6 @@ def _extract_pad_args(node: NodeProto, initializers: dict[str, TensorProto]) -> 
     """Extract arguments for Pad operation.
 
     :param node: ONNX Pad node.
-
     :param initializers: All ONNX initializers.
 
     :return: Arguments for F.pad call
@@ -191,7 +192,6 @@ def _process_conv_padding(pads: list[int], operation: str) -> int | tuple[int, .
     """Convert and validate ONNX padding to PyTorch format.
 
     :param pads: ONNX padding values.
-
     :param operation: Operation name (Conv or ConvTranspose).
 
     :return: PyTorch padding format
@@ -347,9 +347,7 @@ def extract_operation_args(
     """Extract arguments for functional operation.
 
     :param node: ONNX node.
-
     :param initializers: All ONNX initializers.
-
     :param layer_type: PyTorch layer type.
 
     :return: Arguments for functional call

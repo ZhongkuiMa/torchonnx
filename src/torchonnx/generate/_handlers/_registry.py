@@ -26,7 +26,6 @@ def register_handler(pytorch_type: str, handler: Handler) -> None:
     """Register handler for a PyTorch type.
 
     :param pytorch_type: PyTorch type string (e.g., "nn.Conv2d", "torch.add").
-
     :param handler: Handler function.
 
     """
@@ -37,6 +36,8 @@ def get_handler(pytorch_type: str) -> Handler | None:
     """Get handler for PyTorch type.
 
     :param pytorch_type: PyTorch type string.
+
+
 
     :return: Handler function or None if not found
     """

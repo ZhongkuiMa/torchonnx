@@ -38,7 +38,7 @@ from tests.test_benchmarks.benchmark_utils import (
     get_model_data_path,
     get_model_relative_path,
 )
-from tests.test_benchmarks.utils import BENCHMARKS_WITHOUT_BATCH_DIM, if_has_batch_dim
+from tests.test_benchmarks.utils import BENCHMARKS_WITHOUT_BATCH_DIM, has_batch_dim
 
 # Tolerance settings (same as test_benchmarks.py)
 TOLERANCE_EPSILON = 1e-10
@@ -243,7 +243,7 @@ def find_models_without_batch_dim(
     all_models = find_models(benchmarks, max_per_benchmark)
 
     # Filter to models without batch dimension
-    models_no_batch = [m for m in all_models if not if_has_batch_dim(str(m))]
+    models_no_batch = [m for m in all_models if not has_batch_dim(str(m))]
     return models_no_batch
 
 
@@ -324,7 +324,7 @@ def get_vmap_models():
     benchmarks = find_benchmarks(str(benchmarks_dir))
     models = find_models(benchmarks, max_per_benchmark=20)
     # Filter to only models without batch dimension
-    vmap_models = [m for m in models if not if_has_batch_dim(str(m))]
+    vmap_models = [m for m in models if not has_batch_dim(str(m))]
     model_list = [str(m) for m in vmap_models]
 
     # Return a skip marker if no models found (prevents pytest collection error)

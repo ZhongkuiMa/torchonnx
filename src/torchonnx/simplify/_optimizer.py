@@ -24,9 +24,7 @@ def optimize_generated_code(
     - Removing unused buffer registrations
 
     :param code: Generated Python code from Stage 5.
-
     :param state_dict: Optional state dict to filter based on removed buffers.
-
     :param enable: If False, return code unchanged.
 
     :return: Optimized code, or (optimized_code, filtered_state_dict) if state_dict provided

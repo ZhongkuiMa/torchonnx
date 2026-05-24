@@ -17,7 +17,6 @@ def _handle_generic_layer(layer: SemanticLayerIR, layer_name_mapping: dict[str, 
     Produces: output = self.layer_name(input)
 
     :param layer: Semantic layer IR.
-
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
 
     :return: Generated code line
@@ -46,7 +45,6 @@ def _handle_batchnorm2d(layer: SemanticLayerIR, layer_name_mapping: dict[str, st
     reshape to (N, C, 1, L) using unsqueeze(2), then squeeze(2) back.
 
     :param layer: Semantic layer IR.
-
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
 
     :return: Generated code line

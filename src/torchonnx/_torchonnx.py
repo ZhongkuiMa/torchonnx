@@ -52,9 +52,7 @@ class TorchONNX:
         :param onnx_path: Path to input ONNX model.
         :param benchmark_name: Name of benchmark (for module naming).
         :param target_py_path: Path to save generated Python module.
-
         :param target_pth_path: Path to save state dict.
-
         :param vmap_mode: If True, generate vmap-compatible helper functions.
 
             that avoid .item() calls and in-place operations, enabling
@@ -169,11 +167,8 @@ class TorchONNX:
         Default: 21 (for shapeonnx compatibility)
 
         :param onnx_path: Path to ONNX model.
-
         :param target_opset: Target opset version (None = keep original, default = 21).
-
         :param infer_shapes: Run ONNX shape inference (default: True).
-
         :param clear_docstrings: Clear node docstrings (default: True).
 
         :return: Preprocessed model

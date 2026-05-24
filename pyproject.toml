@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "torchonnx"
-version = "2026.5.2"
+version = "2026.5.3"
 description = "PyTorch to ONNX model conversion and utilities"
 readme = "README.md"
 requires-python = ">=3.11"

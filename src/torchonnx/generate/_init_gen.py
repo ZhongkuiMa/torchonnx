@@ -102,9 +102,7 @@ def _register_standalone_parameters(
     """Register standalone parameters (not used by any layer).
 
     :param lines: List to append registration lines to.
-
     :param semantic_ir: Semantic IR from Stage 3.
-
     :param layer_params: Set of parameter ONNX names used by layers.
 
     """
@@ -128,11 +126,8 @@ def _register_standalone_buffers(
     """Register standalone buffer constants (not used by any layer).
 
     :param lines: List to append registration lines to.
-
     :param semantic_ir: Semantic IR from Stage 3.
-
     :param layer_consts: Set of constant ONNX names used by layers.
-
     :param used_constant_onnx_names: Set of constant ONNX names used in forward.
 
     """
@@ -154,9 +149,7 @@ def _instantiate_layers(
     """Instantiate all layer objects with clean names.
 
     :param lines: List to append instantiation lines to.
-
     :param semantic_ir: Semantic IR from Stage 3.
-
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
 
     """
@@ -185,9 +178,7 @@ def generate_init_method(
     3. Layer instantiation for LAYER operators
 
     :param semantic_ir: Semantic IR from Stage 3.
-
     :param layer_name_mapping: Optional mapping of ONNX name -> clean name.
-
     :param used_constant_onnx_names: Set of constant ONNX names actually used in forward.
 
     :return: Complete __init__ method code

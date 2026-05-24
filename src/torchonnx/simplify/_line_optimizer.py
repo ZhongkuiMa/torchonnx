@@ -120,7 +120,6 @@ def _convert_to_positional(layer_type: str, args: list[str]) -> list[str]:
     """Convert named arguments to positional where appropriate.
 
     :param layer_type: Layer type name.
-
     :param args: List of arguments.
 
     :return: Modified arguments list
@@ -152,7 +151,6 @@ def _remove_defaults(layer_type: str, args: list[str]) -> list[str]:
     """Remove arguments that match default values.
 
     :param layer_type: Layer type name.
-
     :param args: List of arguments.
 
     :return: Modified arguments list
@@ -213,8 +211,9 @@ def _remove_function_defaults(function_name: str, args: list[str]) -> list[str]:
     """Remove function arguments that match default values.
 
     :param function_name: Function name (e.g., "F.relu", "torch.cat").
-
     :param args: List of arguments.
+
+
 
     :return: Modified arguments list
     """

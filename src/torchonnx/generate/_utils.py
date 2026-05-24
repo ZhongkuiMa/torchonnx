@@ -21,6 +21,8 @@ def format_tensor_shape(shape: tuple[int, ...] | None) -> str:
 
     :param shape: Tensor shape tuple or None.
 
+
+
     :return: Formatted shape string (e.g., "(1, 3, 224, 224)")
     """
     if shape is None:
@@ -103,6 +105,8 @@ def sanitize_layer_name(name: str) -> str:
 
     :param name: ONNX layer name.
 
+
+
     :return: Clean Python identifier without underscores
     """
     if not name:
@@ -135,6 +139,8 @@ def to_camel_case(name: str) -> str:
         "vgg16-7" -> "Vgg167"
 
     :param name: Original name.
+
+
 
     :return: CamelCase name
     """

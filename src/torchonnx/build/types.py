@@ -22,20 +22,13 @@ class NodeIR:
     happens in Stage 3.
 
     :param name: Node name (from ONNX node.name or generated).
-
-    :param onnx_op_type: ONNX operator type (e.g., "Conv", "Add", "BatchNormalization").
-
-    :param raw_attributes: Raw ONNX attributes (unparsed dict of AttributeProto).
-
-    :param input_names: ALL input tensor names (no filtering/classification).
-
-    :param output_names: ALL output tensor names.
-
-    :param input_shapes: Input tensor shapes.
-
-    :param output_shapes: Output tensor shapes.
-
-    :param node: Original ONNX NodeProto.
+:param onnx_op_type: ONNX operator type (e.g., "Conv", "Add", "BatchNormalization").
+:param raw_attributes: Raw ONNX attributes (unparsed dict of AttributeProto).
+:param input_names: ALL input tensor names (no filtering/classification).
+:param output_names: ALL output tensor names.
+:param input_shapes: Input tensor shapes.
+:param output_shapes: Output tensor shapes.
+:param node: Original ONNX NodeProto.
 
     """
 
@@ -48,7 +41,6 @@ class NodeIR:
     output_shapes: dict[str, tuple[int, ...] | None]
     node: NodeProto
 
-
 @dataclass(frozen=True)
 class ModelIR:
     """Pure structural IR for complete ONNX model.
@@ -57,16 +49,11 @@ class ModelIR:
     and initializers. No semantic classification happens here.
 
     :param layers: List of node IRs (structural only).
-
-    :param input_names: Model input tensor names.
-
-    :param output_names: Model output tensor names.
-
-    :param shapes: All tensor shapes in the model.
-
-    :param initializers: All ONNX initializers (unclassified).
-
-    :param model: Original ONNX ModelProto.
+:param input_names: Model input tensor names.
+:param output_names: Model output tensor names.
+:param shapes: All tensor shapes in the model.
+:param initializers: All ONNX initializers (unclassified).
+:param model: Original ONNX ModelProto.
 
     """
 

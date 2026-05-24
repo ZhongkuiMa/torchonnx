@@ -19,9 +19,7 @@ def _get_input_code_name(
     """Get code name for input (handles parameters and constants with self.).
 
     :param inp: Input info.
-
     :param use_literal_for_scalar: If True, use literal value for scalar constants.
-
     :param use_literal_for_small_vector: If True, use literal for 1D vectors with ≤10 elements.
 
     :return: Code name string
@@ -50,19 +48,15 @@ def _get_input_code_name(
             values = inp.data.tolist()
             return f"torch.tensor({values})"
         # Non-literal constant - mark as used
-        from torchonnx.generate._forward_gen import get_forward_gen_context
+        from torchonnx.generate._forward_gen import _get_ctx
 
-        ctx = get_forward_gen_context()
-        if ctx:
-            ctx.mark_constant_used(inp.code_name)
+        _get_ctx().mark_constant_used(inp.code_name)
         return f"self.{inp.code_name}"
     if isinstance(inp, ParameterInfo):
         # Import here to avoid circular dependency
-        from torchonnx.generate._forward_gen import get_forward_gen_context
+        from torchonnx.generate._forward_gen import _get_ctx
 
-        ctx = get_forward_gen_context()
-        if ctx:
-            ctx.mark_parameter_used(inp.code_name)
+        _get_ctx().mark_parameter_used(inp.code_name)
         return f"self.{inp.code_name}"
     return inp.code_name
 
@@ -74,7 +68,6 @@ def _handle_add(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> s
     for proper device handling in CUDA.
 
     :param layer: Semantic layer IR.
-
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
 
     :return: Generated code line
@@ -106,7 +99,6 @@ def _handle_sub(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> s
     for proper device handling in CUDA.
 
     :param layer: Semantic layer IR.
-
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
 
     :return: Generated code line
@@ -128,7 +120,6 @@ def _handle_mul(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> s
     for proper device handling in CUDA.
 
     :param layer: Semantic layer IR.
-
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
 
     :return: Generated code line
@@ -150,7 +141,6 @@ def _handle_div(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> s
     for proper device handling in CUDA.
 
     :param layer: Semantic layer IR.
-
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
 
     :return: Generated code line
@@ -171,7 +161,6 @@ def _handle_matmul(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
     Note: MatMul requires tensor operands, cannot use scalar literals.
 
     :param layer: Semantic layer IR.
-
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
 
     :return: Generated code line
@@ -189,7 +178,6 @@ def _handle_pow(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> s
     for proper device handling in CUDA.
 
     :param layer: Semantic layer IR.
-
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
 
     :return: Generated code line
@@ -210,7 +198,6 @@ def _handle_neg(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> s
     Uses literals for scalar constant operands.
 
     :param layer: Semantic layer IR.
-
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
 
     :return: Generated code line
@@ -226,7 +213,6 @@ def _handle_equal(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) ->
     Uses literals for scalar constant operands.
 
     :param layer: Semantic layer IR.
-
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
 
     :return: Generated code line

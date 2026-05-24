@@ -33,6 +33,8 @@ def _convert_to_operator_function(onnx_op_type: str) -> str:
 
     :param onnx_op_type: ONNX operator type.
 
+
+
     :return: PyTorch function name (e.g., "torch.add")
     """
     # Map common operators to torch.* functions
@@ -92,8 +94,9 @@ def convert_to_pytorch_type(node: NodeProto, initializers: dict[str, TensorProto
     """Infer PyTorch layer type from ONNX node.
 
     :param node: ONNX node.
-
     :param initializers: Optional ONNX initializers for weight shape inspection.
+
+
 
     :return: PyTorch layer type (e.g., "Conv2d", "Linear") or operation type
     """

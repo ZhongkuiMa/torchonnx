@@ -87,10 +87,10 @@ def _get_parameter_role(
     """Determine PyTorch parameter role based on input position and layer type.
 
     :param onnx_name: ONNX tensor name.
-
     :param input_names: All input names for this node.
-
     :param pytorch_type: PyTorch layer type (e.g., "nn.Conv2d" or "Conv2d").
+
+
 
     :return: Parameter role ("weight", "bias", etc.) or None if not a parameter
     """
@@ -128,17 +128,11 @@ def _process_parameter_input(
     """Process and create a parameter input.
 
     :param onnx_name: ONNX tensor name.
-
     :param tensor: TensorProto object.
-
     :param param_role: Parameter role (weight, bias, etc.).
-
     :param pytorch_type: PyTorch layer type.
-
     :param code_name_counters: Mutable counter dict.
-
     :param initializers: All initializers for attribute extraction.
-
     :param node: Optional NodeProto for attributes.
 
     :return: ParameterInfo object
@@ -183,11 +177,8 @@ def _process_constant_input(
     """Process and create or reuse a constant input.
 
     :param onnx_name: ONNX tensor name.
-
     :param tensor: TensorProto object.
-
     :param code_name_counters: Mutable counter dict.
-
     :param constant_mapping: Optional constant mapping dict.
 
     :return: ConstantInfo object
@@ -230,19 +221,12 @@ def classify_inputs(
     Preserves input order.
 
     :param input_names: List of ONNX input tensor names (from Stage 2 NodeIR).
-
     :param initializers: All ONNX initializers (from Stage 2 ModelIR).
-
     :param pytorch_type: PyTorch layer type (to determine parameter roles).
-
     :param shapes: Tensor shapes (from Stage 2 ModelIR).
-
     :param code_name_counters: Mutable dict with keys 'var', 'param', 'const'.
-
     :param variable_mapping: Optional mapping from onnx_name to code_name for variables.
-
     :param constant_mapping: Optional mapping from onnx_name to ConstantInfo for constants.
-
     :param node: Optional ONNX NodeProto for extracting attributes (e.g., transB for Gemm).
 
     :return: Ordered list of typed input info objects
@@ -306,11 +290,8 @@ def classify_outputs(
     Converts Stage 2's output_names (list of strings) into Stage 3's VariableInfo list.
 
     :param output_names: List of ONNX output tensor names (from Stage 2 NodeIR).
-
     :param shapes: Tensor shapes (from Stage 2 ModelIR).
-
     :param code_name_counters: Mutable dict with key 'var'.
-
     :param variable_mapping: Optional mapping from onnx_name to code_name for variables.
 
     :return: Ordered list of VariableInfo objects

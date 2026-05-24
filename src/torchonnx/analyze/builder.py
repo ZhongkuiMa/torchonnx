@@ -56,11 +56,8 @@ def _build_semantic_layer_ir(
     """Convert raw NodeIR to semantic LayerIR with typed containers.
 
     :param layer_ir: Raw node IR from Stage 2.
-
     :param model_ir: Complete model IR.
-
     :param code_name_counters: Shared counters for code name generation.
-
     :param variable_mapping: Shared mapping from onnx_name to code_name for variables.
 
     :return: Semantic layer IR with typed inputs/outputs

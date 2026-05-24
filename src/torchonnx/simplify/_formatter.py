@@ -179,7 +179,6 @@ def _ensure_blank_lines_before(lines: list[str], count: int) -> None:
     Modifies the list in place.
 
     :param lines: List of lines to modify.
-
     :param count: Number of blank lines to ensure.
 
     """
