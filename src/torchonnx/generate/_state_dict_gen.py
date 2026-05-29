@@ -10,27 +10,22 @@ from torch import Tensor
 
 from torchonnx.analyze import ConstantInfo, OperatorClass, ParameterInfo, SemanticModelIR
 
-# PyTorch layers that don't have buffers - their constants are constructor args only
-_LAYERS_WITHOUT_BUFFERS = {
-    "Dropout",
-    "nn.Dropout",
-    "ReLU",
-    "nn.ReLU",
-    "Sigmoid",
-    "nn.Sigmoid",
-    "Tanh",
-    "nn.Tanh",
-    "Softmax",
-    "nn.Softmax",
-    "LeakyReLU",
-    "nn.LeakyReLU",
-    "ELU",
-    "nn.ELU",
-    "Flatten",
-    "nn.Flatten",
-    "Upsample",
-    "nn.Upsample",
-}
+# PyTorch layers that don't have buffers - their constants are constructor args only.
+# Canonical pytorch_type form is "nn.X" (see analyze/type_mapping/_layers.py); the
+# bare-name form was dead listing on every entry.
+_LAYERS_WITHOUT_BUFFERS = frozenset(
+    {
+        "nn.Dropout",
+        "nn.ELU",
+        "nn.Flatten",
+        "nn.LeakyReLU",
+        "nn.ReLU",
+        "nn.Sigmoid",
+        "nn.Softmax",
+        "nn.Tanh",
+        "nn.Upsample",
+    }
+)
 
 
 def _build_param_mappings(

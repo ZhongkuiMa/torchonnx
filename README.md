@@ -83,16 +83,15 @@ has_batch = if_has_batch_dim("acasxu")
 
 ## Compiler Pipeline
 
-TorchONNX is a 6-stage compiler:
+TorchONNX is a 5-stage compiler:
 
 | Stage | Directory | Purpose |
 |-------|-----------|---------|
 | 1. Normalize | `normalize/` | Load, validate, convert opset, infer shapes |
 | 2. Build | `build/` | Extract structural IR (`ModelIR`, `NodeIR`) from ONNX graph |
 | 3. Analyze | `analyze/` | Classify tensors, map ONNX ops to PyTorch types |
-| 4. Optimize | `optimize/` | IR-level optimizations |
-| 5. Generate | `generate/` | Emit `__init__`, `forward()`, state dict, imports |
-| 6. Simplify | `simplify/` | Remove unused buffers, default args, format code |
+| 4. Generate | `generate/` | Emit `__init__`, `forward()`, state dict, imports |
+| 5. Simplify | `simplify/` | Remove unused buffers, default args, format code |
 
 ## Supported Operations
 
@@ -116,9 +115,8 @@ torchonnx/
 │   ├── normalize/        # Stage 1: ONNX normalization
 │   ├── build/            # Stage 2: Structural IR
 │   ├── analyze/          # Stage 3: Semantic IR + type mapping
-│   ├── optimize/         # Stage 4: IR optimization
-│   ├── generate/         # Stage 5: Code generation + handlers
-│   └── simplify/         # Stage 6: Code optimization
+│   ├── generate/         # Stage 4: Code generation + handlers
+│   └── simplify/         # Stage 5: Code optimization
 └── tests/
     ├── test_units/       # Unit tests
     └── test_benchmarks/  # VNNCOMP 2024 benchmark validation

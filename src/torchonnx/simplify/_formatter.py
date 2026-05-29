@@ -86,7 +86,11 @@ def _wrap_long_line(line: str) -> list[str]:
 
 
 def _split_args(args_str: str) -> list[str]:
-    """Split arguments by comma, respecting nested parentheses and brackets.
+    """Split arguments by comma, respecting nesting and string boundaries.
+
+    Tracks parentheses, brackets, and string literal boundaries (single
+    and double quotes with escape support) so that commas inside strings
+    or nested expressions are not treated as argument separators.
 
     :param args_str: Arguments string (without outer parentheses).
 
@@ -95,9 +99,24 @@ def _split_args(args_str: str) -> list[str]:
     args = []
     current = []
     depth = 0
+    in_string = None  # None, "'", or '"'
+    escaped = False
 
     for char in args_str:
-        if char in "([{":
+        if escaped:
+            escaped = False
+            current.append(char)
+        elif char == "\\" and in_string:
+            escaped = True
+            current.append(char)
+        elif in_string:
+            if char == in_string:
+                in_string = None
+            current.append(char)
+        elif char in "\"'":
+            in_string = char
+            current.append(char)
+        elif char in "([{":
             depth += 1
             current.append(char)
         elif char in ")]}":

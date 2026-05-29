@@ -718,6 +718,59 @@ class TestGatherHandlerDirect:
         assert "output = " in code
         assert "gather" in code or "indices" in code
 
+    def test_gather_constant_multidim_indices_preserve_rank(self):
+        """Constant K>=2 indices must reshape post index_select to keep rank.
+
+        ONNX Gather with K-D indices produces output of shape
+        ``data.shape[:axis] + indices.shape + data.shape[axis+1:]``. The
+        prior handler emitted ``index_select(axis, indices.reshape(-1))``
+        which silently flattened the indices dimensions away. We now emit
+        an explicit ``.reshape(*data.shape[:axis], *indices.shape,
+        *data.shape[axis+1:])`` for K>=2 constant indices.
+        """
+        layer = SemanticLayerIR(
+            name="gather_multi",
+            onnx_op_type="Gather",
+            pytorch_type="gather",
+            operator_class=OperatorClass.OPERATION,
+            inputs=[
+                make_variable("data", shape=(10, 8)),
+                make_constant("indices", [[0, 1, 2], [3, 4, 5]]),  # shape (2, 3)
+            ],
+            outputs=[make_variable("output")],
+            arguments=[ArgumentInfo(onnx_name="axis", pytorch_name="axis", value=0)],
+        )
+
+        code = _handle_gather(layer, {})
+
+        assert "index_select" in code
+        # Reshape must restore the K-D structure of indices.
+        assert ".reshape(" in code
+        assert "(2, 3)" in code
+
+    def test_gather_runtime_indices_reshape_unifies_ranks(self):
+        """Runtime indices use the unified reshape covering scalar/1D/K-D."""
+        layer = SemanticLayerIR(
+            name="gather_runtime",
+            onnx_op_type="Gather",
+            pytorch_type="gather",
+            operator_class=OperatorClass.OPERATION,
+            inputs=[
+                make_variable("data", shape=(10, 8)),
+                make_variable("indices"),  # runtime, shape unknown at codegen
+            ],
+            outputs=[make_variable("output")],
+            arguments=[ArgumentInfo(onnx_name="axis", pytorch_name="axis", value=0)],
+        )
+
+        code = _handle_gather(layer, {})
+
+        # The unified runtime form references indices.shape at runtime
+        # rather than branching scalar / non-scalar.
+        assert "index_select" in code
+        assert ".shape" in code
+        assert ".reshape(" in code
+
 
 class TestClipHandlerDirect:
     """Direct unit tests for _handle_clip handler."""
@@ -804,6 +857,56 @@ class TestReshapeHandlerDirect:
         code = _handle_reshape(layer, {})
 
         assert "y = " in code
+
+    def test_reshape_inner_leading_one_not_rewritten_to_batch(self):
+        """A `[1, k, k]` target whose input is NOT batched must NOT be rewritten.
+
+        Previously the handler unconditionally rewrote ``shape[0] = -1``
+        whenever the target shape started with ``1``, on the assumption that
+        the leading 1 is the batch dimension. For inner tensors (e.g. a
+        constant-broadcast scratch pad inside a transformer block) whose
+        input shape does NOT start with 1, that rewrite is wrong: the
+        leading 1 is a rank-fix constant, not a batch axis hint. Output
+        shape silently changes at batch>1 runtime.
+        """
+        layer = SemanticLayerIR(
+            name="reshape_inner",
+            onnx_op_type="Reshape",
+            pytorch_type="reshape",
+            operator_class=OperatorClass.OPERATION,
+            inputs=[
+                make_variable("X", shape=(3, 4, 4)),  # input has NO leading 1
+                make_constant("shape", [1, 4, 12]),
+            ],
+            outputs=[make_variable("Y", shape=(1, 4, 12))],
+            arguments=[],
+        )
+
+        code = _handle_reshape(layer, {})
+
+        # Must keep the literal 1, not rewrite to -1.
+        assert "(1, 4, 12)" in code
+        assert "(-1, 4, 12)" not in code
+
+    def test_reshape_batched_leading_one_still_rewritten(self):
+        """Batched input WITH leading 1 keeps the rewrite for dynamic batching."""
+        layer = SemanticLayerIR(
+            name="reshape_batched",
+            onnx_op_type="Reshape",
+            pytorch_type="reshape",
+            operator_class=OperatorClass.OPERATION,
+            inputs=[
+                make_variable("X", shape=(1, 3, 24)),  # input has leading 1
+                make_constant("shape", [1, 72]),
+            ],
+            outputs=[make_variable("Y", shape=(1, 72))],
+            arguments=[],
+        )
+
+        code = _handle_reshape(layer, {})
+
+        # The legacy batch rewrite still applies here.
+        assert "(-1, 72)" in code
 
 
 class TestCodeGeneratorAnalysisDirect:

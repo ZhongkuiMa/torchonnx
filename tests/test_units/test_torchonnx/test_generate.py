@@ -28,9 +28,7 @@ from torchonnx.build import build_model_ir
 from torchonnx.generate import generate_pytorch_module
 from torchonnx.generate._utils import (
     format_argument,
-    format_tensor_shape,
     sanitize_identifier,
-    sanitize_layer_name,
     to_camel_case,
 )
 from torchonnx.normalize import load_and_preprocess_onnx_model
@@ -396,17 +394,6 @@ class TestStateDictGeneration:
 class TestCodeUtilities:
     """Test code formatting and naming utilities."""
 
-    def test_format_tensor_shape_regular(self):
-        """Test formatting regular tensor shapes."""
-        assert format_tensor_shape((1, 3, 224, 224)) == "(1, 3, 224, 224)"
-        # Note: format_tensor_shape doesn't add trailing comma for single-element tuples
-        assert format_tensor_shape((10,)) == "(10)"
-        assert format_tensor_shape((1,)) == "(1)"
-
-    def test_format_tensor_shape_none(self):
-        """Test formatting None shapes."""
-        assert format_tensor_shape(None) == "None"
-
     def test_format_argument_basic_types(self):
         """Test formatting basic argument types."""
         assert format_argument(None) == "None"
@@ -451,11 +438,6 @@ class TestCodeUtilities:
         result = sanitize_identifier("class")
         assert not keyword.iskeyword(result)
         assert result.isidentifier()
-
-    def test_sanitize_layer_name(self):
-        """Test layer name sanitization."""
-        assert sanitize_layer_name("relu_1") == "relu1"
-        assert sanitize_layer_name("conv2d_0") == "conv2d0"
 
     def test_to_camel_case_examples(self):
         """Test CamelCase conversion."""
@@ -2814,9 +2796,13 @@ class TestPhase21PadEdgeCases:
     """Test pad operation with edge conditions."""
 
     def test_pad_dynamic_pads(self, pad_dynamic_pads_model):
-        """Test pad with dynamic pad values.
+        """Dynamic Pad in vmap mode now raises instead of silently breaking vmap.
 
-        Tests dynamic pad parameter handling.
+        The handler can only express runtime ``pads`` through ``.tolist()``
+        which is a graph break for ``torch.vmap`` and ``torch.compile``. With
+        ``vmap_mode=True`` the user has asked for a vmap-safe module, so we
+        raise at codegen time; with ``vmap_mode=False`` the runtime branch
+        is still emitted.
         """
         try:
             normalized = load_and_preprocess_onnx_model(pad_dynamic_pads_model)
@@ -2825,8 +2811,10 @@ class TestPhase21PadEdgeCases:
         except TypeError:
             pytest.skip("classify_inputs() bug prevents semantic IR generation")
 
-        module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
+        with pytest.raises((RuntimeError, ValueError), match="vmap_mode=True"):
+            generate_pytorch_module(semantic_ir, vmap_mode=True)
 
+        module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=False)
         assert isinstance(module_code, str)
         assert len(module_code) > 0
         ast.parse(module_code)
@@ -2983,9 +2971,12 @@ class TestPhase21BatchNormEdgeCases:
     """Test batch norm with specific configurations."""
 
     def test_batchnorm3d(self, batchnorm3d_model):
-        """Test 3D batch normalization.
+        """3D batch norm code generation surfaces the missing-shape error.
 
-        Tests 3D batch norm parameter handling.
+        The BatchNorm handler cannot disambiguate 3D from 2D without an
+        input shape. The generator now fails fast so callers learn about
+        unsupported shapes at compile time instead of getting a module that
+        ast-parses but crashes on the first forward pass.
         """
         try:
             normalized = load_and_preprocess_onnx_model(batchnorm3d_model)
@@ -2994,11 +2985,8 @@ class TestPhase21BatchNormEdgeCases:
         except TypeError:
             pytest.skip("classify_inputs() bug prevents semantic IR generation")
 
-        module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
-
-        assert isinstance(module_code, str)
-        assert len(module_code) > 0
-        ast.parse(module_code)
+        with pytest.raises(RuntimeError, match="Failed to generate code"):
+            generate_pytorch_module(semantic_ir, vmap_mode=True)
 
 
 # ============================================================================

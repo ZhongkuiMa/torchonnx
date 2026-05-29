@@ -49,7 +49,9 @@ def test_conversion_baseline_exists(model_path, baselines_dir):
     """
     assert model_path is not None, "Benchmark data not available (run build_benchmarks.py)"
     model_path_obj = Path(model_path)
-    benchmark_name = model_path_obj.parent.name
+    # Corpus layout is .../<benchmark>/onnx/<model>.onnx; the benchmark
+    # name is the grandparent, not the parent (which is always "onnx").
+    benchmark_name = model_path_obj.parent.parent.name
     model_name = model_path_obj.stem
 
     # Expected paths
@@ -75,7 +77,9 @@ def test_conversion_results_match_baseline(model_path, baselines_dir, results_di
 
     """
     model_path_obj = Path(model_path)
-    benchmark_name = model_path_obj.parent.name
+    # Corpus layout is .../<benchmark>/onnx/<model>.onnx; the benchmark
+    # name is the grandparent, not the parent (which is always "onnx").
+    benchmark_name = model_path_obj.parent.parent.name
     model_name = model_path_obj.stem
 
     # Expected paths

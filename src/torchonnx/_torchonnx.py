@@ -10,6 +10,12 @@ from pathlib import Path
 import onnx
 import torch
 
+from torchonnx.analyze import build_semantic_ir
+from torchonnx.build import build_model_ir
+from torchonnx.generate import generate_pytorch_module, to_camel_case
+from torchonnx.normalize import load_and_preprocess_onnx_model
+from torchonnx.simplify import add_file_header, format_code, optimize_generated_code
+
 _logger = logging.getLogger(__name__)
 
 
@@ -24,10 +30,10 @@ def _enable_verbose() -> None:
 
 
 class TorchONNX:
-    """ONNX-to-PyTorch converter using a 6-stage pipeline.
+    """ONNX-to-PyTorch converter using a 5-stage pipeline.
 
     Converts ONNX models to standalone PyTorch nn.Module code by:
-    normalize -> build IR -> analyze semantics -> generate code -> simplify -> export.
+    normalize -> build IR -> analyze semantics -> generate code -> simplify + export.
 
     :param verbose: Print stage-by-stage progress.
     :param use_shapeonnx: Use shapeonnx for shape inference instead of onnxruntime.
@@ -53,18 +59,15 @@ class TorchONNX:
         :param benchmark_name: Name of benchmark (for module naming).
         :param target_py_path: Path to save generated Python module.
         :param target_pth_path: Path to save state dict.
-        :param vmap_mode: If True, generate vmap-compatible helper functions.
-
-            that avoid .item() calls and in-place operations, enabling
-            compatibility with torch.vmap and functorch transforms.
+        :param vmap_mode: If True (default), generate vmap-compatible helper
+            functions that avoid ``.item()`` calls and in-place operations,
+            enabling compatibility with ``torch.vmap`` and functorch transforms.
         """
         _logger.info(f"TorchONNX: converting {onnx_path}")
         t_total = time.perf_counter()
 
         # Stage 1: Normalize ONNX model
         t = time.perf_counter()
-        from torchonnx.normalize import load_and_preprocess_onnx_model
-
         model = load_and_preprocess_onnx_model(
             onnx_path,
             target_opset=20,
@@ -72,33 +75,20 @@ class TorchONNX:
             check_model=True,
             use_shapeonnx=self.use_shapeonnx,
         )
-        _logger.info(f"  Normalize: opset 20, shape inference ({time.perf_counter() - t:.4f})")
+        _logger.info(f"  Normalize: opset 20, shape inference ({time.perf_counter() - t:.4f}s)")
 
         # Stage 2: Build structural IR
         t = time.perf_counter()
-        from torchonnx.build import build_model_ir
-
         raw_ir = build_model_ir(model)
-        _logger.info(f"  Build IR ({time.perf_counter() - t:.4f})")
+        _logger.info(f"  Build IR ({time.perf_counter() - t:.4f}s)")
 
         # Stage 3: Build semantic IR
         t = time.perf_counter()
-        from torchonnx.analyze import build_semantic_ir
-
         semantic_ir = build_semantic_ir(raw_ir)
-        _logger.info(f"  Analyze semantics ({time.perf_counter() - t:.4f})")
+        _logger.info(f"  Analyze semantics ({time.perf_counter() - t:.4f}s)")
 
-        # Stage 4: Optimize IR
+        # Stage 4: Generate PyTorch code
         t = time.perf_counter()
-        from torchonnx.optimize import optimize_semantic_ir
-
-        optimized_ir = optimize_semantic_ir(semantic_ir)
-        _logger.info(f"  Optimize IR ({time.perf_counter() - t:.4f})")
-
-        # Stage 5: Generate PyTorch code
-        t = time.perf_counter()
-        from torchonnx.generate import generate_pytorch_module, to_camel_case
-
         model_name = Path(onnx_path).stem
         if benchmark_name:
             module_class_name = f"{benchmark_name}_{model_name}"
@@ -109,28 +99,21 @@ class TorchONNX:
         camel_class_name = to_camel_case(module_class_name)
 
         code, state_dict = generate_pytorch_module(
-            optimized_ir, camel_class_name, vmap_mode=vmap_mode
+            semantic_ir, camel_class_name, vmap_mode=vmap_mode
         )
-        _logger.info(f"  Generate code: {camel_class_name} ({time.perf_counter() - t:.4f})")
+        _logger.info(f"  Generate code: {camel_class_name} ({time.perf_counter() - t:.4f}s)")
 
-        # Stage 6: Optimize generated code and filter state_dict
+        # Stage 5: Simplify generated code and filter state_dict.
+        # The overloaded signature of optimize_generated_code lets the type
+        # checker see the tuple return when state_dict is non-None, so the
+        # destructure is direct.
         t = time.perf_counter()
-        from torchonnx.simplify import (
-            add_file_header,
-            format_code,
-            optimize_generated_code,
-        )
+        optimized_code, state_dict = optimize_generated_code(code, state_dict, enable=True)
 
-        result = optimize_generated_code(code, state_dict, enable=True)
-        assert isinstance(result, tuple), (
-            "optimize_generated_code should return tuple when state_dict is provided"
-        )
-        optimized_code, state_dict = result
-
-        # Stage 6b: Apply Black-compatible formatting
+        # Stage 5b: Apply Black-compatible formatting
         formatted_code = format_code(optimized_code)
 
-        # Stage 6c: Add file header with metadata
+        # Stage 5c: Add file header with metadata
         final_code = add_file_header(formatted_code, camel_class_name, onnx_path)
 
         # Save outputs
@@ -141,10 +124,10 @@ class TorchONNX:
 
         Path(target_py_path).write_text(final_code)
         torch.save(state_dict, target_pth_path)
-        _logger.info(f"  Simplify + export ({time.perf_counter() - t:.4f})")
+        _logger.info(f"  Simplify + export ({time.perf_counter() - t:.4f}s)")
         _logger.info(f"  Output: {target_py_path}")
         _logger.info(f"  State dict: {target_pth_path}")
-        _logger.info(f"  Total: {time.perf_counter() - t_total:.4f}")
+        _logger.info(f"  Total: {time.perf_counter() - t_total:.4f}s")
 
     @staticmethod
     def preprocess(
@@ -171,10 +154,8 @@ class TorchONNX:
         :param infer_shapes: Run ONNX shape inference (default: True).
         :param clear_docstrings: Clear node docstrings (default: True).
 
-        :return: Preprocessed model
+        :return: Preprocessed model.
         """
-        from torchonnx.normalize import load_and_preprocess_onnx_model
-
         return load_and_preprocess_onnx_model(
             onnx_path,
             target_opset=target_opset,

@@ -6,6 +6,8 @@ Creates parameter registration, buffer registration, and layer instantiation cod
 __docformat__ = "restructuredtext"
 __all__ = ["build_layer_name_mapping", "generate_init_method"]
 
+from types import MappingProxyType
+
 import torch
 
 from torchonnx.analyze import (
@@ -18,18 +20,21 @@ from torchonnx.analyze import (
 from torchonnx.generate._templates import INDENT, INIT_TEMPLATE
 from torchonnx.generate._utils import format_argument
 
-# PyTorch dtype to string representation
-_DTYPE_TO_STR = {
-    torch.float32: "torch.float32",
-    torch.float64: "torch.float64",
-    torch.float16: "torch.float16",
-    torch.int64: "torch.int64",
-    torch.int32: "torch.int32",
-    torch.int16: "torch.int16",
-    torch.int8: "torch.int8",
-    torch.uint8: "torch.uint8",
-    torch.bool: "torch.bool",
-}
+#: PyTorch dtype to source-string representation. Wrapped in MappingProxyType so
+#: handlers cannot accidentally mutate the table at import time.
+_DTYPE_TO_STR = MappingProxyType(
+    {
+        torch.float32: "torch.float32",
+        torch.float64: "torch.float64",
+        torch.float16: "torch.float16",
+        torch.int64: "torch.int64",
+        torch.int32: "torch.int32",
+        torch.int16: "torch.int16",
+        torch.int8: "torch.int8",
+        torch.uint8: "torch.uint8",
+        torch.bool: "torch.bool",
+    }
+)
 
 
 def _extract_layer_base_type(pytorch_type: str) -> str:
@@ -224,6 +229,8 @@ def _format_layer_arguments(layer: SemanticLayerIR) -> str:
     args: list[str] = []
 
     for arg in layer.arguments:
+        if arg.is_default():
+            continue
         formatted_value = format_argument(arg.value)
         if arg.pytorch_name:
             # Named argument

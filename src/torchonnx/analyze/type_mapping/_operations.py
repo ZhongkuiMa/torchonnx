@@ -24,15 +24,15 @@ from torchonnx.analyze.attr_extractor import extract_onnx_attrs
 
 ONNX_TO_PYTORCH_OPERATORS: dict[str, str] = {
     # Unary operators
-    "Neg": "-",
+    "Neg": "torch.neg",
     # Binary operators
-    "MatMul": "@",
-    "Add": "+",
-    "Sub": "-",
-    "Mul": "*",
-    "Div": "/",
-    "Pow": "**",
-    "Equal": "==",
+    "MatMul": "torch.matmul",
+    "Add": "torch.add",
+    "Sub": "torch.sub",
+    "Mul": "torch.mul",
+    "Div": "torch.div",
+    "Pow": "torch.pow",
+    "Equal": "torch.equal",
 }
 
 ONNX_TO_PYTORCH_OPERATIONS: dict[str, str] = {

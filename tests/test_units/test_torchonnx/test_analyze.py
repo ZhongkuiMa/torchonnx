@@ -6,6 +6,7 @@ import onnx
 import pytest
 import torch
 
+from torchonnx.analyze.attr_extractor import _check_pads_symmetric
 from torchonnx.analyze.builder import build_semantic_ir
 from torchonnx.analyze.tensor_classifier import classify_inputs
 from torchonnx.analyze.type_mapping import (
@@ -17,17 +18,13 @@ from torchonnx.analyze.type_mapping import (
     is_operator,
 )
 from torchonnx.analyze.type_mapping._layers import (
-    _check_symmetric_padding,
     _extract_dropout_args,
     _extract_elu_args,
     _extract_flatten_args,
     _extract_gelu_args,
     _extract_globalavgpool_args,
     _extract_leakyrelu_args,
-    _extract_relu_args,
-    _extract_sigmoid_args,
     _extract_softmax_args,
-    _extract_tanh_args,
     _extract_upsample_args,
     _simplify_tuple,
 )
@@ -560,42 +557,33 @@ class TestLayerExtractionEdgeCases:
         # Empty tuple should remain empty
         assert _simplify_tuple(()) == ()
 
-    def test_check_symmetric_padding_valid(self):
+    def test_check_pads_symmetric_valid(self):
         """Test symmetric padding validation passes for symmetric padding."""
         # Symmetric padding should not raise error
         try:
-            _check_symmetric_padding((1, 1, 1, 1))
-            _check_symmetric_padding((2, 3, 2, 3))
+            _check_pads_symmetric((1, 1, 1, 1))
+            _check_pads_symmetric((2, 3, 2, 3))
         except ValueError as e:
             raise AssertionError("Symmetric padding should not raise error") from e
 
-    def test_check_symmetric_padding_invalid(self):
+    def test_check_pads_symmetric_invalid(self):
         """Test symmetric padding validation raises for asymmetric padding."""
         # Asymmetric padding should raise error (top=1, left=2, bottom=2, right=1)
         with pytest.raises(ValueError, match=r"asymmetric|symmetric"):
-            _check_symmetric_padding((1, 2, 2, 1))
+            _check_pads_symmetric((1, 2, 2, 1))
 
-    def test_check_symmetric_padding_3d(self):
+    def test_check_pads_symmetric_3d(self):
         """Test symmetric padding for 3D operations."""
         # 3D: [start_d, start_h, start_w, end_d, end_h, end_w]
         # Symmetric: start==end for each dimension
         try:
-            _check_symmetric_padding((1, 2, 3, 1, 2, 3))
+            _check_pads_symmetric((1, 2, 3, 1, 2, 3))
         except ValueError as e:
             raise AssertionError("Symmetric 3D padding should not raise error") from e
 
         # Asymmetric should raise
         with pytest.raises(ValueError, match=r"asymmetric|symmetric"):
-            _check_symmetric_padding((1, 2, 3, 1, 2, 4))
-
-    def test_extract_relu_args_no_args(self):
-        """Test ReLU extraction with no special arguments."""
-        # ReLU with default args
-        node = onnx.helper.make_node("Relu", inputs=["X"], outputs=["Y"])
-
-        args = _extract_relu_args(node, {})
-        # ReLU typically has no required args
-        assert isinstance(args, dict)
+            _check_pads_symmetric((1, 2, 3, 1, 2, 4))
 
     def test_extract_dropout_opset_11_ratio_attribute(self):
         """Test Dropout with opset 11 (ratio as attribute)."""
@@ -688,22 +676,6 @@ class TestLayerExtractionEdgeCases:
         )
 
         args = _extract_upsample_args(node, {})
-        assert isinstance(args, dict)
-
-    def test_sigmoid_layer_extraction(self):
-        """Test Sigmoid layer extraction."""
-        # Sigmoid has no special attributes
-        node = onnx.helper.make_node("Sigmoid", inputs=["X"], outputs=["Y"])
-
-        args = _extract_sigmoid_args(node, {})
-        assert isinstance(args, dict)
-
-    def test_tanh_layer_extraction(self):
-        """Test Tanh layer extraction."""
-        # Tanh has no special attributes
-        node = onnx.helper.make_node("Tanh", inputs=["X"], outputs=["Y"])
-
-        args = _extract_tanh_args(node, {})
         assert isinstance(args, dict)
 
     def test_globalavgpool_layer_extraction(self):

@@ -314,11 +314,6 @@ def _get_attrs_resize(node: NodeProto, initializers: dict[str, TensorProto]) -> 
     )
 
 
-def _get_attrs_scatter(node: NodeProto, initializers: dict[str, TensorProto]) -> dict[str, Any]:
-    """Extract Scatter operator attributes."""
-    return _get_attrs_scatterelement(node, initializers)
-
-
 def _get_attrs_scatterelement(
     node: NodeProto, initializers: dict[str, TensorProto]
 ) -> dict[str, Any]:
@@ -389,7 +384,7 @@ EXTRACT_ATTRS_MAP: dict[str, Callable[[NodeProto, dict[str, TensorProto]], dict[
     "Reshape": _get_attrs_reshape,
     "Resize": _get_attrs_resize,
     "Shape": _get_attrs_shape,
-    "Scatter": _get_attrs_scatter,
+    "Scatter": _get_attrs_scatterelement,
     "ScatterElements": _get_attrs_scatterelement,
     "ScatterND": _get_attrs_scatternd,
     "Sigmoid": _get_attrs_simple({}),

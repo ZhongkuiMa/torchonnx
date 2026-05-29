@@ -11,7 +11,7 @@ from typing import Any
 
 from onnx import NodeProto, TensorProto
 
-from torchonnx.analyze.attr_extractor import extract_onnx_attrs
+from torchonnx.analyze.attr_extractor import _check_pads_symmetric, extract_onnx_attrs
 
 ONNX_TO_PYTORCH_LAYERS: dict[str, str] = {
     # Convolution - Note: Conv/ConvTranspose require weight shape inspection
@@ -96,21 +96,6 @@ def _simplify_tuple(arg: tuple[int, ...] | int) -> tuple[int, ...] | int:
     return arg
 
 
-def _check_symmetric_padding(pads: tuple[int, ...]) -> None:
-    """Check that padding is symmetric.
-
-    :param pads: ONNX padding in format [start_h, start_w, end_h, end_w].
-
-    """
-    length = len(pads)
-    dims = length // 2
-    for i in range(dims):
-        if pads[i] != pads[i + dims]:
-            raise ValueError(
-                f"Asymmetric padding {pads} not supported. Start and end padding must be equal."
-            )
-
-
 def _extract_conv_args(
     node: NodeProto,
     initializers: dict[str, TensorProto],
@@ -141,7 +126,7 @@ def _extract_conv_args(
     pads = attrs.get("pads")
     if pads is None:
         pads = tuple([0] * len(kernel_shape) * 2)
-    _check_symmetric_padding(pads)
+    _check_pads_symmetric(pads)
 
     dilations = attrs.get("dilations")
     if dilations is None:
@@ -261,7 +246,7 @@ def _extract_convtranspose_args(
     pads = attrs.get("pads")
     if pads is None:
         pads = tuple([0] * len(kernel_shape) * 2)
-    _check_symmetric_padding(pads)
+    _check_pads_symmetric(pads)
 
     dilations = attrs.get("dilations")
     if dilations is None:
@@ -288,20 +273,6 @@ def _extract_convtranspose_args(
     return torch_args
 
 
-def _extract_relu_args(
-    node: NodeProto,
-    initializers: dict[str, TensorProto],
-) -> dict[str, Any]:
-    """Map ONNX Relu to PyTorch ReLU arguments.
-
-    :param node: ONNX Relu node.
-    :param initializers: All ONNX initializers.
-
-    :return: PyTorch ReLU constructor arguments (empty dict)
-    """
-    return {}
-
-
 def _extract_averagepool_args(
     node: NodeProto,
     initializers: dict[str, TensorProto],
@@ -326,7 +297,7 @@ def _extract_averagepool_args(
     pads = attrs.get("pads")
     if pads is None:
         pads = tuple([0] * len(kernel_shape) * 2)
-    _check_symmetric_padding(pads)
+    _check_pads_symmetric(pads)
 
     ceil_mode = attrs.get("ceil_mode", 0)
     count_include_pad = attrs.get("count_include_pad", 1)
@@ -379,7 +350,7 @@ def _extract_maxpool_args(
     pads = attrs.get("pads")
     if pads is None:
         pads = tuple([0] * len(kernel_shape) * 2)
-    _check_symmetric_padding(pads)
+    _check_pads_symmetric(pads)
 
     dilations = attrs.get("dilations")
     if dilations is None:
@@ -525,34 +496,6 @@ def _extract_upsample_args(
     return {"mode": mode}
 
 
-def _extract_sigmoid_args(
-    node: NodeProto,
-    initializers: dict[str, TensorProto],
-) -> dict[str, Any]:
-    """Map ONNX Sigmoid to PyTorch Sigmoid arguments.
-
-    :param node: ONNX Sigmoid node.
-    :param initializers: All ONNX initializers.
-
-    :return: PyTorch Sigmoid constructor arguments (empty dict)
-    """
-    return {}
-
-
-def _extract_tanh_args(
-    node: NodeProto,
-    initializers: dict[str, TensorProto],
-) -> dict[str, Any]:
-    """Map ONNX Tanh to PyTorch Tanh arguments.
-
-    :param node: ONNX Tanh node.
-    :param initializers: All ONNX initializers.
-
-    :return: PyTorch Tanh constructor arguments (empty dict)
-    """
-    return {}
-
-
 def _extract_globalavgpool_args(
     node: NodeProto,
     initializers: dict[str, TensorProto],
@@ -594,13 +537,13 @@ _ONNX_TO_PYTORCH_ARGS: dict[str, Any] = {
     "MaxPool": _extract_maxpool_args,
     "AveragePool": _extract_averagepool_args,
     "Dropout": _extract_dropout_args,
-    "Relu": _extract_relu_args,  # ONNX uses "Relu" (lowercase u)
-    "ReLU": _extract_relu_args,  # Some models use "ReLU" (uppercase U)
+    "Relu": lambda node, init: {},  # ONNX uses "Relu" (lowercase u)
+    "ReLU": lambda node, init: {},  # Some models use "ReLU" (uppercase U)
     "LeakyRelu": _extract_leakyrelu_args,
     "Elu": _extract_elu_args,
     "Gelu": _extract_gelu_args,
-    "Sigmoid": _extract_sigmoid_args,
-    "Tanh": _extract_tanh_args,
+    "Sigmoid": lambda node, init: {},
+    "Tanh": lambda node, init: {},
     "Softmax": _extract_softmax_args,
     "Upsample": _extract_upsample_args,
     "Resize": _extract_upsample_args,  # Resize also maps to nn.Upsample

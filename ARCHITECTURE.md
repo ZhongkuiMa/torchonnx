@@ -1,6 +1,6 @@
 # TorchONNX Architecture
 
-ONNX-to-PyTorch compiler: 6-stage pipeline converting `.onnx` models into standalone `.py` modules + `.pth` state dicts.
+ONNX-to-PyTorch compiler: 5-stage pipeline converting `.onnx` models into standalone `.py` modules + `.pth` state dicts.
 
 ## Package Tree
 
@@ -21,9 +21,7 @@ src/torchonnx/
 │   └── type_mapping/      ONNX-to-PyTorch type/op mapping tables
 │       ├── _layers.py     nn.Module mappings (Conv, BatchNorm, Linear...)
 │       └── _operations.py Functional op mappings (reshape, cat, pad...)
-├── optimize/              Stage 4: IR-level optimizations
-│   └── optimizer.py       Optimization passes on semantic IR
-├── generate/              Stage 5: Python code generation
+├── generate/              Stage 4: Python code generation
 │   ├── code_generator.py  Orchestrates __init__ + forward + state_dict generation
 │   ├── _init_gen.py       Emits __init__ body (layer declarations)
 │   ├── _forward_gen.py    Emits forward() body (operation calls)
@@ -35,7 +33,7 @@ src/torchonnx/
 │       ├── _layers.py     nn.Module handlers (Conv2d, Linear, BatchNorm2d...)
 │       ├── _operations.py Functional handlers (reshape, cat, gather...)
 │       └── _operators.py  Binary/unary operator handlers (add, mul, matmul...)
-└── simplify/              Stage 6: Post-processing on generated code strings
+└── simplify/              Stage 5: Post-processing on generated code strings
     ├── _optimizer.py      Dead-code removal, unused buffer cleanup
     ├── _rules.py          Simplification rules
     ├── _line_optimizer.py Line-level optimizations
@@ -57,7 +55,7 @@ src/torchonnx/
 
 | Rule | Source | Failure |
 |------|--------|---------|
-| Stages flow forward only (1->2->3->4->5->6) | (enforced) | Circular import |
+| Stages flow forward only (1->2->3->4->5) | (enforced) | Circular import |
 | Absolute imports only | (enforced) | Ruff TID error |
 | IR dataclasses are frozen | (enforced) | `FrozenInstanceError` |
 | `generate/_handlers/` must not import from `simplify/` | (observed) | N/A |

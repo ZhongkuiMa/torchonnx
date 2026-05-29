@@ -4,6 +4,7 @@ __docformat__ = "restructuredtext"
 __all__ = ["load_and_preprocess_onnx_model"]
 
 import warnings
+from typing import Any
 
 import onnx
 from onnx import ModelProto, TensorProto, version_converter
@@ -71,47 +72,38 @@ def _convert_version(
         try:
             model = version_converter.convert_version(model, target_opset)
         except (ValueError, RuntimeError, AttributeError) as error:
-            warnings.warn(
-                f"Version conversion failed "
-                f"from opset {current_opset} to {target_opset}: {error}. "
-                f"Keeping original opset version.",
-                UserWarning,
-                stacklevel=2,
-            )
+            raise ValueError(
+                f"Failed to convert model from opset {current_opset} to {target_opset}: {error}. "
+                f"Use target_opset={current_opset} to keep the original opset."
+            ) from error
 
     return model
 
 
 def _apply_shapeonnx_inference(model: ModelProto, shapes: dict) -> None:
-    """Apply inferred shapes from shapeonnx to model value_info.
+    value_info_map: dict[str, Any] = {}
+    for vi in model.graph.value_info:
+        value_info_map[vi.name] = vi
 
-    :param model: ONNX model to update.
-    :param shapes: Dictionary of inferred shapes from shapeonnx.
-
-    """
     for node in model.graph.node:
         for output in node.output:
-            if output in shapes:
-                found = False
-                for value_info in model.graph.value_info:
-                    if value_info.name == output:
-                        shape_val = shapes[output]
-                        shape_list = [shape_val] if isinstance(shape_val, int) else shape_val
-                        value_info.type.tensor_type.shape.ClearField("dim")
-                        for dim_value in shape_list:
-                            dim = value_info.type.tensor_type.shape.dim.add()
-                            dim.dim_value = dim_value
-                        found = True
-                        break
-
-                if not found:
-                    value_info = model.graph.value_info.add()
-                    value_info.name = output
-                    shape_val = shapes[output]
-                    shape_list = [shape_val] if isinstance(shape_val, int) else shape_val
-                    for dim_value in shape_list:
-                        dim = value_info.type.tensor_type.shape.dim.add()
-                        dim.dim_value = dim_value
+            if output not in shapes:
+                continue
+            vi = value_info_map.get(output)
+            shape_val = shapes[output]
+            shape_list = [shape_val] if isinstance(shape_val, int) else shape_val
+            if vi is not None:
+                vi.type.tensor_type.shape.ClearField("dim")
+                for dim_value in shape_list:
+                    dim = vi.type.tensor_type.shape.dim.add()
+                    dim.dim_value = dim_value
+            else:
+                vi = model.graph.value_info.add()
+                vi.name = output
+                for dim_value in shape_list:
+                    dim = vi.type.tensor_type.shape.dim.add()
+                    dim.dim_value = dim_value
+                value_info_map[output] = vi
 
 
 def _infer_shapes(model: ModelProto, use_shapeonnx: bool = False) -> ModelProto:
@@ -205,7 +197,11 @@ def _convert_onnx_constants_to_initializers(model: ModelProto) -> ModelProto:
     for tensor in new_initializers:
         model_copy.graph.initializer.append(tensor)
 
-    remaining_nodes = [n for n in model_copy.graph.node if n not in nodes_to_remove]
+    # Use output-name matching, not object identity, because CopyFrom
+    # creates new Python objects and the identity-based ``in`` would
+    # never match a single node.
+    removed_outputs = {n.output[0] for n in nodes_to_remove if n.output}
+    remaining_nodes = [n for n in model_copy.graph.node if n.output[0] not in removed_outputs]
 
     del model_copy.graph.node[:]
     model_copy.graph.node.extend(remaining_nodes)
@@ -248,10 +244,10 @@ def load_and_preprocess_onnx_model(
         _check_model(model)
 
     if target_opset is not None:
+        # _convert_version swallows its own failures and returns the
+        # already-validated model unchanged, so a second _check_model here
+        # could only fail on something the first check already accepted.
         model = _convert_version(model, target_opset=target_opset)
-
-    if check_model:
-        _check_model(model)
 
     if infer_shapes:
         model = _infer_shapes(model, use_shapeonnx=use_shapeonnx)

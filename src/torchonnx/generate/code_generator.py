@@ -6,18 +6,33 @@ Assembles complete PyTorch module from semantic IR.
 __docformat__ = "restructuredtext"
 __all__ = ["generate_pytorch_module"]
 
+import inspect
+
 from torch import Tensor
 
-from torchonnx.analyze import SemanticModelIR
+from torchonnx.analyze import ConstantInfo, SemanticModelIR, VariableInfo
 from torchonnx.generate._forward_gen import (
     ForwardGenContext,
     generate_forward_method,
     set_forward_gen_context,
 )
 from torchonnx.generate._init_gen import build_layer_name_mapping, generate_init_method
+from torchonnx.generate._runtime_helpers import _standard, _vmap
 from torchonnx.generate._state_dict_gen import build_state_dict
 from torchonnx.generate._templates import MODULE_TEMPLATE
 from torchonnx.generate._utils import sanitize_identifier
+
+
+def _helper_source(fn) -> str:
+    """Return the source text of a runtime-helper function for inlining.
+
+    ``inspect.getsource`` keeps the leading column-0 indent, the docstring,
+    and the body verbatim, so the inlined text is exactly what the unit
+    suite in ``_runtime_helpers/`` covers. We strip the trailing newline
+    so the helper block in the generated module is consistent with the
+    prior hand-written triple-quoted templates.
+    """
+    return inspect.getsource(fn).rstrip()
 
 
 def generate_pytorch_module(
@@ -36,11 +51,11 @@ def generate_pytorch_module(
 
     :param semantic_ir: Semantic IR from Stage 3/4.
     :param module_name: Name for the generated class.
-    :param vmap_mode: If True, generate vmap-compatible helper functions that.
+    :param vmap_mode: If True (default), generate vmap-compatible helper
+        functions that avoid ``.item()`` calls and in-place operations,
+        enabling compatibility with ``torch.vmap`` and functorch transforms.
 
-        avoid .item() calls and in-place operations. Default False preserves
-        the standard helpers for backward compatibility.
-    :return: Tuple of (module_code_string, state_dict)
+    :return: Tuple of (module_code_string, state_dict).
     """
     # Sanitize class name
     class_name = sanitize_identifier(module_name)
@@ -59,8 +74,21 @@ def generate_pytorch_module(
     # Generate helper functions based on actual usage (not just op type existence)
     helpers = _generate_helpers_from_context(forward_context, vmap_mode=vmap_mode)
 
-    # Generate __init__ method with all constants (Stage 6 will remove unused ones)
-    init_method = generate_init_method(semantic_ir, layer_name_mapping)
+    # Generate __init__ method, emitting only the constants the forward
+    # actually references. The IR-level set is the source of truth; the
+    # simplify-stage `_remove_unused_buffers` regex-rewriter remains as a
+    # safety net for any constants introduced after this point.
+    code_to_onnx = {c.code_name: c.onnx_name for c in semantic_ir.constants}
+    used_constant_onnx_names = {
+        code_to_onnx[code_name]
+        for code_name in forward_context.used_constants
+        if code_name in code_to_onnx
+    }
+    init_method = generate_init_method(
+        semantic_ir,
+        layer_name_mapping,
+        used_constant_onnx_names=used_constant_onnx_names,
+    )
 
     # Assemble complete module
     module_code = MODULE_TEMPLATE.format(
@@ -115,8 +143,6 @@ def _check_slice_needs_helper(
 
     :return: True if helper is needed, False otherwise
     """
-    from torchonnx.analyze import ConstantInfo
-
     if len(layer.inputs) < 3:
         return False
 
@@ -168,8 +194,6 @@ def _extract_axes_list(axes_input) -> list:
     """Extract axes list from axes input."""
     if axes_input is None:
         return [0]
-    from torchonnx.analyze import ConstantInfo
-
     assert isinstance(axes_input, ConstantInfo)
     axes_data = axes_input.data.tolist()
     return axes_data if isinstance(axes_data, list) else [axes_data]
@@ -179,8 +203,6 @@ def _extract_steps_list(steps_input, axes_len: int) -> list:
     """Extract steps list from steps input."""
     if steps_input is None:
         return [1] * axes_len
-    from torchonnx.analyze import ConstantInfo
-
     assert isinstance(steps_input, ConstantInfo)
     steps_data = steps_input.data.tolist()
     return steps_data if isinstance(steps_data, list) else [steps_data]
@@ -193,8 +215,6 @@ def _check_expand_needs_helper(layer) -> bool:
 
     :return: True if helper is needed
     """
-    from torchonnx.analyze import ConstantInfo
-
     if len(layer.inputs) < 2:
         return False
 
@@ -262,7 +282,7 @@ def _detect_static_slice_lengths(
 
     Analyzes the computation graph to find patterns where slice length
     is constant even if starts/ends are dynamic. Common pattern:
-    ends = starts + constant → slice_length = constant
+    ends = starts + constant -> slice_length = constant
 
     :param layer: Slice layer.
     :param starts_input: Starts tensor info.
@@ -273,8 +293,6 @@ def _detect_static_slice_lengths(
 
     :return: List of static slice lengths, or None if can't determine
     """
-    from torchonnx.analyze import ConstantInfo
-
     # Get axes list
     if axes_input is None:
         # Default: slice all axes from 0
@@ -336,8 +354,6 @@ def _try_constant_case(starts_input, ends_input, axis_idx: int, step: int) -> in
 
     :return: Slice length or None
     """
-    from torchonnx.analyze import ConstantInfo
-
     if not (isinstance(starts_input, ConstantInfo) and isinstance(ends_input, ConstantInfo)):
         return None
 
@@ -363,8 +379,6 @@ def _try_add_pattern_case(
 
     :return: Slice length or None
     """
-    from torchonnx.analyze import ConstantInfo, VariableInfo
-
     if not (isinstance(ends_input, VariableInfo) and ends_input.onnx_name in producer_map):
         return None
 
@@ -430,7 +444,7 @@ def _get_static_slice_length(
     return None
 
 
-def _find_producer_through_shape_ops(onnx_name: str, producer_map, depth: int = 5):
+def _find_producer_through_shape_ops(onnx_name: str, producer_map, depth: int = 20):
     """Find the actual producer by tracing through shape-preserving operations.
 
     :param onnx_name: Starting variable onnx_name.
@@ -439,8 +453,6 @@ def _find_producer_through_shape_ops(onnx_name: str, producer_map, depth: int = 
 
     :return: Producer layer, or None if can't find
     """
-    from torchonnx.analyze import VariableInfo
-
     shape_ops = {"Unsqueeze", "Squeeze", "Reshape", "Flatten"}
     current = onnx_name
 
@@ -474,8 +486,6 @@ def _are_from_same_source(var1, var2, producer_map) -> bool:
 
     Here x14 and x15 are from the same source (x4) with a constant offset.
     """
-    from torchonnx.analyze import VariableInfo
-
     if not isinstance(var1, VariableInfo) or not isinstance(var2, VariableInfo):
         return False
 
@@ -487,7 +497,7 @@ def _are_from_same_source(var1, var2, producer_map) -> bool:
     return bool(source1 and source2 and source1 == source2)
 
 
-def _trace_to_source(var, producer_map, depth: int = 5) -> str | None:
+def _trace_to_source(var, producer_map, depth: int = 20) -> str | None:
     """Trace a variable back to its source, skipping shape-preserving ops.
 
     :param var: Variable to trace.
@@ -496,8 +506,6 @@ def _trace_to_source(var, producer_map, depth: int = 5) -> str | None:
 
     :return: Source onnx_name, or None if can't trace
     """
-    from torchonnx.analyze import VariableInfo
-
     if not isinstance(var, VariableInfo):
         return None
 
@@ -514,8 +522,6 @@ def _trace_to_source(var, producer_map, depth: int = 5) -> str | None:
         if producer.onnx_op_type not in shape_ops:
             # For Add, trace through the non-constant input
             if producer.onnx_op_type == "Add" and len(producer.inputs) == 2:
-                from torchonnx.analyze import ConstantInfo
-
                 for inp in producer.inputs:
                     if not isinstance(inp, ConstantInfo) and isinstance(inp, VariableInfo):
                         current = inp.onnx_name
@@ -581,336 +587,15 @@ def _generate_helpers_from_context(ctx: ForwardGenContext, vmap_mode: bool = Tru
     return "\n\n".join(helpers)
 
 
-# Helper function templates
-DYNAMIC_SLICE_HELPER = '''\
-def dynamic_slice(data, starts, ends, axes=None, steps=None):
-    """Dynamic slice helper for ONNX Slice operation."""
-    # Ensure tensor
-    starts = torch.as_tensor(starts, device=data.device)
-    ends   = torch.as_tensor(ends,   device=data.device)
-    if axes is None:
-        axes = torch.arange(starts.numel(), device=data.device)
-    else:
-        axes = torch.as_tensor(axes, device=data.device)
-    if steps is None:
-        steps = torch.ones_like(starts, device=starts.device)
-    else:
-        steps = torch.as_tensor(steps, device=data.device)
-
-    # Normalize negative starts/ends
-    dims = torch.as_tensor(data.shape, device=data.device)
-    # axes tells where to read dim size
-    dim_sizes = dims[axes]
-
-    starts = torch.where(starts < 0, dim_sizes + starts, starts)
-    ends   = torch.where(ends   < 0, dim_sizes + ends,   ends)
-
-    # Clip to bounds (ONNX semantics)
-    # Use tensors for both min and max to avoid type mismatch
-    zero = torch.zeros_like(dim_sizes, device=dim_sizes.device)
-    starts = torch.clamp(starts, min=zero, max=dim_sizes)
-    ends   = torch.clamp(ends,   min=zero, max=dim_sizes)
-
-    # Build index tuple dynamically
-    index = [slice(None)] * data.ndim
-    for i in range(axes.shape[0]):
-        ax = axes[i].item()
-        idx = torch.arange(starts[i], ends[i], steps[i], device=data.device)
-        index[ax] = idx
-
-    return data[tuple(index)]'''
+# Helper templates -- extracted at import time from the linted, unit-tested
+# real functions in _runtime_helpers/. The standard variants are emitted when
+# vmap_mode=False, the VMAP variants when vmap_mode=True (the default).
+DYNAMIC_SLICE_HELPER = _helper_source(_standard.dynamic_slice)
 
 
-SCATTER_ND_HELPER = '''\
-def scatter_nd(data, indices, updates, reduction="none"):
-    """PyTorch equivalent of ONNX ScatterND using tensor-based indexing.
+SCATTER_ND_HELPER = _helper_source(_standard.scatter_nd)
+EXPAND_HELPER = _helper_source(_standard.dynamic_expand)
 
-    indices: (..., K)
-    updates: broadcastable to indices[..., :-1] + data.shape[K:]
-    reduction: "none", "add" (ONNX opset >= 11)
-    """
-    result = data.clone()
-    indices = indices.to(torch.long)
-
-    # Ensure updates has the same dtype as result (important for float64 testing)
-    updates = updates.to(result.dtype)
-
-    # Convert indices (..., K) -> tuple of K tensors
-    idx_tuple = tuple(indices[..., i] for i in range(indices.shape[-1]))
-
-    if reduction == "none":
-        result.index_put_(idx_tuple, updates)
-    elif reduction == "add":
-        result.index_put_(idx_tuple, updates, accumulate=True)
-    else:
-        raise NotImplementedError(f"Unsupported reduction: {reduction}")
-
-    return result'''
-
-
-EXPAND_HELPER = '''\
-def dynamic_expand(data, target_shape):
-    """Dynamic expand helper for ONNX Expand operation.
-
-    Handles dimension mismatches and ONNX semantics conversion:
-    - ONNX allows expanding from higher dims to lower dims (e.g., 4D->3D)
-    - ONNX uses 1 to mean "keep dimension", PyTorch uses -1
-    """
-    # Ensure target_shape is a list of integers
-    if isinstance(target_shape, torch.Tensor):
-        target_shape = target_shape.to(torch.int64).tolist()
-    # Convert to integers (handle cases where list contains floats or numpy ints)
-    target_shape = [int(x) for x in target_shape]
-
-    # If data has more dimensions than target, squeeze leading dimensions
-    if data.ndim > len(target_shape):
-        # Remove leading dimensions by reshaping to match target length
-        new_shape = tuple(int(s) for s in data.shape[data.ndim - len(target_shape):])
-        data = data.reshape(new_shape)
-
-    # Convert ONNX semantics to PyTorch
-    # For each dimension in target_shape:
-    # - If target[i] == 1 and data has a non-1 dim at that position,
-    #   keep data's dim (-1)
-    # - Otherwise, use target[i]
-    converted_shape = []
-    for i in range(len(target_shape)):
-        if i < len(target_shape) - data.ndim:
-            # Dimension doesn't exist in data, use target value
-            converted_shape.append(int(target_shape[i]))
-        else:
-            # Dimension exists in data
-            data_idx = i - (len(target_shape) - data.ndim)
-            if target_shape[i] == 1 and data.shape[data_idx] != 1:
-                # Keep data's dimension
-                converted_shape.append(-1)
-            else:
-                # Use target dimension
-                converted_shape.append(int(target_shape[i]))
-
-    return data.expand(converted_shape)'''
-
-# =============================================================================
-# VMAP-COMPATIBLE HELPER TEMPLATES
-# =============================================================================
-# These helpers are designed for improved vmap compatibility:
-# - scatter_nd: uses functional torch.scatter instead of in-place index_put_
-# - dynamic_expand: handles tensor shapes for vmap contexts
-# - dynamic_slice: uses torch.gather, but requires .item() for slice length
-#   (vmap works only when all batch elements have the same slice bounds)
-#
-# Note: Models with input-dependent slice bounds that vary across batch elements
-# cannot be vmapped - this is a fundamental limitation, not a bug.
-
-DYNAMIC_SLICE_VMAP_HELPER = '''\
-def dynamic_slice(data, starts, ends, axes=None, steps=None, slice_lengths=None):
-    """Vmap-compatible dynamic slice helper for ONNX Slice operation.
-
-    Returns a tuple (result, valid_flag) where:
-    - result: The sliced data (zeros if slice was empty/out-of-bounds)
-    - valid_flag: 1.0 if slice was non-empty, 0.0 if empty
-
-    The valid_flag should be accumulated across multiple slices and passed
-    to scatter_nd to determine whether to actually perform the scatter.
-
-    For vmap compatibility:
-    - axes/steps MUST be constant (Python ints or lists)
-    - starts/ends can be tensors (input-dependent)
-    - slice_lengths MUST be provided (list of ints, one per axis)
-
-    Args:
-        data: Input tensor to slice
-        starts: Start indices (tensor or list)
-        ends: End indices (tensor or list)
-        axes: Axes to slice along (constant list or None)
-        steps: Step sizes (constant list or None, must be 1 for now)
-        slice_lengths: Static slice lengths for each axis (REQUIRED for vmap mode)
-    """
-    # Convert to tensors if needed
-    starts = torch.as_tensor(starts, device=data.device)
-    ends = torch.as_tensor(ends, device=data.device)
-
-    # Handle axes - MUST be constant for vmap compatibility
-    if axes is None:
-        axes_list = list(range(starts.numel()))
-    elif isinstance(axes, (list, tuple)):
-        axes_list = list(axes)
-    elif isinstance(axes, torch.Tensor):
-        axes_list = axes.tolist()
-        if not isinstance(axes_list, list):
-            axes_list = [axes_list]
-    else:
-        axes_list = [int(axes)]
-
-    # Handle steps - MUST be constant for vmap compatibility
-    if steps is None:
-        steps_list = [1] * len(axes_list)
-    elif isinstance(steps, (list, tuple)):
-        steps_list = list(steps)
-    elif isinstance(steps, torch.Tensor):
-        steps_list = steps.tolist()
-        if not isinstance(steps_list, list):
-            steps_list = [steps_list]
-    else:
-        steps_list = [int(steps)]
-
-    # Handle slice_lengths - default to 1 if not provided
-    if slice_lengths is None:
-        lengths_list = [1] * len(axes_list)
-    else:
-        lengths_list = list(slice_lengths)
-
-    result = data
-    # Track validity: 1.0 if all slices non-empty, 0.0 if any slice empty
-    cumulative_valid = torch.ones((), dtype=data.dtype, device=data.device)
-
-    for i, (axis, step, slice_len) in enumerate(zip(axes_list, steps_list, lengths_list)):
-        axis = int(axis)
-        step = int(step)
-        slice_len = int(slice_len)
-        dim_size = result.shape[axis]
-
-        # Get start for this axis (handle scalar or 1D tensor)
-        if starts.numel() == 1:
-            start = starts.reshape(())
-        else:
-            start = starts[i]
-
-        # Normalize negative start index
-        start = torch.where(start < 0, dim_size + start, start)
-
-        # Clamp start to valid range
-        start = torch.clamp(start.long(), 0, dim_size)
-
-        # Check if slice would be out of bounds (start + slice_len > dim_size)
-        # is_valid = 1.0 if in bounds, 0.0 if out of bounds
-        is_valid = (start + slice_len <= dim_size).to(data.dtype)
-        cumulative_valid = cumulative_valid * is_valid
-
-        # Generate indices for gather: start, start+step, start+2*step, ...
-        # These are relative offsets that we add to start
-        offsets = torch.arange(slice_len, device=data.device, dtype=torch.long) * step
-
-        # Compute actual indices: start + offsets
-        # Clamp to valid range (even if out of bounds, we need valid indices for gather)
-        indices = (start + offsets).clamp(0, dim_size - 1)
-
-        # Reshape indices for gather: [slice_len] -> proper broadcast shape
-        # indices needs shape where axis dimension is slice_len, others are 1
-        shape = [1] * result.ndim
-        shape[axis] = slice_len
-        indices = indices.view(*shape)
-
-        # Expand indices to match result shape except for the slice axis
-        expand_shape = list(result.shape)
-        expand_shape[axis] = slice_len
-        indices = indices.expand(*expand_shape)
-
-        # Gather along axis
-        result = torch.gather(result, axis, indices)
-
-    # Return both the result and validity flag
-    # Result is multiplied by validity so out-of-bounds slices return zeros
-    return result * cumulative_valid, cumulative_valid'''
-
-
-SCATTER_ND_VMAP_HELPER = '''\
-def scatter_nd(data, indices, updates, reduction="none", valid=None):
-    """Vmap-compatible PyTorch equivalent of ONNX ScatterND.
-
-    Uses functional torch.scatter instead of in-place index_put_ to be
-    compatible with vmap and functorch transforms.
-
-    Args:
-        data: Target tensor to scatter into
-        indices: (..., K) where K is the number of dimensions to index
-        updates: Values to scatter
-        reduction: "none" or "add"
-        valid: Optional validity flag (scalar tensor). If provided and < 0.5,
-               returns data unchanged (simulates empty scatter from empty slices).
-
-    When valid=0 (from out-of-bounds slices), returns original data unchanged,
-    matching the behavior of standard mode where empty slices cause no scatter.
-    """
-    indices = indices.to(torch.long)
-    updates = updates.to(data.dtype)
-
-    # Compute linear indices from N-D indices
-    # strides[i] = product of data.shape[i+1:]
-    data_shape = torch.tensor(data.shape, device=data.device, dtype=torch.long)
-    k = indices.shape[-1]
-
-    # Compute strides for the first K dimensions
-    strides = torch.ones(k, device=data.device, dtype=torch.long)
-    for i in range(k - 2, -1, -1):
-        strides[i] = strides[i + 1] * data_shape[i + 1]
-
-    # Compute linear indices
-    linear_idx = (indices * strides).sum(dim=-1)
-
-    # Flatten data and updates
-    flat_data = data.reshape(-1)
-    flat_updates = updates.reshape(-1)
-    linear_idx = linear_idx.reshape(-1)
-
-    # Use functional scatter
-    if reduction == "none":
-        scattered = flat_data.scatter(0, linear_idx, flat_updates)
-    elif reduction == "add":
-        scattered = flat_data.scatter_add(0, linear_idx, flat_updates)
-    else:
-        raise NotImplementedError(f"Unsupported reduction: {reduction}")
-
-    result = scattered.reshape(data.shape)
-
-    # If valid flag provided, use it to select between scattered result and original data
-    # valid > 0.5 means slices were non-empty, so use scattered result
-    # valid <= 0.5 means slices were empty, so return original data unchanged
-    if valid is not None:
-        # Use torch.where for vmap compatibility (no Python if/else branching)
-        result = torch.where(valid > 0.5, result, data)
-
-    return result'''
-
-
-EXPAND_VMAP_HELPER = '''\
-def dynamic_expand(data, target_shape):
-    """Vmap-compatible dynamic expand helper for ONNX Expand operation.
-
-    This version handles the conversion from ONNX semantics to PyTorch
-    while remaining compatible with vmap.
-
-    Note: For full vmap compatibility, target_shape should be constant
-    (known at code generation time). Dynamic target_shape from tensors
-    may still work but with limitations.
-    """
-    # Convert target_shape to list of ints
-    if isinstance(target_shape, torch.Tensor):
-        target_shape = target_shape.to(torch.int64).tolist()
-    target_shape = [int(x) for x in target_shape]
-
-    # If data has more dimensions than target, squeeze leading dimensions
-    if data.ndim > len(target_shape):
-        new_shape = tuple(int(s) for s in data.shape[data.ndim - len(target_shape):])
-        data = data.reshape(new_shape)
-
-    # Convert ONNX semantics to PyTorch
-    # ONNX: 1 means "keep dimension", PyTorch: -1 means "keep dimension"
-    converted_shape = []
-    offset = len(target_shape) - data.ndim
-
-    for i in range(len(target_shape)):
-        if i < offset:
-            # Dimension doesn't exist in data, use target value
-            converted_shape.append(target_shape[i])
-        else:
-            # Dimension exists in data
-            data_idx = i - offset
-            if target_shape[i] == 1 and data.shape[data_idx] != 1:
-                # Keep data's dimension
-                converted_shape.append(-1)
-            else:
-                # Use target dimension
-                converted_shape.append(target_shape[i])
-
-    return data.expand(*converted_shape)'''
+DYNAMIC_SLICE_VMAP_HELPER = _helper_source(_vmap.dynamic_slice)
+SCATTER_ND_VMAP_HELPER = _helper_source(_vmap.scatter_nd)
+EXPAND_VMAP_HELPER = _helper_source(_vmap.dynamic_expand)

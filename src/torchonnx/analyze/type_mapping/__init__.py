@@ -28,40 +28,6 @@ from torchonnx.analyze.type_mapping._operations import (
 )
 
 
-def _convert_to_operator_function(onnx_op_type: str) -> str:
-    """Convert ONNX operator to PyTorch function name.
-
-    :param onnx_op_type: ONNX operator type.
-
-
-
-    :return: PyTorch function name (e.g., "torch.add")
-    """
-    # Map common operators to torch.* functions
-    operator_map = {
-        "Add": "torch.add",
-        "Sub": "torch.sub",
-        "Mul": "torch.mul",
-        "Div": "torch.div",
-        "MatMul": "torch.matmul",
-        "Pow": "torch.pow",
-        "Neg": "torch.neg",
-        "Equal": "torch.equal",
-    }
-    return operator_map.get(onnx_op_type, f"torch.{onnx_op_type.lower()}")
-
-
-def _convert_to_operation_function(onnx_op_type: str) -> str:
-    """Convert ONNX operation to PyTorch function name.
-
-    :param onnx_op_type: ONNX operation type.
-
-    :return: PyTorch function name
-    """
-    # Get from the operations mapping
-    return ONNX_TO_PYTORCH_OPERATIONS.get(onnx_op_type, onnx_op_type)
-
-
 def _get_conv_pytorch_type(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
     """Get PyTorch Conv type from weight shape."""
     if len(node.input) >= 2 and node.input[1] in initializers:
@@ -115,7 +81,7 @@ def convert_to_pytorch_type(node: NodeProto, initializers: dict[str, TensorProto
         layer_type = ONNX_TO_PYTORCH_LAYERS[node.op_type]
         return f"nn.{layer_type}"
     if is_operator(node.op_type):
-        return _convert_to_operator_function(node.op_type)
+        return convert_to_operator(node.op_type)
     if is_operation(node.op_type):
-        return _convert_to_operation_function(node.op_type)
+        return convert_to_operation(node.op_type)
     raise ValueError(f"Unsupported ONNX operator: {node.op_type}. ")

@@ -1,4 +1,4 @@
-"""Main Stage 6 code optimizer.
+"""Main Stage 5 code optimizer.
 
 Orchestrates line-by-line and whole-code optimizations on generated PyTorch code.
 """
@@ -7,27 +7,40 @@ __docformat__ = "restructuredtext"
 __all__ = ["optimize_generated_code"]
 
 import re
+from typing import overload
 
 from torch import Tensor
 
 from torchonnx.simplify._line_optimizer import optimize_line
 
 
+@overload
+def optimize_generated_code(
+    code: str, state_dict: dict[str, Tensor], enable: bool = ...
+) -> tuple[str, dict[str, Tensor]]: ...
+@overload
+def optimize_generated_code(code: str, state_dict: None = ..., enable: bool = ...) -> str: ...
 def optimize_generated_code(
     code: str, state_dict: dict[str, Tensor] | None = None, enable: bool = True
 ) -> str | tuple[str, dict[str, Tensor]]:
     """Apply code-level optimizations to generated PyTorch code.
+
+    Overloads encode the discrimination so callers do not need an
+    ``assert isinstance(result, tuple)`` to placate the type checker:
+    a ``state_dict`` argument forces the tuple return, ``state_dict=None``
+    (the default) returns the bare code string.
 
     Optimizations include:
     - Converting named arguments to positional where appropriate
     - Removing default arguments from layer constructors and functions
     - Removing unused buffer registrations
 
-    :param code: Generated Python code from Stage 5.
+    :param code: Generated Python code from Stage 4 (the generate stage).
     :param state_dict: Optional state dict to filter based on removed buffers.
     :param enable: If False, return code unchanged.
 
-    :return: Optimized code, or (optimized_code, filtered_state_dict) if state_dict provided
+    :return: Optimized code, or (optimized_code, filtered_state_dict) if
+        ``state_dict`` is provided.
     """
     if not enable:
         return (code, state_dict) if state_dict is not None else code
@@ -97,7 +110,7 @@ def _remove_unused_buffers(code: str) -> tuple[str, set[str]]:
         # Check if this is a register_buffer call
         if "self.register_buffer(" in line:
             # Extract buffer name from: self.register_buffer("c20", ...)
-            match = re.search(r'self\.register_buffer\("(\w+)"', line)
+            match = re.search(r"self\.register_buffer\([\"\'](\w+)[\"\']", line)
             if match:
                 buffer_name = match.group(1)
                 if buffer_name not in used_buffers:

@@ -13,21 +13,28 @@ from torch import Tensor
 
 from torchonnx.analyze.types import ConstantInfo, ParameterInfo, VariableInfo
 
-# ONNX dtype to PyTorch dtype mapping
+# ONNX dtype to PyTorch dtype mapping.
+# Maps each ONNX TensorProto.DataType enum value to the corresponding
+# PyTorch dtype. Unmappable types (STRING, UINT16, UINT32, UINT64) raise
+# ``ValueError`` instead of silently defaulting to float32.
 _ONNX_TO_TORCH_DTYPE = {
     1: torch.float32,  # FLOAT
     2: torch.uint8,  # UINT8
     3: torch.int8,  # INT8
-    # 4: torch.uint16,  # UINT16  (not directly supported in PyTorch)
     5: torch.int16,  # INT16
     6: torch.int32,  # INT32
     7: torch.int64,  # INT64
     9: torch.bool,  # BOOL
     10: torch.float16,  # FLOAT16
     11: torch.float64,  # DOUBLE
-    # 12: torch.uint32,  # UINT32 (not directly supported in PyTorch)
-    # 13: torch.uint64,  # UINT64 (not directly supported in PyTorch)
+    14: torch.complex64,  # COMPLEX64
+    15: torch.complex128,  # COMPLEX128
+    16: torch.bfloat16,  # BFLOAT16
 }
+
+#: ONNX dtype codes that are not mappable to PyTorch (STRING, unsigned
+#: integer types wider than 8 bits) and raise on access.
+_UNSUPPORTED_ONNX_DTYPES: frozenset[int] = frozenset({4, 8, 12, 13})
 
 
 def _tensor_proto_to_torch(tensor: TensorProto) -> Tensor:
@@ -50,7 +57,14 @@ def _onnx_dtype_to_torch(onnx_dtype: int) -> torch.dtype:
     :param onnx_dtype: ONNX data type code.
 
     :return: PyTorch dtype
+
+    :raises ValueError: If the ONNX dtype is not mappable to PyTorch.
     """
+    if onnx_dtype in _UNSUPPORTED_ONNX_DTYPES:
+        raise ValueError(
+            f"ONNX dtype {onnx_dtype} is not supported in PyTorch. "
+            f"Supported dtypes: {sorted(_ONNX_TO_TORCH_DTYPE)}"
+        )
     return _ONNX_TO_TORCH_DTYPE.get(onnx_dtype, torch.float32)
 
 
@@ -233,13 +247,17 @@ def classify_inputs(
     """
     results: list[VariableInfo | ParameterInfo | ConstantInfo] = []
 
-    for onnx_name in input_names:
-        # Skip empty strings (optional inputs not provided in ONNX)
-        if not onnx_name:
-            continue
+    # Filter empty-string input names so that the results list positions
+    # align with the indices used by _get_parameter_role. ONNX uses empty
+    # strings for unprovided optional inputs; skipping them keeps the
+    # results contiguous and prevents _get_parameter_role from reading a
+    # wrong position via input_names.index().
+    non_empty_names = [n for n in input_names if n]
+
+    for onnx_name in non_empty_names:
         if onnx_name in initializers:
             tensor = initializers[onnx_name]
-            param_role = _get_parameter_role(onnx_name, input_names, pytorch_type)
+            param_role = _get_parameter_role(onnx_name, non_empty_names, pytorch_type)
 
             if param_role:
                 param_info = _process_parameter_input(

@@ -1,6 +1,19 @@
-"""Optimization rules for Stage 6 code refinement.
+"""Optimization rules for the simplify stage.
 
-Defines which arguments are positional, which defaults to remove, etc.
+Defines which constructor arguments should be promoted to positional form
+and what each argument's PyTorch default is. The default tables are
+**derived at import time** from ``inspect.signature(...)`` on the real
+classes / functions in ``torch.nn`` and ``torch.nn.functional`` so that
+the simplify stage can never drift from the actual PyTorch surface --
+when PyTorch bumps a default in a minor release, this module picks it
+up on the next import.
+
+Earlier revisions of this file maintained ~200 lines of hand-copied
+defaults (``"eps": "1e-05"``, ``"padding_mode": "'zeros'"``, ...) which
+were guaranteed to disagree with PyTorch eventually. The R8 multi-master
+audit flagged the table as a parallel source of truth that would silently
+diverge from the generator's IR-level ``arg.is_default()`` check; this
+rewrite collapses it to one source: PyTorch itself.
 """
 
 __docformat__ = "restructuredtext"
@@ -10,8 +23,24 @@ __all__ = [
     "POSITIONAL_ONLY_ARGS",
 ]
 
-# Layers where first N arguments should be positional (remove arg name)
-# Format: "LayerType": ["arg1", "arg2", ...]
+import inspect
+from collections.abc import Callable
+from typing import Any
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F  # noqa: N812  -- F is the idiomatic alias
+
+# ---------------------------------------------------------------------------
+# Positional-only argument rules.
+#
+# These cannot be derived from inspect: PyTorch signatures do not mark which
+# arguments are "naturally positional" in idiomatic source. The first N
+# arguments below are stripped of their keyword form by the line optimizer
+# (e.g. ``nn.Conv2d(in_channels=3, out_channels=16, kernel_size=3)`` becomes
+# ``nn.Conv2d(3, 16, 3)``).
+# ---------------------------------------------------------------------------
+
 POSITIONAL_ONLY_ARGS: dict[str, list[str]] = {
     # Convolution layers
     "Conv1d": ["in_channels", "out_channels", "kernel_size"],
@@ -72,209 +101,134 @@ POSITIONAL_ONLY_ARGS: dict[str, list[str]] = {
     "UpsamplingBilinear2d": [],
 }
 
-# Default argument values that can be omitted
-# Format: "LayerType": {"arg_name": "default_value_str", ...}
+
+def _format_default(value: Any) -> str:
+    """Format a PyTorch default value as its Python source representation.
+
+    Mirrors what ``format_argument`` emits in the generator so the simplify
+    stage's string comparison succeeds.
+
+    :param value: Default value from ``inspect.Parameter.default``.
+
+    :return: Source-text rendering ('True', "'zeros'", '1e-05', 'None', ...).
+    """
+    if value is None:
+        return "None"
+    if isinstance(value, bool):
+        return "True" if value else "False"
+    return repr(value)
+
+
+def _derive_defaults(callable_obj: Callable[..., Any]) -> dict[str, str]:
+    """Read the default-value table for a callable from its signature.
+
+    Returns an empty dict if the signature cannot be inspected (typically
+    a C extension without a proper ``__text_signature__``), so callers
+    silently fall back to "do not strip anything" rather than crashing.
+    Excludes ``*args`` / ``**kwargs`` and positional-only or self-style
+    parameters that have no name to emit.
+
+    :param callable_obj: The class / function to introspect.
+
+    :return: Mapping of keyword-name -> formatted default value.
+    """
+    try:
+        sig = inspect.signature(callable_obj)
+    except (TypeError, ValueError):
+        return {}
+    return {
+        name: _format_default(p.default)
+        for name, p in sig.parameters.items()
+        if p.default is not inspect.Parameter.empty
+        and p.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+    }
+
+
+# ---------------------------------------------------------------------------
+# nn.* class defaults -- auto-derived from torch.nn signatures.
+# ---------------------------------------------------------------------------
+
+_SUPPORTED_LAYERS: tuple[type, ...] = (
+    nn.Conv1d,
+    nn.Conv2d,
+    nn.Conv3d,
+    nn.ConvTranspose1d,
+    nn.ConvTranspose2d,
+    nn.ConvTranspose3d,
+    nn.MaxPool1d,
+    nn.MaxPool2d,
+    nn.MaxPool3d,
+    nn.AvgPool1d,
+    nn.AvgPool2d,
+    nn.AvgPool3d,
+    nn.AdaptiveAvgPool2d,
+    nn.AdaptiveAvgPool3d,
+    nn.BatchNorm1d,
+    nn.BatchNorm2d,
+    nn.BatchNorm3d,
+    nn.GroupNorm,
+    nn.LayerNorm,
+    nn.Linear,
+    nn.ReLU,
+    nn.LeakyReLU,
+    nn.ELU,
+    nn.GELU,
+    nn.Sigmoid,
+    nn.Tanh,
+    nn.Softmax,
+    nn.LogSoftmax,
+    nn.Dropout,
+    nn.Dropout2d,
+    nn.Dropout3d,
+    nn.Upsample,
+    nn.Flatten,
+)
+
 LAYER_DEFAULTS: dict[str, dict[str, str]] = {
-    # Convolution layers
-    "Conv1d": {
-        "stride": "1",
-        "padding": "0",
-        "dilation": "1",
-        "groups": "1",
-        "bias": "True",
-        "padding_mode": "'zeros'",
-    },
-    "Conv2d": {
-        "stride": "1",
-        "padding": "0",
-        "dilation": "1",
-        "groups": "1",
-        "bias": "True",
-        "padding_mode": "'zeros'",
-    },
-    "ConvTranspose1d": {
-        "stride": "1",
-        "padding": "0",
-        "output_padding": "0",
-        "dilation": "1",
-        "groups": "1",
-        "bias": "True",
-        "padding_mode": "'zeros'",
-    },
-    "ConvTranspose2d": {
-        "stride": "1",
-        "padding": "0",
-        "output_padding": "0",
-        "dilation": "1",
-        "groups": "1",
-        "bias": "True",
-        "padding_mode": "'zeros'",
-    },
-    # Pooling layers
-    "MaxPool2d": {
-        "stride": "None",
-        "padding": "0",
-        "dilation": "1",
-        "return_indices": "False",
-        "ceil_mode": "False",
-    },
-    "AvgPool2d": {
-        "stride": "None",
-        "padding": "0",
-        "ceil_mode": "False",
-        "count_include_pad": "True",
-        "divisor_override": "None",
-    },
-    "AdaptiveAvgPool2d": {},  # Only has output_size, which is required
-    # Normalization layers
-    "BatchNorm2d": {
-        "eps": "1e-05",
-        "momentum": "0.1",
-        "affine": "True",
-        "track_running_stats": "True",
-    },
-    # Linear layers
-    "Linear": {
-        "bias": "True",
-    },
-    # Activation functions
-    "ReLU": {
-        "inplace": "False",
-    },
-    "LeakyReLU": {
-        "negative_slope": "0.01",
-        "inplace": "False",
-    },
-    "ELU": {
-        "alpha": "1.0",
-        "inplace": "False",
-    },
-    "GELU": {
-        "approximate": "'none'",
-    },
-    "Sigmoid": {},  # No parameters with defaults
-    "Tanh": {},  # No parameters with defaults
-    "Softmax": {},  # dim is required, in POSITIONAL_ONLY_ARGS
-    # Dropout
-    "Dropout": {
-        "p": "0.5",
-        "inplace": "False",
-    },
-    # Upsampling
-    "Upsample": {
-        "scale_factor": "None",
-        "mode": "'nearest'",
-        "align_corners": "None",
-    },
-    # Shape operations
-    "Flatten": {
-        "start_dim": "1",
-        "end_dim": "-1",
-    },
+    cls.__name__: _derive_defaults(cls) for cls in _SUPPORTED_LAYERS
 }
 
-# Default argument values for functional operations (F.* and torch.*)
-# Format: "function_name": {"arg_name": "default_value_str", ...}
+# ---------------------------------------------------------------------------
+# Function defaults -- auto-derived from F.* and torch.* signatures.
+# ---------------------------------------------------------------------------
+
+_SUPPORTED_FUNCTIONS: tuple[tuple[str, Callable[..., Any]], ...] = (
+    # Activation functions
+    ("F.relu", F.relu),
+    ("F.leaky_relu", F.leaky_relu),
+    ("F.elu", F.elu),
+    ("F.gelu", F.gelu),
+    ("F.sigmoid", F.sigmoid),
+    ("F.tanh", F.tanh),
+    ("F.softmax", F.softmax),
+    ("F.log_softmax", F.log_softmax),
+    # Pooling
+    ("F.max_pool2d", F.max_pool2d),
+    ("F.avg_pool2d", F.avg_pool2d),
+    ("F.adaptive_avg_pool2d", F.adaptive_avg_pool2d),
+    # Convolution
+    ("F.conv2d", F.conv2d),
+    ("F.conv_transpose2d", F.conv_transpose2d),
+    # Dropout
+    ("F.dropout", F.dropout),
+    # Pad
+    ("F.pad", F.pad),
+    # Torch tensor ops
+    ("torch.cat", torch.cat),
+    ("torch.concat", torch.concat),
+    ("torch.flatten", torch.flatten),
+    ("torch.squeeze", torch.squeeze),
+    ("torch.unsqueeze", torch.unsqueeze),
+    # Torch math
+    ("torch.add", torch.add),
+    ("torch.sub", torch.sub),
+    # Torch creation
+    ("torch.zeros", torch.zeros),
+    ("torch.ones", torch.ones),
+    ("torch.full", torch.full),
+    ("torch.arange", torch.arange),
+)
+
 FUNCTION_DEFAULTS: dict[str, dict[str, str]] = {
-    # Activation functions (F.*)
-    "F.relu": {
-        "inplace": "False",
-    },
-    "F.leaky_relu": {
-        "negative_slope": "0.01",
-        "inplace": "False",
-    },
-    "F.elu": {
-        "alpha": "1.0",
-        "inplace": "False",
-    },
-    "F.gelu": {
-        "approximate": "'none'",
-    },
-    "F.sigmoid": {},
-    "F.tanh": {},
-    "F.softmax": {
-        "dtype": "None",
-    },
-    # Pooling functions (F.*)
-    "F.max_pool2d": {
-        "stride": "None",
-        "padding": "0",
-        "dilation": "1",
-        "return_indices": "False",
-        "ceil_mode": "False",
-    },
-    "F.avg_pool2d": {
-        "stride": "None",
-        "padding": "0",
-        "ceil_mode": "False",
-        "count_include_pad": "True",
-        "divisor_override": "None",
-    },
-    "F.adaptive_avg_pool2d": {},
-    # Convolution functions (F.*)
-    "F.conv2d": {
-        "stride": "1",
-        "padding": "0",
-        "dilation": "1",
-        "groups": "1",
-    },
-    "F.conv_transpose2d": {
-        "stride": "1",
-        "padding": "0",
-        "output_padding": "0",
-        "groups": "1",
-        "dilation": "1",
-    },
-    # Dropout functions (F.*)
-    "F.dropout": {
-        "p": "0.5",
-        "training": "True",
-        "inplace": "False",
-    },
-    # Torch tensor operations
-    "torch.cat": {
-        "dim": "0",
-    },
-    "torch.concat": {
-        "dim": "0",
-    },
-    "torch.flatten": {
-        "start_dim": "0",
-        "end_dim": "-1",
-    },
-    "torch.reshape": {},
-    "torch.squeeze": {
-        "dim": "None",
-    },
-    "torch.unsqueeze": {},
-    "torch.transpose": {},
-    "torch.permute": {},
-    # Torch math operations
-    "torch.add": {
-        "alpha": "1",
-    },
-    "torch.sub": {
-        "alpha": "1",
-    },
-    "torch.mul": {},
-    "torch.div": {},
-    "torch.matmul": {},
-    "torch.bmm": {},
-    # Torch creation operations
-    "torch.tensor": {
-        "dtype": "None",
-        "device": "None",
-        "requires_grad": "False",
-    },
-    "torch.zeros": {
-        "dtype": "None",
-        "device": "None",
-        "requires_grad": "False",
-    },
-    "torch.ones": {
-        "dtype": "None",
-        "device": "None",
-        "requires_grad": "False",
-    },
+    name: _derive_defaults(fn) for name, fn in _SUPPORTED_FUNCTIONS
 }

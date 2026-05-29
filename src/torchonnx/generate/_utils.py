@@ -6,28 +6,12 @@ Helper functions for formatting tensors, arguments, and names.
 __docformat__ = "restructuredtext"
 __all__ = [
     "format_argument",
-    "format_tensor_shape",
     "sanitize_identifier",
-    "sanitize_layer_name",
     "to_camel_case",
 ]
 
 import keyword
 from typing import Any
-
-
-def format_tensor_shape(shape: tuple[int, ...] | None) -> str:
-    """Format tensor shape as Python tuple string.
-
-    :param shape: Tensor shape tuple or None.
-
-
-
-    :return: Formatted shape string (e.g., "(1, 3, 224, 224)")
-    """
-    if shape is None:
-        return "None"
-    return f"({', '.join(map(str, shape))})"
 
 
 def format_argument(value: Any) -> str:
@@ -93,39 +77,6 @@ def sanitize_identifier(name: str) -> str:
     # Ensure it's not a Python keyword
     if keyword.iskeyword(sanitized):
         sanitized = sanitized + "_"
-
-    return sanitized
-
-
-def sanitize_layer_name(name: str) -> str:
-    """Sanitize ONNX layer name to a clean Python identifier.
-
-    Removes underscores and non-alphanumeric characters, keeping only
-    letters and digits. Example: "relu_1" -> "relu1"
-
-    :param name: ONNX layer name.
-
-
-
-    :return: Clean Python identifier without underscores
-    """
-    if not name:
-        return "layer"
-
-    # Remove all non-alphanumeric characters (including underscores)
-    sanitized = "".join(c for c in name if c.isalnum())
-
-    # Ensure it doesn't start with a digit
-    if sanitized and sanitized[0].isdigit():
-        sanitized = "layer" + sanitized
-
-    # Ensure it's not empty
-    if not sanitized:
-        sanitized = "layer"
-
-    # Ensure it's not a Python keyword
-    if keyword.iskeyword(sanitized):
-        sanitized = sanitized + "Layer"
 
     return sanitized
 

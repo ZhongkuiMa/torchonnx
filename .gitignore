@@ -78,6 +78,8 @@ tests/vnncomp2024_benchmarks/
 tests/benchmarks/
 tests/data/
 tests/temp/
+tests/test_benchmarks/results/
+tests/test_benchmarks/vnncomp2024_benchmarks
 
 # === Test baselines - commit .py files (golden references), ignore .pth files (large) ===
 tests/baselines/**/*.pth

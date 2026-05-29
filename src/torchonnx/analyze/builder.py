@@ -212,5 +212,4 @@ def build_semantic_ir(model_ir: ModelIR) -> SemanticModelIR:
         input_names=model_ir.input_names,
         output_names=model_ir.output_names,
         shapes=model_ir.shapes,
-        # REMOVED: initializers, model (no ONNX dependencies in Stage 3)
     )

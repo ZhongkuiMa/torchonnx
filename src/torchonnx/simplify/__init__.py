@@ -1,4 +1,4 @@
-"""Stage 6: Code-level optimization and formatting.
+"""Stage 5: Code-level optimization and formatting.
 
 Post-processes generated PyTorch code to:
 - Remove default arguments from layer constructors

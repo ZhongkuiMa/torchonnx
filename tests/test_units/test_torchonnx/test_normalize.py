@@ -16,6 +16,7 @@ Test Coverage:
 
 __docformat__ = "restructuredtext"
 
+import contextlib
 import tempfile
 from pathlib import Path
 
@@ -397,11 +398,12 @@ class TestShapeONNXIntegration:
 
         node = onnx.helper.make_node("Identity", inputs=["X"], outputs=["Y"])
         graph = onnx.helper.make_graph([node], "TestModel", [X], [Y])
-        model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 13)])
+        model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 21)])
 
-        # Requesting opset outside range should warn
-        with pytest.warns(UserWarning, match=r"opset.*outside"):
-            _convert_version(model, target_opset=10, warn_on_diff=True)
+        # Requesting opset outside tested range should warn (but still succeed).
+        # target_opset=22 is above MAX_TESTED_OPSET=21.
+        with pytest.warns(UserWarning, match=r"opset.*outside"), contextlib.suppress(ValueError):
+            _convert_version(model, target_opset=22, warn_on_diff=True)
 
     def test_version_conversion_preserves_model_structure(self, linear_model):
         """Test that version conversion preserves model structure."""

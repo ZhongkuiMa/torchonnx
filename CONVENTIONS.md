@@ -15,7 +15,7 @@ Every `.py` file begins with a module docstring.
 | # | Rule | Pass/Fail |
 |---|------|-----------|
 | 1.1 | **First line**: short summary of the module's purpose (one sentence) | ☐ |
-| 1.2 | **Extended description** (optional): 1-2 paragraphs after a blank line, covering the module's role in the 6-stage pipeline | ☐ |
+| 1.2 | **Extended description** (optional): 1-2 paragraphs after a blank line, covering the module's role in the 5-stage pipeline | ☐ |
 | 1.3 | **Format**: ReST plain text, no `:param:` or `:return:` tags at module level | ☐ |
 | 1.4 | Always followed by `__docformat__ = "restructuredtext"` | ☐ |
 | 1.5 | **No author, date, or version lines** — git history is authoritative | ☐ |
@@ -25,7 +25,7 @@ Every `.py` file begins with a module docstring.
 
 | File type | Style | Example |
 |-----------|-------|---------|
-| Entry point (`_torchonnx.py`) | One line describing the converter | `"""ONNX-to-PyTorch converter using a 6-stage pipeline."""` |
+| Entry point (`_torchonnx.py`) | One line describing the converter | `"""ONNX-to-PyTorch converter using a 5-stage pipeline."""` |
 | Stage modules (`normalize/`, `build/`, `analyze/`) | One line | `"""Normalize ONNX model for conversion."""` |
 | Handler module (`_handlers/_layers.py`) | One line | `"""Layer handler implementations for code generation."""` |
 | Template module (`_templates.py`) | One line | `"""Code generation templates for PyTorch modules."""` |
@@ -41,7 +41,7 @@ torchonnx uses a main orchestrator class with per-stage subpackages.
 
 ```python
 class TorchONNX:
-    """ONNX-to-PyTorch converter using a 6-stage pipeline.
+    """ONNX-to-PyTorch converter using a 5-stage pipeline.
 
     Converts ONNX models to standalone PyTorch nn.Module code by:
     normalize -> build IR -> analyze semantics -> generate code -> simplify -> export.
@@ -69,7 +69,7 @@ def convert(self, onnx_path: str, output_dir: str | None = None) -> str:
     """
     Convert ONNX model to PyTorch nn.Module code.
 
-    Runs the full 6-stage pipeline: normalize, build IR, analyze,
+    Runs the full 5-stage pipeline: normalize, build IR, analyze,
     generate, simplify, optimize.
 
     :param onnx_path: Path to input ONNX model.
@@ -143,9 +143,9 @@ def convert(self, onnx_path: str, output_dir: str | None = None) -> str:
 
 | # | Rule | Pass/Fail |
 |---|------|-----------|
-| 7.1 | Pipeline order is fixed: **normalize → build IR → analyze → optimize IR → generate → simplify (optimize + format + header)** | ☐ |
+| 7.1 | Pipeline order is fixed: **normalize -> build IR -> analyze -> generate -> simplify (optimize + format + header)** | [x] |
 | 7.2 | Each stage is a separate subpackage under `torchonnx/` | ☐ |
-| 7.3 | Stages communicate via well-defined intermediate formats (ONNX ModelProto → ModelIR → SemanticModelIR → optimized SemanticModelIR → generated code str → formatted code str) | ☐ |
+| 7.3 | Stages communicate via well-defined intermediate formats (ONNX ModelProto -> ModelIR -> SemanticModelIR -> generated code str -> formatted code str) | [x] |
 | 7.4 | `TorchONNX.convert()` orchestrates all stages. The simplify stage has three entry points called sequentially: `optimize_generated_code()`, `format_code()`, `add_file_header()` | ☐ |
 | 7.5 | New stages are added by: create subpackage → add to pipeline in `_torchonnx.py` → update this section | ☐ |
 | 7.6 | Stage entry functions accept the previous stage's output and return the next stage's input | ☐ |
@@ -289,9 +289,9 @@ torchonnx uses `StrEnum` for operator classification (`OperatorClass` in `analyz
 
 | # | Rule | Pass/Fail |
 |---|------|-----------|
-| 17.1 | **Global context**: `_forward_gen_context` module-level variable with `set_forward_gen_context()` / `get_forward_gen_context()` for sharing state between `code_generator.py` and handlers | ☐ |
-| 17.2 | **Helper lifecycle**: IR analyzed via `_get_helper_needs_from_ir()` to determine needed helpers; only needed helpers are generated via `_generate_helpers_from_context()` | ☐ |
-| 17.3 | **Error recovery in generation**: `_generate_forward_body()` catches `(KeyError, RuntimeError, ValueError, AttributeError)` and emits placeholder comments for failed layers instead of crashing | ☐ |
+| 17.1 | **Forward-gen context**: `_forward_gen_context` lives in `generate/_context.py` (re-exported through `_forward_gen.py` for back-compat) with `set_forward_gen_context()` / `get_forward_gen_context()` for sharing state between `code_generator.py` and handlers | [x] |
+| 17.2 | **Helper lifecycle**: IR analyzed via `_get_helper_needs_from_ir()` to determine needed helpers; only needed helpers are generated via `_generate_helpers_from_context()` | [x] |
+| 17.3 | **Fail-fast in generation**: `_generate_forward_body()` re-raises any handler exception as a `RuntimeError` so callers learn about unsupported ops at compile time instead of getting a module that ast-parses but crashes on the first forward pass | [x] |
 | 17.4 | **`OperatorClass` enum**: `LAYER` (nn.Module), `OPERATION` (torch.nn.functional), `OPERATOR` (torch operators). Classification by `_classify_operator_class()` in `analyze/builder.py` | ☐ |
 | 17.5 | **Stage subpackages may import from earlier stages**: `build/` imports from `normalize/` for utility functions; `analyze/` imports from `build/` for IR types. This is an accepted cross-stage coupling for shared data structures | ☐ |
 
@@ -346,5 +346,14 @@ class TorchONNX:
 | 19.4 | **Output format**: first line `TorchONNX: converting <path>`, stage lines `  Stage: description (0.XXXXs)`, final line `  Total: 0.XXXXs` | ☐ |
 | 19.5 | **Per-stage timing**: `t = time.perf_counter()` before each stage, elapsed after | ☐ |
 | 19.6 | **`warnings.warn()` for recoverable errors** — never `logger.warning()`. Warnings independent of verbose flag | ☐ |
-| 19.7 | **`raise ValueError/RuntimeError` for fatal errors** — never `logger.error()` | ☐ |
-| 19.8 | **No `print()` for diagnostic output** in source code | ☐ |
+| 19.7 | **`raise ValueError/RuntimeError` for fatal errors** -- never `logger.error()` | [x] |
+| 19.8 | **No `print()` for diagnostic output** in source code | [x] |
+
+---
+
+## 20. Known Numerical Limits
+
+| # | Rule / observation | Pass/Fail |
+|---|------|-----------|
+| 20.1 | **300-node ML4ACOPF models exceed tier-3 tolerance.** Both `ml4acopf_2023/onnx/300_ieee_ml4acopf.onnx` and `ml4acopf_2024/onnx/300_ieee_ml4acopf.onnx` produce float32 outputs that diverge from `onnxruntime` by up to ``max_abs = 2.15e-02`` / ``max_rel = 5.58e+01`` even though the generated PyTorch module is structurally identical to the (passing) 14- and 118-node variants. The cause is float32 precision accumulation across the 168-node graph on outputs whose magnitude is near zero -- not a handler bug. A future float64 conversion path is the right fix; today these two are tracked as hard fails in `test_verify_model_against_original`. | [x] |
+| 20.2 | **Tolerance tiers**: see `tests/test_benchmarks/test_torchonnx.py` -- `TOLERANCE_TIER1_ABS=1e-6`, `TOLERANCE_TIER2_REL=1e-5`, `TOLERANCE_TIER3_REL=1e-3`, `TOLERANCE_TIER3_ABS=1e-4`. Anything beyond tier 3 is either `TOLERANCE_MISMATCH` (xfail) or `NUMERICAL_MISMATCH` (hard fail). | [x] |

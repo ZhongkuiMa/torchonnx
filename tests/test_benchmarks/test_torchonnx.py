@@ -444,6 +444,9 @@ def _handle_verification_status(status: str, error_msg: str | None) -> None:
         pytest.skip(error_msg or "Test skipped")
 
 
+@pytest.mark.parametrize("model_path", get_benchmark_models())
+@pytest.mark.parametrize("dtype", ["float32"])
+@pytest.mark.parametrize("device", ["cpu"])
 def test_verify_model_against_original(
     model_path,
     dtype,

@@ -1,4 +1,4 @@
-"""Line-by-line code optimization for Stage 6.
+"""Line-by-line code optimization for Stage 5.
 
 Transforms individual lines of generated code.
 """
@@ -8,6 +8,7 @@ __all__ = ["optimize_line"]
 
 import re
 
+from torchonnx.simplify._formatter import _split_args
 from torchonnx.simplify._rules import (
     FUNCTION_DEFAULTS,
     LAYER_DEFAULTS,
@@ -72,7 +73,7 @@ def _optimize_layer_instantiation(line: str) -> str:
     args_str = match.group(3)  # "in_channels=3, out_channels=64, ..."
 
     # Parse arguments
-    args = _parse_args(args_str)
+    args = _split_args(args_str)
 
     # Apply optimizations
     args = _convert_to_positional(layer_type, args)
@@ -197,7 +198,7 @@ def _optimize_function_call(line: str) -> str:
     args_str = match.group(4)  # "x, inplace=False"
 
     # Parse arguments
-    args = _parse_args(args_str)
+    args = _split_args(args_str)
 
     # Remove default arguments
     args = _remove_function_defaults(function_name, args)

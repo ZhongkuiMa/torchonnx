@@ -2,288 +2,29 @@
 
 Handlers for functional operations (OPERATION class).
 Generate code like: x2 = x0.reshape(...), x3 = F.pad(x1, ...), etc.
+
+Shared utilities (``_get_input_code_names``, ``_format_args_with_inputs``,
+``INT64_MAX``, ...) live in ``_operations_utils.py``; this module
+re-imports them so existing call sites and test imports keep working
+unchanged.
 """
 
 __docformat__ = "restructuredtext"
 __all__ = ["register_operation_handlers"]
 
 from torchonnx.analyze import ConstantInfo, ParameterInfo, SemanticLayerIR, VariableInfo
+from torchonnx.generate._context import _get_ctx
+from torchonnx.generate._handlers._operations_utils import (
+    INT64_MAX,
+    _can_infer_reshape_statically,
+    _compute_inferred_dim,
+    _format_args_with_inputs,
+    _get_input_code_name_selective,
+    _get_input_code_names,
+    _require_min_inputs,
+)
 from torchonnx.generate._handlers._registry import register_handler
 from torchonnx.generate._utils import format_argument
-
-
-def _get_input_code_names(layer: SemanticLayerIR) -> list[str]:
-    """Get code names for all inputs.
-
-    Adds self. prefix for parameters and constants (registered as buffers).
-    Marks constants/parameters as used in the forward generation context.
-
-    :param layer: Semantic layer IR.
-
-    :return: List of code names
-    """
-    from torchonnx.generate._forward_gen import _get_ctx
-
-    names = []
-    ctx = _get_ctx()
-
-    for inp in layer.inputs:
-        if isinstance(inp, (ParameterInfo, ConstantInfo)):
-            names.append(f"self.{inp.code_name}")
-            if isinstance(inp, ConstantInfo):
-                ctx.mark_constant_used(inp.code_name)
-            else:
-                ctx.mark_parameter_used(inp.code_name)
-        else:
-            names.append(inp.code_name)
-    return names
-
-
-def _get_input_code_name_selective(
-    inp: VariableInfo | ParameterInfo | ConstantInfo,
-) -> str:
-    """Get code name for a single input, marking constants/parameters as used.
-
-    :param inp: Input info.
-
-    :return: Code name string (e.g., 'self.const_0', 'x1')
-    """
-    from torchonnx.generate._forward_gen import _get_ctx
-
-    if isinstance(inp, ConstantInfo):
-        _get_ctx().mark_constant_used(inp.code_name)
-        return f"self.{inp.code_name}"
-    if isinstance(inp, ParameterInfo):
-        _get_ctx().mark_parameter_used(inp.code_name)
-        return f"self.{inp.code_name}"
-    # Variable - just return code name
-    return inp.code_name
-
-
-def _format_args_with_inputs(layer: SemanticLayerIR, extra_inputs: list[str] | None = None) -> str:
-    """Format function arguments (inputs + keyword args).
-
-        :param layer: Semantic layer IR.
-    :param extra_inputs: Additional input names to prepend.
-
-        :return: Formatted argument string
-    """
-    all_inputs = (extra_inputs or []) + _get_input_code_names(layer)
-    args_parts = all_inputs.copy()
-
-    # Add keyword arguments
-    for arg in layer.arguments:
-        if arg.pytorch_name and arg.value is not None:
-            formatted_value = format_argument(arg.value)
-            args_parts.append(f"{arg.pytorch_name}={formatted_value}")
-
-    return ", ".join(args_parts)
-
-
-def _compute_inferred_dim(
-    input_shape: list[int] | tuple[int | str, ...], shape_list: list
-) -> int | None:
-    """Compute inferred dimension when shape contains -1.
-
-        :param input_shape: Input tensor shape (only concrete int dimensions are used).
-    :param shape_list: Target reshape shape with -1 placeholder.
-
-        :return: Inferred dimension or None if can't compute
-    """
-    import math
-
-    # Convert to list of ints, filtering out symbolic dimensions
-    int_shape = [d for d in input_shape if isinstance(d, int)]
-    total_elements: int = int(math.prod(int_shape))
-
-    known_product: int = 1
-    minus_one_idx: int = -1
-    for i, dim in enumerate(shape_list):
-        if dim == -1:
-            minus_one_idx = i
-        elif isinstance(dim, int):
-            known_product *= dim
-
-    if known_product <= 0 or minus_one_idx < 0:
-        return None
-
-    return total_elements // known_product
-
-
-def _require_min_inputs(
-    layer: SemanticLayerIR, min_count: int, operation_name: str | None = None
-) -> None:  # pragma: no cover
-    """Validate that a layer has at least the minimum number of inputs.
-
-    Raises ValueError with a descriptive message if validation fails.
-
-    :param layer: Semantic layer IR to validate.
-    :param min_count: Minimum number of required inputs.
-    :param operation_name: Optional operation name for error message (defaults to layer.name).
-
-    :raises ValueError: If layer has fewer than min_count inputs.
-    """
-    if len(layer.inputs) < min_count:
-        op_name = operation_name or layer.name
-        raise ValueError(
-            f"{op_name} requires at least {min_count} input(s), got {len(layer.inputs)}"
-        )
-
-
-def _can_infer_reshape_statically(
-    input_shape: tuple[int | str, ...] | None,
-    shape_list: list[int],
-) -> bool:
-    """Check if reshape can be statically inferred with -1 replacement.
-
-        Returns True when input shape is known with all-integer dimensions
-        and the target shape only contains integers and -1.
-
-        :param input_shape: Input tensor shape (may contain symbolic dimensions).
-    :param shape_list: Target reshape shape with possible -1 placeholder.
-
-        :return: True if reshape can be statically inferred
-    """
-    if not input_shape:
-        return False
-    return all(isinstance(d, int) for d in input_shape) and all(
-        isinstance(d, int) or d == -1 for d in shape_list
-    )
-
-
-def _handle_reshape(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
-    """Handle reshape operation.
-
-        Detects common patterns:
-        - Flatten pattern (batch, -1): generates x.flatten(1) for batch-aware flattening
-        - Other reshapes: generates x.reshape(shape) with batch dimension preserved
-
-        When the target shape contains -1 and the first dimension is 1 (hardcoded batch),
-        we need to compute what -1 resolves to, replace it with the computed value,
-        then set the batch dimension to -1 for dynamic batching.
-
-        :param layer: Semantic layer IR.
-    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
-
-        :return: Generated code line
-    """
-    output = layer.outputs[0].code_name
-
-    _require_min_inputs(layer, 2, "Reshape")
-
-    data = _get_input_code_name_selective(layer.inputs[0])
-    shape_input = layer.inputs[1]
-
-    # If shape is a constant, use Python literal directly
-    if isinstance(shape_input, ConstantInfo):
-        shape_data = shape_input.data
-        shape_list: list[int] = shape_data.tolist()  # pyright: ignore[reportAssignmentType]
-        if not isinstance(shape_list, list):
-            shape_list = [shape_list]
-
-        # Detect flatten pattern: reshape(batch_size, -1) -> flatten(1)
-        if len(shape_list) == 2 and shape_list[1] == -1:
-            return f"{output} = {data}.flatten(1)"
-
-        # Handle batch-aware reshaping for first dim=1 cases
-        if len(shape_list) >= 1 and shape_list[0] == 1:
-            if -1 in shape_list:
-                input_info = layer.inputs[0]
-                input_shape = input_info.shape if hasattr(input_info, "shape") else None
-
-                if _can_infer_reshape_statically(input_shape, shape_list):
-                    assert input_shape is not None
-                    inferred_dim = _compute_inferred_dim(input_shape, shape_list)
-                    if inferred_dim is not None:
-                        minus_one_idx = shape_list.index(-1)
-                        shape_list[minus_one_idx] = inferred_dim
-                        shape_list[0] = -1
-            else:
-                shape_list[0] = -1
-
-        shape_literal = tuple(shape_list)
-        return f"{output} = {data}.reshape{shape_literal}"
-
-    # Dynamic shape - use tolist() at runtime
-    shape_code = _get_input_code_name_selective(shape_input)
-    return f"{output} = {data}.reshape([int(x) for x in {shape_code}.tolist()])"
-
-
-def _handle_transpose(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
-    """Handle transpose/permute operation.
-
-    Generates: output = input.permute(dims)
-
-    :param layer: Semantic layer IR.
-
-    :return: Generated code line
-    """
-    inputs = _get_input_code_names(layer)
-    output = layer.outputs[0].code_name
-
-    # Get perm argument
-    perm_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "perm"), None)
-
-    if perm_arg:
-        perm = format_argument(perm_arg.value)
-        return f"{output} = {inputs[0]}.permute({perm})"
-    # Default transpose (swap last two dims)
-    return f"{output} = {inputs[0]}.transpose(-2, -1)"
-
-
-def _handle_squeeze(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
-    """Handle squeeze operation.
-
-    :param layer: Semantic layer IR.
-
-    :return: Generated code line
-    """
-    inputs = _get_input_code_names(layer)
-    output = layer.outputs[0].code_name
-
-    # Get dim argument
-    dim_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "dim"), None)
-
-    if dim_arg:
-        dim = format_argument(dim_arg.value)
-        return f"{output} = {inputs[0]}.squeeze({dim})"
-    return f"{output} = {inputs[0]}.squeeze()"
-
-
-def _handle_unsqueeze(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
-    """Handle unsqueeze operation.
-
-        In ONNX opset 13+, axes is the second input tensor.
-        In older opsets, axes is an attribute.
-
-        :param layer: Semantic layer IR.
-    :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
-
-        :return: Generated code line
-    """
-    output = layer.outputs[0].code_name
-
-    # Get dim argument (from attributes for older opsets)
-    dim_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "dim"), None)
-
-    # Process data input
-    data = _get_input_code_name_selective(layer.inputs[0])
-
-    if dim_arg and dim_arg.value is not None:
-        dim = format_argument(dim_arg.value)
-        return f"{output} = {data}.unsqueeze({dim})"
-    if len(layer.inputs) >= 2:
-        # ONNX opset 13+: axes is the second input
-        axes_input = layer.inputs[1]
-        if isinstance(axes_input, ConstantInfo):
-            # Use literal (don't mark as used)
-            axes_value = int(axes_input.data.item())
-            return f"{output} = {data}.unsqueeze({axes_value})"
-        # Dynamic axes (mark as used)
-        axes_code = _get_input_code_name_selective(axes_input)
-        return f"{output} = {data}.unsqueeze({axes_code}.item())"
-    # Fallback: unsqueeze at dim 0
-    return f"{output} = {data}.unsqueeze(0)"
 
 
 def _prepare_concat_inputs(
@@ -300,8 +41,6 @@ def _prepare_concat_inputs(
 
     :return: Tuple of (input_codes: list[str], concat_axis: int)
     """
-    from torchonnx.generate._forward_gen import _get_ctx
-
     ctx = _get_ctx()
 
     # Get axis argument
@@ -387,10 +126,16 @@ def _handle_pad(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> s
     Conversion: split into begins/ends, reverse, interleave
 
     When pads is a constant, preprocess to Python literal for cleaner code.
+    When pads or value is runtime AND ``vmap_mode=True``, we raise at codegen
+    time. The runtime path needs ``.tolist()`` / ``.item()`` which silently
+    break ``torch.vmap`` and ``torch.compile``; the caller asked for a
+    vmap-safe module, so pretending the runtime branch is safe would land a
+    silent regression on the verification sweep.
 
     :param layer: Semantic layer IR.
 
-    :return: Generated code line
+    :return: Generated code line.
+    :raises ValueError: If ``vmap_mode=True`` and pads or value is runtime.
     """
     inputs = _get_input_code_names(layer)
     output = layer.outputs[0].code_name
@@ -406,6 +151,21 @@ def _handle_pad(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> s
     # Get mode from arguments
     mode_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "mode"), None)
     mode = format_argument(mode_arg.value) if mode_arg and mode_arg.value else "'constant'"
+
+    runtime_pads = not isinstance(pads_input, ConstantInfo)
+    runtime_value = bool(
+        value_input
+        and not (isinstance(value_input, ConstantInfo) and value_input.data.numel() == 1)
+    )
+    ctx = _get_ctx()
+    if ctx.vmap_mode and (runtime_pads or runtime_value):
+        problem = "pads" if runtime_pads else "value"
+        raise ValueError(
+            f"Pad layer {layer.name!r}: vmap_mode=True but {problem} is runtime, "
+            "which forces .tolist() / .item() and silently breaks torch.vmap "
+            "and torch.compile. Provide a constant pads/value or call "
+            "convert(vmap_mode=False) for this model."
+        )
 
     # Check if pads is a constant - if so, convert to Python literal
     if isinstance(pads_input, ConstantInfo):
@@ -484,8 +244,6 @@ def _handle_clip(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> 
     # Process data input
     data_input = layer.inputs[0]
     if isinstance(data_input, (ParameterInfo, ConstantInfo)):
-        from torchonnx.generate._forward_gen import _get_ctx
-
         ctx = _get_ctx()
         if isinstance(data_input, ConstantInfo):
             ctx.mark_constant_used(data_input.code_name)
@@ -548,32 +306,50 @@ def _handle_gather(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
     axis_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "axis"), None)
     axis = int(axis_arg.value) if axis_arg else 0
 
-    # Check if indices is a constant - use literals only for small indices (≤10 elements)
+    # Check if indices is a constant - use literals only for small indices (<=10 elements)
     if isinstance(indices_input, ConstantInfo):
         indices_data = indices_input.data
-        # Note: INT64_MAX (9223372036854775807) means "until the end", convert to -1
-        int64_max = 9223372036854775807
 
         if indices_data.numel() == 1:
             # Scalar index - use bracket slicing notation (don't mark as used)
             idx_value = int(indices_data.item())
-            idx_value = -1 if idx_value == int64_max else idx_value
+            idx_value = -1 if idx_value == INT64_MAX else idx_value
             # Build slice with proper axis
             slices = [":" for _ in range(axis)] + [str(idx_value)]
             return f"{output} = {data}[{', '.join(slices)}]"
         # All indices use buffer reference for device control and performance
-        # (avoid creating tensors on every forward pass)
+        # (avoid creating tensors on every forward pass). Multi-dim ONNX
+        # Gather requires the post-index_select tensor to be reshaped from
+        # ``data.shape[:axis] + (indices.numel(),) + data.shape[axis+1:]`` to
+        # ``data.shape[:axis] + indices.shape + data.shape[axis+1:]``.
+        # For scalar / 1-D constant indices ``index_select`` already returns
+        # the right shape; for K>=2 constant indices we emit the reshape
+        # explicitly because the indices shape is known at codegen time.
         indices_code = _get_input_code_name_selective(indices_input)
-        return f"{output} = {data}.index_select({axis}, {indices_code}.reshape(-1).long())"
+        indices_shape = tuple(indices_data.shape)
+        select_expr = f"{data}.index_select({axis}, {indices_code}.reshape(-1).long())"
+        if len(indices_shape) >= 2:
+            reshape_expr = f"*{data}.shape[:{axis}], *{indices_shape}, *{data}.shape[{axis} + 1:]"
+            return f"{output} = {select_expr}.reshape({reshape_expr})"
+        return f"{output} = {select_expr}"
 
-    # Runtime indices - need dynamic handling (mark as used)
+    # Runtime indices - need dynamic handling (mark as used). The unified
+    # ``.reshape(*data.shape[:axis], *indices.shape, *data.shape[axis+1:])``
+    # form correctly covers all three ONNX Gather index ranks at runtime:
+    #   - scalar indices (.dim() == 0): indices.shape == (), so the reshape
+    #     drops axis from the output -- equivalent to ``.squeeze(axis)``;
+    #   - 1-D indices: indices.shape == (n,), so the reshape is a no-op;
+    #   - K-D indices (K >= 2): the reshape restores the indices.shape
+    #     dimensions that index_select otherwise flattened away.
+    # The old code branched between squeeze (scalar) and bare index_select
+    # (K >= 1) and silently rank-collapsed K-D indices, which then surfaced
+    # as a cryptic matmul shape error far from the offending Gather.
     indices_code = _get_input_code_name_selective(indices_input)
-    # ONNX Gather with scalar indices reduces that dimension
-    # Use index_select then squeeze if scalar, else just index_select
     return (
         f"{output} = {data}.index_select({axis}, {indices_code}.reshape(-1).long())"
-        f".squeeze({axis}) if {indices_code}.dim() == 0 else "
-        f"{data}.index_select({axis}, {indices_code}.reshape(-1).long())"
+        f".reshape("
+        f"*{data}.shape[:{axis}], *{indices_code}.shape, *{data}.shape[{axis} + 1:]"
+        f")"
     )
 
 
@@ -599,10 +375,16 @@ def _handle_constant_of_shape(layer: SemanticLayerIR, layer_name_mapping: dict[s
             # Use string comparison for dtype mapping
             dtype_name = str(val.dtype)
             dtype_map = {
-                "int64": "torch.int64",
-                "int32": "torch.int32",
+                "float16": "torch.float16",
                 "float32": "torch.float32",
                 "float64": "torch.float64",
+                "int8": "torch.int8",
+                "int16": "torch.int16",
+                "int32": "torch.int32",
+                "int64": "torch.int64",
+                "uint8": "torch.uint8",
+                "bool": "torch.bool",
+                "bfloat16": "torch.bfloat16",
             }
             if dtype_name in dtype_map:
                 dtype_str = f", dtype={dtype_map[dtype_name]}"
@@ -617,8 +399,6 @@ def _handle_constant_of_shape(layer: SemanticLayerIR, layer_name_mapping: dict[s
     shape_input = layer.inputs[0]
 
     # Get device from first forward input
-    from torchonnx.generate._forward_gen import _get_ctx
-
     ctx = _get_ctx()
     device_expr = f"{ctx.first_input_name}.device" if ctx.first_input_name else "'cpu'"
 
@@ -670,8 +450,6 @@ def _handle_arange(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
             has_runtime_value = True
 
     # Add device parameter: use runtime value's device if available, else first input's device
-    from torchonnx.generate._forward_gen import _get_ctx
-
     if has_runtime_value and runtime_arg:
         device_expr = f", device={runtime_arg}.device"
     else:
@@ -700,12 +478,11 @@ def _generate_literal_slice(
 
         :return: Generated code
     """
-    int64_max = 9223372036854775807
     slice_parts = {}
 
     for i, axis in enumerate(axes):
-        start = starts[i] if starts[i] != int64_max else 0
-        end = "" if ends[i] == int64_max else ends[i]
+        start = starts[i] if starts[i] != INT64_MAX else 0
+        end = "" if ends[i] == INT64_MAX else ends[i]
         step = steps[i]
 
         # Build slice string for this axis
@@ -784,7 +561,7 @@ def _normalize_int64_max(values):
     """Convert INT64_MAX to -1 in a list or scalar."""
     if isinstance(values, list):
         return [_normalize_int64_max(v) for v in values]
-    return -1 if values == 9223372036854775807 else values
+    return -1 if values == INT64_MAX else values
 
 
 def _encode_slice_input(input_val, default: str) -> str:
@@ -819,8 +596,6 @@ def _handle_slice(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) ->
 
         :return: Generated code line
     """
-    from torchonnx.generate._forward_gen import _get_ctx
-
     output = layer.outputs[0].code_name
 
     # ONNX Slice inputs: data, starts, ends, [axes], [steps]
@@ -883,16 +658,21 @@ def _handle_slice(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) ->
     axes_code = _encode_slice_input(axes_input, "None")
     steps_code = _encode_slice_input(steps_input, "None")
 
-    # In vmap mode, dynamic_slice returns (result, valid_flag) tuple
+    # In vmap mode, dynamic_slice returns (result, valid_flag) tuple. The valid
+    # flag is recorded per-output on the ctx so a directly downstream ScatterND
+    # can consume the matching producer's flag (see _handle_scatter_nd). The
+    # earlier design multiplied every slice's validity into a single
+    # _slice_valid global, which corrupted every later scatter as soon as any
+    # one slice went out of bounds.
     if ctx.vmap_mode:
         slice_lengths = ctx.get_slice_lengths(layer.name)
         slice_lengths_code = str(slice_lengths) if slice_lengths else "None"
         valid_var = f"{output}_valid"
+        ctx.slice_valid_var_by_output[output] = valid_var
         fn_args = (
             f"{data}, {starts_code}, {ends_code}, {axes_code}, {steps_code}, {slice_lengths_code}"
         )
-        valid_update = f"_slice_valid = _slice_valid * {valid_var}"
-        return f"{output}, {valid_var} = dynamic_slice({fn_args}); {valid_update}"
+        return f"{output}, {valid_var} = dynamic_slice({fn_args})"
 
     slice_args = f"{data}, {starts_code}, {ends_code}, {axes_code}, {steps_code}"
     return f"{output} = dynamic_slice({slice_args})"
@@ -916,15 +696,23 @@ def _handle_cast(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> 
         1: "torch.float32",
         2: "torch.uint8",
         3: "torch.int8",
+        5: "torch.int16",
         6: "torch.int32",
         7: "torch.int64",
         9: "torch.bool",
         10: "torch.float16",
         11: "torch.float64",
+        16: "torch.bfloat16",
     }
 
     if to_arg:
-        dtype = onnx_to_torch_dtype.get(to_arg.value, "torch.float32")
+        dtype = onnx_to_torch_dtype.get(to_arg.value)
+        if dtype is None:
+            raise ValueError(
+                f"Cast to ONNX dtype {to_arg.value} is not supported; "
+                f"no PyTorch equivalent available (type 4=uint16, 8=string, "
+                f"12=uint32, 13=uint64, 14=complex64, 15=complex128)"
+            )
         return f"{output} = {inputs[0]}.to({dtype})"
     return f"{output} = {inputs[0]}"
 
@@ -995,8 +783,6 @@ def _handle_expand_constant_shape(
 
         :return: Generated code or None to defer to runtime helper
     """
-    from torchonnx.generate._forward_gen import _get_ctx
-
     target_shape: list[int] = shape_input.data.tolist()  # pyright: ignore[reportAssignmentType]
     if not isinstance(target_shape, list):
         target_shape = [target_shape]
@@ -1028,8 +814,6 @@ def _handle_expand_runtime_shape(
 
         :return: Generated code
     """
-    from torchonnx.generate._forward_gen import _get_ctx
-
     ctx = _get_ctx()
     ctx.needs_dynamic_expand = True
     shape_code = _get_input_code_name_selective(shape_input)
@@ -1118,41 +902,50 @@ def _handle_split(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) ->
     output = layer.outputs[0].code_name
     if split_sizes_code:
         return f"{output} = {data}.split({split_sizes_code}, dim={dim})"
-    return f"{output} = {data}.chunk(2, dim={dim})"
+    # Try num_outputs from attributes; fall back to identity (split into 1).
+    num_outputs = next(
+        (a.value for a in layer.arguments if a.pytorch_name == "num_outputs"),
+        None,
+    )
+    if num_outputs and num_outputs > 1:
+        return f"{output}, = {data}.chunk({num_outputs}, dim={dim})"
+    return f"{output} = {data}"
 
 
 def _handle_scatter_nd(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Handle ScatterND operation.
 
-    ScatterND requires a helper function as there's no direct PyTorch equivalent.
-    The helper wraps torch.index_put_ with proper index format conversion.
+    ScatterND requires a helper because PyTorch has no direct equivalent;
+    the helper wraps functional ``torch.scatter`` with proper index conversion.
 
-    In vmap mode, passes the accumulated validity flag from dynamic_slice operations.
-    When validity is 0 (any slice was empty/out-of-bounds), scatter_nd returns
-    the original data unchanged, matching standard mode's empty-tensor behavior.
+    In vmap mode we only suppress the scatter when the *specific* Slice that
+    produced this scatter's data input went out of bounds; we look up that
+    producer's validity flag in the forward-gen context. If the data tensor
+    didn't come straight from a Slice op, we omit ``valid`` entirely and the
+    scatter always runs. This replaces the earlier global accumulator, which
+    zeroed every scatter in the model as soon as any one slice was empty.
 
     :param layer: Semantic layer IR.
 
     :return: Generated code line
     """
-    from torchonnx.generate._forward_gen import _get_ctx
-
     inputs = _get_input_code_names(layer)
     output = layer.outputs[0].code_name
 
-    # Mark that we need the scatter_nd helper
     ctx = _get_ctx()
     ctx.needs_scatter_nd = True
 
-    # ScatterND(data, indices, updates) - no direct PyTorch equivalent
-    if len(inputs) >= 3:
-        # In vmap mode, pass the accumulated validity flag
-        if ctx.vmap_mode:
+    if len(inputs) < 3:
+        return f"{output} = {inputs[0]}"
+
+    if ctx.vmap_mode:
+        valid_var = ctx.slice_valid_var_by_output.get(inputs[0])
+        if valid_var is not None:
             return (
-                f"{output} = scatter_nd({inputs[0]}, {inputs[1]}, {inputs[2]}, valid=_slice_valid)"
+                f"{output} = scatter_nd({inputs[0]}, {inputs[1]}, {inputs[2]}, valid={valid_var})"
             )
-        return f"{output} = scatter_nd({inputs[0]}, {inputs[1]}, {inputs[2]})"
-    return f"{output} = {inputs[0]}"
+
+    return f"{output} = scatter_nd({inputs[0]}, {inputs[1]}, {inputs[2]})"
 
 
 def _handle_reduce(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
@@ -1199,8 +992,8 @@ def _handle_linear(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
     F.linear(input, weight, bias=None) performs a linear transformation.
 
     ONNX Gemm behavior depends on transB attribute:
-      - transB=0 (default): weight shape = (in_features, out_features) → needs transpose
-      - transB=1: weight shape = (out_features, in_features) → already correct
+      - transB=0 (default): weight shape = (in_features, out_features) -> needs transpose
+      - transB=1: weight shape = (out_features, in_features) -> already correct
     PyTorch F.linear expects: weight shape = (out_features, in_features)
 
     :param layer: Semantic layer IR.
@@ -1216,17 +1009,6 @@ def _handle_linear(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
     data = inputs[0]
     weight = inputs[1]
     bias = inputs[2] if len(inputs) >= 3 else None
-
-    # Check transB attribute to determine if weight needs transpose
-    trans_b = 0  # Default value
-    for arg in layer.arguments:
-        if arg.pytorch_name == "transB":
-            trans_b = arg.value
-            break
-
-    # Only transpose if transB=0 (ONNX weight is in_features x out_features)
-    if trans_b == 0:
-        weight = f"{weight}.t()"
 
     if bias:
         return f"{output} = F.linear({data}, {weight}, {bias})"
@@ -1346,6 +1128,76 @@ def _handle_generic_method(layer: SemanticLayerIR, layer_name_mapping: dict[str,
     args_str = ", ".join(args_parts) if args_parts else ""
 
     return f"{output} = {inputs[0]}.{method_name}({args_str})"
+
+
+def _handle_reshape(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
+    output = layer.outputs[0].code_name
+    _require_min_inputs(layer, 2, "Reshape")
+    data = _get_input_code_name_selective(layer.inputs[0])
+    shape_input = layer.inputs[1]
+    if isinstance(shape_input, ConstantInfo):
+        shape_data = shape_input.data
+        shape_list: list[int] = shape_data.tolist()
+        if not isinstance(shape_list, list):
+            shape_list = [shape_list]
+        if len(shape_list) == 2 and shape_list[1] == -1:
+            return f"{output} = {data}.flatten(1)"
+        input_info = layer.inputs[0]
+        input_shape = input_info.shape if hasattr(input_info, "shape") else None
+        input_has_batch_leading_one = bool(
+            input_shape and len(input_shape) >= 1 and input_shape[0] == 1
+        )
+        if len(shape_list) >= 1 and shape_list[0] == 1 and input_has_batch_leading_one:
+            if -1 in shape_list:
+                if _can_infer_reshape_statically(input_shape, shape_list):
+                    assert input_shape is not None
+                    inferred_dim = _compute_inferred_dim(input_shape, shape_list)
+                    if inferred_dim is not None:
+                        minus_one_idx = shape_list.index(-1)
+                        shape_list[minus_one_idx] = inferred_dim
+                        shape_list[0] = -1
+            else:
+                shape_list[0] = -1
+        return f"{output} = {data}.reshape{tuple(shape_list)}"
+    shape_code = _get_input_code_name_selective(shape_input)
+    return f"{output} = {data}.reshape([int(x) for x in {shape_code}.tolist()])"
+
+
+def _handle_transpose(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
+    inputs = _get_input_code_names(layer)
+    output = layer.outputs[0].code_name
+    perm_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "perm"), None)
+    if perm_arg:
+        perm = format_argument(perm_arg.value)
+        return f"{output} = {inputs[0]}.permute({perm})"
+    return f"{output} = {inputs[0]}.transpose(-2, -1)"
+
+
+def _handle_squeeze(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
+    inputs = _get_input_code_names(layer)
+    output = layer.outputs[0].code_name
+    dim_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "dim"), None)
+    if dim_arg:
+        dim = format_argument(dim_arg.value)
+        return f"{output} = {inputs[0]}.squeeze({dim})"
+    return f"{output} = {inputs[0]}.squeeze()"
+
+
+def _handle_unsqueeze(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
+    output = layer.outputs[0].code_name
+    dim_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "dim"), None)
+    data = _get_input_code_name_selective(layer.inputs[0])
+    if dim_arg and dim_arg.value is not None:
+        dim = format_argument(dim_arg.value)
+        return f"{output} = {data}.unsqueeze({dim})"
+    if len(layer.inputs) >= 2:
+        axes_input = layer.inputs[1]
+        if isinstance(axes_input, ConstantInfo):
+            axes_value = int(axes_input.data.item())
+            return f"{output} = {data}.unsqueeze({axes_value})"
+        axes_code = _get_input_code_name_selective(axes_input)
+        return f"{output} = {data}.unsqueeze({axes_code}.item())"
+    return f"{output} = {data}.unsqueeze(0)"
 
 
 def register_operation_handlers() -> None:

@@ -8,6 +8,7 @@ __docformat__ = "restructuredtext"
 __all__ = ["register_operator_handlers"]
 
 from torchonnx.analyze import ConstantInfo, ParameterInfo, SemanticLayerIR, VariableInfo
+from torchonnx.generate._context import _get_ctx
 from torchonnx.generate._handlers._registry import register_handler
 
 
@@ -48,14 +49,9 @@ def _get_input_code_name(
             values = inp.data.tolist()
             return f"torch.tensor({values})"
         # Non-literal constant - mark as used
-        from torchonnx.generate._forward_gen import _get_ctx
-
         _get_ctx().mark_constant_used(inp.code_name)
         return f"self.{inp.code_name}"
     if isinstance(inp, ParameterInfo):
-        # Import here to avoid circular dependency
-        from torchonnx.generate._forward_gen import _get_ctx
-
         _get_ctx().mark_parameter_used(inp.code_name)
         return f"self.{inp.code_name}"
     return inp.code_name
