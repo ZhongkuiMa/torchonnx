@@ -60,10 +60,41 @@ def optimize_generated_code(
 
     # Filter state_dict if provided
     if state_dict is not None:
-        filtered_state_dict = {k: v for k, v in state_dict.items() if k not in removed_buffers}
+        filtered_state_dict = _filter_state_dict(code, state_dict, removed_buffers)
         return code, filtered_state_dict
 
     return code
+
+
+def _filter_state_dict(
+    code: str, state_dict: dict[str, Tensor], removed_buffers: set[str]
+) -> dict[str, Tensor]:
+    """Keep only state_dict entries the generated module actually owns.
+
+    A module's ``load_state_dict`` (strict) rejects keys the class does
+    not declare. Two sources of orphan keys exist:
+    - buffers registered then pruned as unused (``removed_buffers``);
+    - constants the generator inlined as literals (e.g. a Reshape shape
+      emitted as ``x.reshape(-1, 784)``) yet still exported to the
+      ``.pth``. These never get a ``register_buffer`` line, so the
+      unused-buffer pass cannot see them.
+
+    Keep a key when its top-level segment is referenced as ``self.<seg>``
+    in the code: submodule params (``linear1.weight`` -> ``self.linear1``)
+    and live buffers (``c5`` -> ``self.c5``) survive; orphan constants
+    (``c0`` with no ``self.c0``) are dropped.
+
+    :param code: Optimized generated module source.
+    :param state_dict: Raw state dict from code generation.
+    :param removed_buffers: Buffer names pruned by the unused-buffer pass.
+    :return: State dict restricted to keys the module declares.
+    """
+    used_names = set(re.findall(r"\bself\.([a-zA-Z_]\w*)\b", code))
+    return {
+        key: value
+        for key, value in state_dict.items()
+        if key not in removed_buffers and key.split(".", 1)[0] in used_names
+    }
 
 
 def _remove_unused_buffers(code: str) -> tuple[str, set[str]]:

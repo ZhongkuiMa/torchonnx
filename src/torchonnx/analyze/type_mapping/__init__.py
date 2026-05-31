@@ -29,7 +29,12 @@ from torchonnx.analyze.type_mapping._operations import (
 
 
 def _get_conv_pytorch_type(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
-    """Get PyTorch Conv type from weight shape."""
+    """Get PyTorch Conv type from weight shape.
+
+    A dynamic weight (not a static initializer, e.g. spectral-normalized
+    conv) cannot become an ``nn.Conv2d`` module since its kernel shape is
+    unknown at construction time; emit the functional ``F.conv`` instead.
+    """
     if len(node.input) >= 2 and node.input[1] in initializers:
         weight_tensor = initializers[node.input[1]]
         weight_array = numpy_helper.to_array(weight_tensor)
@@ -39,11 +44,15 @@ def _get_conv_pytorch_type(node: NodeProto, initializers: dict[str, TensorProto]
         if weight_ndim == 4:
             return "nn.Conv2d"
         raise NotImplementedError(f"Unsupported Conv: {weight_ndim}D")
-    return "nn.Conv2d"
+    return "F.conv"
 
 
 def _get_convtranspose_pytorch_type(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
-    """Get PyTorch ConvTranspose type from weight shape."""
+    """Get PyTorch ConvTranspose type from weight shape.
+
+    A dynamic weight (not a static initializer) cannot become an
+    ``nn.ConvTranspose2d`` module; emit the functional ``F.conv_transpose``.
+    """
     if len(node.input) >= 2 and node.input[1] in initializers:
         weight_tensor = initializers[node.input[1]]
         weight_array = numpy_helper.to_array(weight_tensor)
@@ -53,7 +62,7 @@ def _get_convtranspose_pytorch_type(node: NodeProto, initializers: dict[str, Ten
         if weight_ndim == 4:
             return "nn.ConvTranspose2d"
         raise NotImplementedError(f"Unsupported ConvTranspose: {weight_ndim}D")
-    return "nn.ConvTranspose2d"
+    return "F.conv_transpose"
 
 
 def convert_to_pytorch_type(node: NodeProto, initializers: dict[str, TensorProto]) -> str:

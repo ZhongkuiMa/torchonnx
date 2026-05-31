@@ -343,6 +343,40 @@ class TestTypeMappingLayers:
         assert is_layer_with_args("nn.Conv2d")
 
 
+class TestDynamicWeightConv:
+    """Conv / ConvTranspose with a runtime-computed (dynamic) weight.
+
+    A spectral-normalized conv divides its kernel by its spectral norm on
+    every forward, so the weight is a graph variable, not a static
+    initializer. Such a node cannot become an ``nn.Conv2d`` module (its
+    kernel shape is unknown at construction time); it must map to the
+    functional ``F.conv`` path. Regression guard for the empty
+    ``nn.Conv2d()`` codegen bug.
+    """
+
+    @staticmethod
+    def _make_conv_node(op_type: str) -> onnx.NodeProto:
+        return onnx.helper.make_node(
+            op_type,
+            inputs=["data", "dynamic_weight", "bias"],
+            outputs=["out"],
+            kernel_shape=[3, 3],
+        )
+
+    def test_dynamic_weight_conv_maps_to_functional(self):
+        """A Conv whose weight is absent from initializers maps to F.conv."""
+        node = self._make_conv_node("Conv")
+        # Only the bias is a static initializer; the weight is dynamic.
+        initializers = {"bias": onnx.TensorProto()}
+        assert convert_to_pytorch_type(node, initializers) == "F.conv"
+
+    def test_dynamic_weight_convtranspose_maps_to_functional(self):
+        """A ConvTranspose with a dynamic weight maps to F.conv_transpose."""
+        node = self._make_conv_node("ConvTranspose")
+        initializers = {"bias": onnx.TensorProto()}
+        assert convert_to_pytorch_type(node, initializers) == "F.conv_transpose"
+
+
 class TestTypeMappingOperations:
     """Test mapping of ONNX operators to PyTorch operations.
 

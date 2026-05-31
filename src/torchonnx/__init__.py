@@ -1,7 +1,7 @@
 """ONNX-to-PyTorch model conversion framework."""
 
 __docformat__ = "restructuredtext"
-__version__ = "2026.5.4"
+__version__ = "2026.5.6"
 __all__ = [
     "BENCHMARKS_WITHOUT_BATCH_DIM",
     "TorchONNX",

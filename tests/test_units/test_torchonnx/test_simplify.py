@@ -121,6 +121,33 @@ class TestOptimizeCode:
         result = optimize_generated_code(code)
         assert isinstance(result, str)
 
+    def test_optimize_drops_orphan_inlined_constants_from_state_dict(self):
+        """State dict keys never referenced as ``self.<name>`` are dropped.
+
+        A Reshape shape constant inlined as a literal in ``forward``
+        still lands in the state dict; without filtering, a strict
+        ``load_state_dict`` rejects it. Submodule params and live
+        buffers survive.
+        """
+        code = (
+            "class Model(nn.Module):\n"
+            "    def __init__(self):\n"
+            "        self.linear1 = nn.Linear(4, 2)\n"
+            '        self.register_buffer("c5", t)\n'
+            "    def forward(self, x0):\n"
+            "        x1 = self.linear1(x0)\n"
+            "        x2 = x1.reshape(-1, 2)\n"
+            "        return x2 + self.c5\n"
+        )
+        state_dict = {
+            "linear1.weight": torch.zeros(2, 4),
+            "linear1.bias": torch.zeros(2),
+            "c5": torch.zeros(2),
+            "c0": torch.tensor([-1, 2]),  # orphan inlined reshape shape
+        }
+        _, filtered = optimize_generated_code(code, state_dict)
+        assert set(filtered) == {"linear1.weight", "linear1.bias", "c5"}
+
 
 class TestFileHeaders:
     """Test file header generation."""

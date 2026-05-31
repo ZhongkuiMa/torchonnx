@@ -30,10 +30,40 @@ import onnxruntime as ort
 import pytest
 import torch
 
+from torchonnx import TorchONNX
 from torchonnx.analyze import build_semantic_ir
 from torchonnx.build import build_model_ir
 from torchonnx.generate import generate_pytorch_module
 from torchonnx.normalize import load_and_preprocess_onnx_model
+
+
+def test_convert_inlined_reshape_loads_strict_without_orphan_keys(reshape_model, tmp_path):
+    """Full conversion of a Reshape model loads strictly (no orphan keys).
+
+    The Reshape shape is inlined as a literal in ``forward`` (e.g.
+    ``x.reshape(-1, 512, 1, 1)``); its shape constant must not leak into
+    the state dict, else the production strict ``load_state_dict`` raises
+    "Unexpected key(s)". Unlike :class:`IntegrationTestHelper`, this drives
+    the full ``TorchONNX().convert`` pipeline (which runs the state-dict
+    filter) and loads with ``strict=True``. Regression guard for the
+    inlined-constant c0/c1 codegen bug.
+    """
+    py_path = tmp_path / "rs.py"
+    pth_path = tmp_path / "rs.pth"
+    TorchONNX().convert(
+        str(reshape_model), target_py_path=str(py_path), target_pth_path=str(pth_path)
+    )
+
+    spec = importlib.util.spec_from_file_location("rs_generated", str(py_path))
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    model = getattr(module, module.__all__[0])()
+    state_dict = torch.load(str(pth_path), weights_only=True)
+
+    assert set(state_dict.keys()) == set(model.state_dict().keys())
+    model.load_state_dict(state_dict, strict=True)
 
 
 class IntegrationTestHelper:
