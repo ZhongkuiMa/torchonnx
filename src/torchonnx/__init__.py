@@ -1,7 +1,10 @@
-"""ONNX-to-PyTorch model conversion framework."""
+"""ONNX-to-PyTorch model conversion framework.
+
+.. seealso:: ``torchonnx/CONVENTIONS.md`` for code conventions.
+"""
 
 __docformat__ = "restructuredtext"
-__version__ = "2026.5.6"
+__version__ = "2026.6.0"
 __all__ = [
     "BENCHMARKS_WITHOUT_BATCH_DIM",
     "TorchONNX",

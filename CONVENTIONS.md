@@ -1,3 +1,10 @@
+---
+type: LAW
+note: "Normative. Code obeys this; change only via deliberate revision. Greater authority than functional code."
+---
+
+> **Law**. Conventions/rules for torchonnx. Code obeys this. Change via deliberate revision.
+
 # Torchonnx Conventions
 
 This file defines style and documentation conventions for the torchonnx package.

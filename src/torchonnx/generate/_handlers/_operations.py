@@ -1131,6 +1131,13 @@ def _handle_generic_method(layer: SemanticLayerIR, layer_name_mapping: dict[str,
 
 
 def _handle_reshape(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
+    """Generate Reshape code with flatten/squeeze-first-dim optimizations.
+
+    When the target shape is a 2-element constant with ``-1`` as the second
+    dimension, emits ``.flatten(1)``. When the first dimension is 1 and the
+    input has a leading batch-1 dimension, swaps the flatten dim from 0 to 1
+    to avoid squeezing the batch.  Falls back to ``.reshape(new_shape)``.
+    """
     output = layer.outputs[0].code_name
     _require_min_inputs(layer, 2, "Reshape")
     data = _get_input_code_name_selective(layer.inputs[0])
@@ -1164,6 +1171,7 @@ def _handle_reshape(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) 
 
 
 def _handle_transpose(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
+    """Generate Transpose code via ``.permute`` or ``.transpose(-2,-1)``."""
     inputs = _get_input_code_names(layer)
     output = layer.outputs[0].code_name
     perm_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "perm"), None)
@@ -1174,6 +1182,7 @@ def _handle_transpose(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]
 
 
 def _handle_squeeze(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
+    """Generate Squeeze code with optional dim argument."""
     inputs = _get_input_code_names(layer)
     output = layer.outputs[0].code_name
     dim_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "dim"), None)
@@ -1184,6 +1193,7 @@ def _handle_squeeze(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) 
 
 
 def _handle_unsqueeze(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
+    """Generate Unsqueeze code via ``.unsqueeze(dim)`` or dynamic-axes path."""
     output = layer.outputs[0].code_name
     dim_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "dim"), None)
     data = _get_input_code_name_selective(layer.inputs[0])

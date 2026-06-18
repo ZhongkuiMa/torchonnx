@@ -1,3 +1,10 @@
+---
+type: DESCRIPTION
+note: "Descriptive. Mirrors current code; update to follow code changes. < functional code."
+---
+
+> **This file IS**: TorchONNX's 5-stage compiler pipeline, package tree, dependency rules, and modification map. **It is NOT**: usage guide, code conventions, or contributor workflow.
+
 # TorchONNX Architecture
 
 ONNX-to-PyTorch compiler: 5-stage pipeline converting `.onnx` models into standalone `.py` modules + `.pth` state dicts.

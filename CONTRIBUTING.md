@@ -1,3 +1,10 @@
+---
+type: DESCRIPTION
+note: "Descriptive. Mirrors current code; update to follow code changes. < functional code."
+---
+
+> **This file IS**: contributor setup, PR workflow, and the procedure for adding new ONNX operations. **It is NOT**: architecture documentation, code conventions, or API reference.
+
 # Contributing to TorchONNX
 
 Shared conventions (imports, formatting, docstrings) are in the root [CONTRIBUTING.md](../CONTRIBUTING.md).
