@@ -1147,10 +1147,20 @@ def _handle_reshape(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) 
         shape_list: list[int] = shape_data.tolist()
         if not isinstance(shape_list, list):
             shape_list = [shape_list]
-        if len(shape_list) == 2 and shape_list[1] == -1:
-            return f"{output} = {data}.flatten(1)"
         input_info = layer.inputs[0]
         input_shape = input_info.shape if hasattr(input_info, "shape") else None
+        # ONNX Reshape with allowzero=0 (the default) treats a target dim of 0 as
+        # "copy the input dim at the SAME index" -- NOT a literal zero. Resolve it
+        # before emitting a literal .reshape(); mirrors pova's _extract_target_shape.
+        if input_shape is not None and 0 in shape_list:
+            shape_list = [
+                int(input_shape[i])
+                if (d == 0 and i < len(input_shape) and isinstance(input_shape[i], int))
+                else d
+                for i, d in enumerate(shape_list)
+            ]
+        if len(shape_list) == 2 and shape_list[1] == -1:
+            return f"{output} = {data}.flatten(1)"
         input_has_batch_leading_one = bool(
             input_shape and len(input_shape) >= 1 and input_shape[0] == 1
         )
@@ -1224,6 +1234,11 @@ def register_operation_handlers() -> None:
     register_handler("cos", _handle_generic_method)
     register_handler("sin", _handle_generic_method)
     register_handler("floor", _handle_generic_method)
+    register_handler("abs", _handle_generic_method)
+    register_handler("sqrt", _handle_generic_method)
+    register_handler("exp", _handle_generic_method)
+    register_handler("log", _handle_generic_method)
+    register_handler("reciprocal", _handle_generic_method)
     register_handler("expand", _handle_expand)
     register_handler("cast", _handle_cast)
 

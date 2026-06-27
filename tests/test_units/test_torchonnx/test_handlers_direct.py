@@ -908,6 +908,60 @@ class TestReshapeHandlerDirect:
         # The legacy batch rewrite still applies here.
         assert "(-1, 72)" in code
 
+    def test_reshape_zero_copies_input_dim(self):
+        """ONNX allowzero=0: a target dim of 0 copies the input dim, not a literal 0.
+
+        Input ``(2, 3, 4)`` reshaped to target ``[0, 3, 4]`` -- the ``0`` means
+        "copy input dim 0" (= 2), giving ``(2, 3, 4)``. Emitting a literal
+        ``.reshape(0, 3, 4)`` would crash the compiled model (size-0 tensor).
+        Since the leading dim is 2 (not a batch 1), no ``-1`` rewrite applies.
+        """
+        layer = SemanticLayerIR(
+            name="reshape_zero",
+            onnx_op_type="Reshape",
+            pytorch_type="reshape",
+            operator_class=OperatorClass.OPERATION,
+            inputs=[
+                make_variable("X", shape=(2, 3, 4)),
+                make_constant("shape", [0, 3, 4]),
+            ],
+            outputs=[make_variable("Y", shape=(2, 3, 4))],
+            arguments=[],
+        )
+
+        code = _handle_reshape(layer, {})
+
+        assert "(2, 3, 4)" in code
+        assert "(0, 3, 4)" not in code
+        assert ".reshape(0" not in code
+
+    def test_reshape_zero_batch_dim_rewritten(self):
+        """A 0 copying a leading batch-1 dim resolves to 1 then rewrites to -1.
+
+        Corpus RSHP1 idiom: input ``(1, 4)`` reshaped to ``[0, 2, 2]``. The
+        ``0`` copies input dim 0 (= 1, the batch), then the existing leading-1
+        batch logic rewrites it to ``-1`` for dynamic batching -> ``(-1, 2, 2)``.
+        """
+        layer = SemanticLayerIR(
+            name="reshape_zero_batch",
+            onnx_op_type="Reshape",
+            pytorch_type="reshape",
+            operator_class=OperatorClass.OPERATION,
+            inputs=[
+                make_variable("X", shape=(1, 4)),
+                make_constant("shape", [0, 2, 2]),
+            ],
+            outputs=[
+                make_variable("Y", shape=(1, 2, 2)),
+            ],
+            arguments=[],
+        )
+
+        code = _handle_reshape(layer, {})
+
+        assert "(-1, 2, 2)" in code
+        assert "(0, 2, 2)" not in code
+
 
 class TestCodeGeneratorAnalysisDirect:
     """Direct unit tests for code_generator analysis functions."""
@@ -2261,6 +2315,91 @@ class TestGenericMethodHandlers:
 
         assert "y = " in code
         assert "floor" in code
+
+    def test_abs_method_handling(self):
+        """Test abs method handler."""
+        layer = SemanticLayerIR(
+            name="abs_0",
+            onnx_op_type="Abs",
+            pytorch_type="abs",
+            operator_class=OperatorClass.OPERATION,
+            inputs=[make_variable("x", shape=(3, 4))],
+            outputs=[make_variable("y", shape=(3, 4))],
+            arguments=[],
+        )
+
+        code = _handle_generic_method(layer, {})
+
+        assert "y = " in code
+        assert "abs" in code
+
+    def test_sqrt_method_handling(self):
+        """Test sqrt method handler."""
+        layer = SemanticLayerIR(
+            name="sqrt_0",
+            onnx_op_type="Sqrt",
+            pytorch_type="sqrt",
+            operator_class=OperatorClass.OPERATION,
+            inputs=[make_variable("x", shape=(3, 4))],
+            outputs=[make_variable("y", shape=(3, 4))],
+            arguments=[],
+        )
+
+        code = _handle_generic_method(layer, {})
+
+        assert "y = " in code
+        assert "sqrt" in code
+
+    def test_exp_method_handling(self):
+        """Test exp method handler."""
+        layer = SemanticLayerIR(
+            name="exp_0",
+            onnx_op_type="Exp",
+            pytorch_type="exp",
+            operator_class=OperatorClass.OPERATION,
+            inputs=[make_variable("x", shape=(3, 4))],
+            outputs=[make_variable("y", shape=(3, 4))],
+            arguments=[],
+        )
+
+        code = _handle_generic_method(layer, {})
+
+        assert "y = " in code
+        assert "exp" in code
+
+    def test_log_method_handling(self):
+        """Test log method handler."""
+        layer = SemanticLayerIR(
+            name="log_0",
+            onnx_op_type="Log",
+            pytorch_type="log",
+            operator_class=OperatorClass.OPERATION,
+            inputs=[make_variable("x", shape=(3, 4))],
+            outputs=[make_variable("y", shape=(3, 4))],
+            arguments=[],
+        )
+
+        code = _handle_generic_method(layer, {})
+
+        assert "y = " in code
+        assert "log" in code
+
+    def test_reciprocal_method_handling(self):
+        """Test reciprocal method handler."""
+        layer = SemanticLayerIR(
+            name="reciprocal_0",
+            onnx_op_type="Reciprocal",
+            pytorch_type="reciprocal",
+            operator_class=OperatorClass.OPERATION,
+            inputs=[make_variable("x", shape=(3, 4))],
+            outputs=[make_variable("y", shape=(3, 4))],
+            arguments=[],
+        )
+
+        code = _handle_generic_method(layer, {})
+
+        assert "y = " in code
+        assert "reciprocal" in code
 
 
 class TestGenericTorchFunctionHandlers:

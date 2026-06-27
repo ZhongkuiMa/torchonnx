@@ -351,6 +351,7 @@ def _get_attrs_transpose(node: NodeProto, initializers: dict[str, TensorProto]) 
 
 
 EXTRACT_ATTRS_MAP: dict[str, Callable[[NodeProto, dict[str, TensorProto]], dict[str, Any]]] = {
+    "Abs": _get_attrs_simple({}),
     "ArgMax": _get_attrs_argmax,
     "AveragePool": _get_attrs_avgpool,
     "BatchNormalization": _get_attrs_batchnorm,
@@ -364,6 +365,7 @@ EXTRACT_ATTRS_MAP: dict[str, Callable[[NodeProto, dict[str, TensorProto]], dict[
     "Cos": _get_attrs_simple({}),
     "Dropout": _get_attrs_simple({"ratio": 0.5}),
     "Elu": _get_attrs_simple({"alpha": 1.0}),
+    "Exp": _get_attrs_simple({}),
     "Expand": _get_attrs_simple({}),
     "Floor": _get_attrs_simple({}),
     "Flatten": _get_attrs_simple({"axis": 1}),
@@ -372,12 +374,14 @@ EXTRACT_ATTRS_MAP: dict[str, Callable[[NodeProto, dict[str, TensorProto]], dict[
     "Gemm": _get_attrs_simple({"alpha": 1.0, "beta": 1.0, "transA": 0, "transB": 0}),
     "GlobalAveragePool": _get_attrs_simple({}),
     "LeakyRelu": _get_attrs_simple({"alpha": 0.01}),
+    "Log": _get_attrs_simple({}),
     "Max": _get_attrs_simple({}),
     "MaxPool": _get_attrs_maxpool,
     "Min": _get_attrs_simple({}),
     "Neg": _get_attrs_simple({}),
     "Pad": _get_attrs_simple({"mode": "constant"}),
     "Range": _get_attrs_simple({}),
+    "Reciprocal": _get_attrs_simple({}),
     "ReduceMean": _get_attrs_reduce("ReduceMean"),
     "ReduceSum": _get_attrs_reduce("ReduceSum"),
     "Relu": _get_attrs_simple({}),
@@ -393,6 +397,7 @@ EXTRACT_ATTRS_MAP: dict[str, Callable[[NodeProto, dict[str, TensorProto]], dict[
     "Slice": _get_attrs_simple({"starts": None, "ends": None, "axes": None, "steps": None}),
     "Softmax": _get_attrs_simple({"axis": -1}),
     "Split": _get_attrs_simple({"axis": 0, "num_outputs": None}),
+    "Sqrt": _get_attrs_simple({}),
     "Squeeze": _get_attrs_simple({"axes": None}),
     "Tanh": _get_attrs_simple({}),
     "Transpose": _get_attrs_transpose,
