@@ -359,7 +359,7 @@ def get_benchmark_models():
     :return: List of model paths for parametrized testing, or pytest.skip marker if empty
     """
     test_dir = Path(__file__).parent
-    benchmarks_dir = test_dir / "vnncomp2024_benchmarks"
+    benchmarks_dir = test_dir / "vnncomp_benchmarks"
     benchmarks = find_benchmarks(str(benchmarks_dir))
     models = find_models(benchmarks, max_per_benchmark=20)
     model_list = [str(m) for m in models]
@@ -517,7 +517,7 @@ def test_verify_model_against_original(
 
 
 def convert_all_models(
-    benchmark_dir: str = "vnncomp2024_benchmarks",
+    benchmark_dir: str = "vnncomp_benchmarks",
     output_dir: str = "results/baselines",
     max_per_benchmark: int = 20,
 ) -> dict:
@@ -920,7 +920,7 @@ def _print_verification_summary(
 
 def verify_benchmarks(
     results_dir: str = "results/baselines",
-    benchmarks_dir: str = "vnncomp2024_benchmarks",
+    benchmarks_dir: str = "vnncomp_benchmarks",
     max_per_benchmark: int = 20,
     dtype: str = "float32",
     device: str = "cpu",

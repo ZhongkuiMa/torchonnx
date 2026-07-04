@@ -18,7 +18,7 @@ def get_benchmark_models():
 
     :return: List of model paths for parametrized testing, or pytest.skip marker if empty
     """
-    benchmarks_dir = Path(__file__).parent / "vnncomp2024_benchmarks"
+    benchmarks_dir = Path(__file__).parent / "vnncomp_benchmarks"
     benchmarks = find_benchmarks(str(benchmarks_dir))
     models = find_models(benchmarks, max_per_benchmark=20)
     model_list = [str(m) for m in models]

@@ -13,7 +13,7 @@ def benchmarks_root():
 
     :return: Path to benchmarks root directory
     """
-    return Path(__file__).parent / "vnncomp2024_benchmarks"
+    return Path(__file__).parent / "vnncomp_benchmarks"
 
 
 @pytest.fixture(scope="session")
@@ -67,7 +67,7 @@ def pytest_configure(config):
 
 def pytest_collection_modifyitems(config, items):
     """Skip benchmark-dependent tests if data is missing or parameters are empty."""
-    benchmarks_path = Path(__file__).parent / "vnncomp2024_benchmarks"
+    benchmarks_path = Path(__file__).parent / "vnncomp_benchmarks"
     has_benchmark_dirs = bool(list(benchmarks_path.glob("*/instances.csv")))
 
     if not has_benchmark_dirs:
@@ -76,7 +76,7 @@ def pytest_collection_modifyitems(config, items):
         )
         for item in items:
             # Skip all benchmark-dependent tests
-            if "test_vnncomp2024_benchmarks" in str(item.fspath) or (
+            if "test_vnncomp_benchmarks" in str(item.fspath) or (
                 "model_path" in item.fixturenames
                 or ("dtype" in item.fixturenames and "device" in item.fixturenames)
             ):

@@ -1,4 +1,4 @@
-"""Build test data from vnncomp2024_benchmarks for torchonnx conversion tests.
+"""Build test data from vnncomp_benchmarks for torchonnx conversion tests.
 
 Generates test inputs and outputs for ONNX models to support the test_benchmarks.py
 conversion pipeline. This reduces model processing time by pre-computing reference outputs.
@@ -157,12 +157,12 @@ def generate_test_data(
 
 
 def build_test_data(
-    benchmarks_root: str = "vnncomp2024_benchmarks",
+    benchmarks_root: str = "vnncomp_benchmarks",
     max_per_benchmark: int = 20,
 ):
     """Build test data from benchmarks.
 
-    Data files are saved in vnncomp2024_benchmarks/benchmark_name/data/
+    Data files are saved in vnncomp_benchmarks/benchmark_name/data/
     to match expected structure from load_test_inputs().
 
     :param benchmarks_root: Root directory with benchmarks (symlink).

@@ -15,7 +15,7 @@ VNNCOMP2024_BENCHMARKS = [
 def test_benchmark_directory_exists(benchmark_name: str) -> None:
     """Test that each benchmark directory exists via symlink."""
     tests_dir = Path(__file__).parent
-    benchmarks_dir = tests_dir / "vnncomp2024_benchmarks"
+    benchmarks_dir = tests_dir / "vnncomp_benchmarks"
     benchmark_path = benchmarks_dir / benchmark_name
 
     assert benchmarks_dir.exists(), "Symlink not found. Run build_benchmarks.py"
@@ -27,5 +27,5 @@ def test_benchmark_directory_exists(benchmark_name: str) -> None:
 def test_benchmark_has_instances_csv(benchmark_name: str) -> None:
     """Test that each benchmark has instances.csv."""
     tests_dir = Path(__file__).parent
-    instances_csv = tests_dir / "vnncomp2024_benchmarks" / benchmark_name / "instances.csv"
+    instances_csv = tests_dir / "vnncomp_benchmarks" / benchmark_name / "instances.csv"
     assert instances_csv.exists(), f"instances.csv not found for {benchmark_name}"

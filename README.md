@@ -130,7 +130,7 @@ pytest tests/test_units/test_torchonnx/ -v   # unit tests
 pytest tests/test_benchmarks/ -v             # benchmark tests
 ```
 
-Benchmark tests require [vnncomp2024_benchmarks](https://github.com/ChristopherBrix/vnncomp2024_benchmarks) cloned as a sibling directory.
+Benchmark tests require [vnncomp_benchmarks](https://github.com/ChristopherBrix/vnncomp_benchmarks) cloned as a sibling directory.
 
 ## Contributing
 

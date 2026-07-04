@@ -320,7 +320,7 @@ def get_vmap_models():
     :return: List of model paths for parametrized testing, or pytest.skip marker if empty
     """
     test_dir = Path(__file__).parent
-    benchmarks_dir = test_dir / "vnncomp2024_benchmarks"
+    benchmarks_dir = test_dir / "vnncomp_benchmarks"
     benchmarks = find_benchmarks(str(benchmarks_dir))
     models = find_models(benchmarks, max_per_benchmark=20)
     # Filter to only models without batch dimension
@@ -448,7 +448,7 @@ def test_torch_vmap_compatibility(model_path, output_dir_vmap, benchmarks_root):
 
 
 def convert_models_without_batch_dim(
-    benchmark_dir: str = "vnncomp2024_benchmarks",
+    benchmark_dir: str = "vnncomp_benchmarks",
     output_dir: str = "results/vmap",
     max_per_benchmark: int = 20,
 ) -> dict:
@@ -582,7 +582,7 @@ def _compare_vmap_vs_standard(
 
 
 def verify_vmap_vs_standard(
-    benchmark_dir: str = "vnncomp2024_benchmarks",
+    benchmark_dir: str = "vnncomp_benchmarks",
     vmap_dir: str = "results/vmap",
     standard_dir: str = "results/baselines",
     max_per_benchmark: int = 20,
@@ -852,7 +852,7 @@ def test_vmap_compatibility(benchmarks_root, output_dir_vmap, max_per_benchmark:
 
 
 def run_all_tests(
-    benchmark_dir: str = "vnncomp2024_benchmarks",
+    benchmark_dir: str = "vnncomp_benchmarks",
     output_dir: str = "results/vmap",
     standard_dir: str = "results/baselines",
     max_per_benchmark: int = 20,

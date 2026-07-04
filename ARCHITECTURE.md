@@ -86,4 +86,4 @@ src/torchonnx/
 
 - [README.md](README.md) -- usage, API, supported operations
 - [CONTRIBUTING.md](CONTRIBUTING.md) -- setup, workflow, adding operations
-- Root [ARCHITECTURE.md](../ARCHITECTURE.md) -- rover system architecture, submodule relationships
+- Root [ARCHITECTURE.md](../ARCHITECTURE.md) -- project architecture, submodule relationships

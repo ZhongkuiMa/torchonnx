@@ -41,7 +41,7 @@ _SKIP_BENCHMARKS: frozenset[str] = frozenset()
 
 def _discover_2025_models() -> list[str | None]:
     """Collect the first ONNX model of each vnncomp2025 benchmark."""
-    corpus = Path(__file__).parent / "vnncomp2025_benchmarks"
+    corpus = Path(__file__).parent / "vnncomp_benchmarks"
     if not corpus.exists():
         return [None]
     benchmarks = [b for b in find_benchmarks(str(corpus)) if b.name not in _SKIP_BENCHMARKS]
