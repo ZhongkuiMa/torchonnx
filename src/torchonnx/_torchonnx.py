@@ -129,6 +129,65 @@ class TorchONNX:
         _logger.info(f"  State dict: {target_pth_path}")
         _logger.info(f"  Total: {time.perf_counter() - t_total:.4f}s")
 
+    def convert_model(
+        self,
+        model: onnx.ModelProto,
+        *,
+        benchmark_name: str | None = None,
+        target_py_path: str,
+        target_pth_path: str,
+        vmap_mode: bool = True,
+        source_label: str = "from_model",
+    ) -> None:
+        """Convert a pre-loaded ModelProto to PyTorch (skip normalize stage).
+
+        :param model: Pre-loaded, pre-normalized ONNX model.
+        :param benchmark_name: Name of benchmark (for module naming).
+        :param target_py_path: Path to save generated Python module.
+        :param target_pth_path: Path to save state dict.
+        :param vmap_mode: If True, generate vmap-compatible helpers.
+        :param source_label: Descriptive label (used for class naming and
+            metadata headers instead of a file path).
+        """
+        _logger.info(f"TorchONNX: converting model ({source_label})")
+        t_total = time.perf_counter()
+        # Stage 1 (normalize) skipped — model is pre-loaded.
+
+        # Stage 2: Build structural IR
+        t = time.perf_counter()
+        raw_ir = build_model_ir(model)
+        _logger.info(f"  Build IR ({time.perf_counter() - t:.4f}s)")
+
+        # Stage 3: Build semantic IR
+        t = time.perf_counter()
+        semantic_ir = build_semantic_ir(raw_ir)
+        _logger.info(f"  Analyze semantics ({time.perf_counter() - t:.4f}s)")
+
+        # Stage 4: Generate PyTorch code
+        t = time.perf_counter()
+        model_name = source_label
+        if benchmark_name:
+            module_class_name = f"{benchmark_name}_{model_name}"
+        else:
+            module_class_name = model_name
+        camel_class_name = to_camel_case(module_class_name)
+        code, state_dict = generate_pytorch_module(
+            semantic_ir, camel_class_name, vmap_mode=vmap_mode
+        )
+        _logger.info(f"  Generate code: {camel_class_name} ({time.perf_counter() - t:.4f}s)")
+
+        # Stage 5: Simplify, format, and save
+        t = time.perf_counter()
+        optimized_code, state_dict = optimize_generated_code(code, state_dict, enable=True)
+        formatted_code = format_code(optimized_code)
+        final_code = add_file_header(formatted_code, camel_class_name, source_label)
+        Path(target_py_path).write_text(final_code)
+        torch.save(state_dict, target_pth_path)
+        _logger.info(f"  Simplify + export ({time.perf_counter() - t:.4f}s)")
+        _logger.info(f"  Output: {target_py_path}")
+        _logger.info(f"  State dict: {target_pth_path}")
+        _logger.info(f"  Total: {time.perf_counter() - t_total:.4f}s")
+
     @staticmethod
     def preprocess(
         onnx_path: str,
