@@ -1,7 +1,7 @@
 """ONNX model preprocessing utilities."""
 
 __docformat__ = "restructuredtext"
-__all__ = ["load_and_preprocess_onnx_model"]
+__all__ = ["load_and_preprocess_onnx_model", "preprocess_onnx_model"]
 
 import warnings
 from typing import Any
@@ -209,8 +209,9 @@ def _convert_onnx_constants_to_initializers(model: ModelProto) -> ModelProto:
     return model_copy
 
 
-def load_and_preprocess_onnx_model(
-    onnx_path: str,
+def preprocess_onnx_model(
+    model: ModelProto,
+    *,
     target_opset: int | None = None,
     infer_shapes: bool = True,
     check_model: bool = True,
@@ -218,17 +219,17 @@ def load_and_preprocess_onnx_model(
     eliminate_constants: bool = True,
     use_shapeonnx: bool = False,
 ) -> ModelProto:
-    """Load ONNX model and preprocess for SlimONNX.
+    """Normalize an in-memory ONNX model for IR construction.
 
     Preprocessing steps:
-    1. Load model from file
+    1. Copy the caller-owned model
     2. Validate with ONNX checker (if enabled)
     3. Convert to target opset version (if specified)
     4. Run shape inference (if enabled)
     5. Convert Constant nodes to initializers (if enabled)
     6. Clear node docstrings (if enabled)
 
-    :param onnx_path: Path to ONNX file.
+    :param model: Caller-owned ONNX model. The input is not mutated.
     :param target_opset: Target opset version (None = keep original).
     :param infer_shapes: Whether to run shape inference.
     :param check_model: Whether to validate model with onnx.checker.
@@ -238,24 +239,53 @@ def load_and_preprocess_onnx_model(
 
     :return: Preprocessed model
     """
-    model = onnx.load(onnx_path)
+    normalized = ModelProto()
+    normalized.CopyFrom(model)
 
     if check_model:
-        _check_model(model)
+        _check_model(normalized)
 
     if target_opset is not None:
-        # _convert_version swallows its own failures and returns the
-        # already-validated model unchanged, so a second _check_model here
-        # could only fail on something the first check already accepted.
-        model = _convert_version(model, target_opset=target_opset)
+        normalized = _convert_version(normalized, target_opset=target_opset)
 
     if infer_shapes:
-        model = _infer_shapes(model, use_shapeonnx=use_shapeonnx)
+        normalized = _infer_shapes(normalized, use_shapeonnx=use_shapeonnx)
 
     if eliminate_constants:
-        model = _convert_onnx_constants_to_initializers(model)
+        normalized = _convert_onnx_constants_to_initializers(normalized)
 
     if clear_docstrings:
-        model = _clear_docstrings(model)
+        normalized = _clear_docstrings(normalized)
 
-    return model
+    return normalized
+
+
+def load_and_preprocess_onnx_model(
+    onnx_path: str,
+    target_opset: int | None = None,
+    infer_shapes: bool = True,
+    check_model: bool = True,
+    clear_docstrings: bool = True,
+    eliminate_constants: bool = True,
+    use_shapeonnx: bool = False,
+) -> ModelProto:
+    """Load an ONNX file and normalize it for IR construction.
+
+    :param onnx_path: Path to ONNX file.
+    :param target_opset: Target opset version (None = keep original).
+    :param infer_shapes: Whether to run shape inference.
+    :param check_model: Whether to validate model with onnx.checker.
+    :param clear_docstrings: Whether to clear node docstrings.
+    :param eliminate_constants: Whether to convert Constant nodes to initializers.
+    :param use_shapeonnx: Use shapeonnx library for shape inference instead of ONNX.
+    :return: Preprocessed model.
+    """
+    return preprocess_onnx_model(
+        onnx.load(onnx_path),
+        target_opset=target_opset,
+        infer_shapes=infer_shapes,
+        check_model=check_model,
+        clear_docstrings=clear_docstrings,
+        eliminate_constants=eliminate_constants,
+        use_shapeonnx=use_shapeonnx,
+    )

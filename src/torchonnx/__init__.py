@@ -4,7 +4,7 @@
 """
 
 __docformat__ = "restructuredtext"
-__version__ = "2026.7.1"
+__version__ = "2026.8.0"
 __all__ = [
     "BENCHMARKS_WITHOUT_BATCH_DIM",
     "TorchONNX",

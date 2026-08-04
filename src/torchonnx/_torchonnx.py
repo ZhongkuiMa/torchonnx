@@ -13,7 +13,7 @@ import torch
 from torchonnx.analyze import build_semantic_ir
 from torchonnx.build import build_model_ir
 from torchonnx.generate import generate_pytorch_module, to_camel_case
-from torchonnx.normalize import load_and_preprocess_onnx_model
+from torchonnx.normalize import load_and_preprocess_onnx_model, preprocess_onnx_model
 from torchonnx.simplify import add_file_header, format_code, optimize_generated_code
 
 _logger = logging.getLogger(__name__)
@@ -139,9 +139,10 @@ class TorchONNX:
         vmap_mode: bool = True,
         source_label: str = "from_model",
     ) -> None:
-        """Convert a pre-loaded ModelProto to PyTorch (skip normalize stage).
+        """Convert a pre-loaded ModelProto to PyTorch.
 
-        :param model: Pre-loaded, pre-normalized ONNX model.
+        :param model: Pre-loaded ONNX model. The same canonical normalization
+            used by :meth:`convert` runs before IR construction.
         :param benchmark_name: Name of benchmark (for module naming).
         :param target_py_path: Path to save generated Python module.
         :param target_pth_path: Path to save state dict.
@@ -151,7 +152,17 @@ class TorchONNX:
         """
         _logger.info(f"TorchONNX: converting model ({source_label})")
         t_total = time.perf_counter()
-        # Stage 1 (normalize) skipped — model is pre-loaded.
+        # Stage 1: normalize the in-memory model through the same semantic
+        # boundary as the file-backed path.
+        t = time.perf_counter()
+        model = preprocess_onnx_model(
+            model,
+            target_opset=20,
+            infer_shapes=True,
+            check_model=True,
+            use_shapeonnx=self.use_shapeonnx,
+        )
+        _logger.info(f"  Normalize: opset 20, shape inference ({time.perf_counter() - t:.4f}s)")
 
         # Stage 2: Build structural IR
         t = time.perf_counter()

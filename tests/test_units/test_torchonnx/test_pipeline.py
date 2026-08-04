@@ -144,6 +144,44 @@ class TestConvertAPI:
         assert output_py.stat().st_size > 0
         assert output_pth.stat().st_size > 0
 
+    def test_convert_model_normalizes_attribute_form_pad(self, tmp_path):
+        """The in-memory API canonicalizes old-opset Pad before codegen."""
+        input_info = onnx.helper.make_tensor_value_info("X", onnx.TensorProto.FLOAT, [1, 2])
+        output_info = onnx.helper.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, [1, 4])
+        pad = onnx.helper.make_node(
+            "Pad",
+            ["X"],
+            ["Y"],
+            mode="constant",
+            pads=[0, 1, 0, 1],
+            value=0.0,
+        )
+        model = onnx.helper.make_model(
+            onnx.helper.make_graph([pad], "attribute_pad", [input_info], [output_info]),
+            opset_imports=[onnx.helper.make_opsetid("", 10)],
+        )
+        output_py = tmp_path / "attribute_pad.py"
+        output_pth = tmp_path / "attribute_pad.pth"
+
+        TorchONNX().convert_model(
+            model,
+            target_py_path=str(output_py),
+            target_pth_path=str(output_pth),
+            source_label="attribute_pad",
+        )
+
+        spec = importlib.util.spec_from_file_location("attribute_pad", output_py)
+        assert spec is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)  # type: ignore[union-attr]
+        generated = module.AttributePad()
+        generated.load_state_dict(torch.load(output_pth, weights_only=True))
+
+        actual = generated(torch.tensor([[1.0, 2.0]])).detach()
+        torch.testing.assert_close(actual, torch.tensor([[0.0, 1.0, 2.0, 0.0]]))
+        assert model.opset_import[0].version == 10
+        assert len(model.graph.node[0].input) == 1
+
     def test_convert_returns_valid_code_and_state_dict(self, linear_model, tmp_path):
         """Verify convert() output format is valid."""
         converter = TorchONNX()

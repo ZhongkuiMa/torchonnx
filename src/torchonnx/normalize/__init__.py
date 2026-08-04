@@ -12,9 +12,10 @@ __all__ = [
     "get_onnx_model_shapes",
     "get_onnx_nodes",
     "load_and_preprocess_onnx_model",
+    "preprocess_onnx_model",
 ]
 
-from torchonnx.normalize.normalize import load_and_preprocess_onnx_model
+from torchonnx.normalize.normalize import load_and_preprocess_onnx_model, preprocess_onnx_model
 from torchonnx.normalize.utils import (
     extract_onnx_opset_version,
     get_onnx_initializers,
