@@ -774,14 +774,11 @@ def _handle_expand_constant_shape(
 ) -> str:
     """Handle expand with constant shape input.
 
-        :param data: Code name for data input.
+    :param data: Code name for data input.
     :param shape_input: Constant shape input.
-    :param data_shape: Data input shape if known (may contain symbolic dims), None otherwise.
+    :param data_shape: Data input shape if known, including symbolic dimensions.
     :param output: Output variable name.
-
-
-
-        :return: Generated code or None to defer to runtime helper
+    :return: Generated inline expand or dynamic-helper call.
     """
     target_shape: list[int] = shape_input.data.tolist()  # pyright: ignore[reportAssignmentType]
     if not isinstance(target_shape, list):
@@ -793,6 +790,13 @@ def _handle_expand_constant_shape(
         int_dims = [d for d in data_shape if isinstance(d, int)]
         concrete_shape: tuple[int, ...] = tuple(int_dims)
         converted = _convert_expand_semantics(concrete_shape, target_shape)
+        # A static leading batch of 1 is dynamic in the generated module.
+        if (
+            len(concrete_shape) == len(target_shape)
+            and concrete_shape[0] == 1
+            and target_shape[0] == 1
+        ):
+            converted[0] = -1
         return f"{output} = {data}.expand({converted})"
 
     # Data shape unknown or contains symbolic dims - use dynamic helper
@@ -823,14 +827,12 @@ def _handle_expand_runtime_shape(
 def _handle_expand(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Handle expand operation.
 
-        If we know the output shape from ONNX shape inference, simply use reshape.
-        For constant shapes, use inline .expand() with ONNX->PyTorch semantics conversion.
-        Otherwise, use dynamic_expand helper for runtime shapes.
+    For constant shapes, use inline ``expand`` with ONNX-to-PyTorch
+    semantics conversion. Otherwise, use ``dynamic_expand`` for runtime shapes.
 
-        :param layer: Semantic layer IR.
+    :param layer: Semantic layer IR.
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
-
-        :return: Generated code line
+    :return: Generated code line.
     """
     output = layer.outputs[0].code_name
 
@@ -840,14 +842,6 @@ def _handle_expand(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
     data = _get_input_code_name_selective(layer.inputs[0])
     assert data is not None, "Expand data input must have a code name"
     shape_input = layer.inputs[1]
-
-    # Get the output shape from ONNX shape inference
-    output_info = layer.outputs[0]
-    output_shape = output_info.shape if output_info else None
-
-    # If we know the output shape with all concrete dimensions, just use reshape
-    if output_shape and all(isinstance(dim, int) for dim in output_shape):
-        return f"{output} = {data}.reshape({tuple(output_shape)})"
 
     # For constant shapes, use optimized constant shape handler
     if isinstance(shape_input, ConstantInfo):

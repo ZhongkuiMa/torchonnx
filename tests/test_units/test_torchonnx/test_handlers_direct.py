@@ -478,27 +478,28 @@ class TestSliceHelperFunctions:
 class TestExpandHandlerDirect:
     """Direct unit tests for _handle_expand handler."""
 
-    def test_expand_constant_shape_all_integers(self):
-        """Test expand with constant shape and all integer output dims."""
+    def test_expand_constant_shape_broadcasts_without_reshape(self):
+        """Generate a real broadcast even when shape inference is concrete."""
         layer = SemanticLayerIR(
             name="expand_0",
             onnx_op_type="Expand",
             pytorch_type="expand",
             operator_class=OperatorClass.OPERATION,
             inputs=[
-                make_variable("X", shape=(1, 10)),
-                make_constant("shape", [5, 1, 10]),
+                make_variable("X", shape=(1, 1)),
+                make_constant("shape", [1, 3]),
             ],
-            outputs=[make_variable("Y", shape=(5, 1, 10))],
+            outputs=[make_variable("Y", shape=(1, 3))],
             arguments=[],
         )
 
         code = _handle_expand(layer, {})
+        scope = {"x": torch.tensor([[1.0], [2.0]])}
+        exec(code, {}, scope)
 
-        # Should generate reshape or expand code
-        assert "y = x" in code
-        # Code should reference the shape
-        assert "5" in code or "expand" in code or "reshape" in code
+        assert code == "y = x.expand([-1, 3])"
+        expected = torch.tensor([[1.0, 1.0, 1.0], [2.0, 2.0, 2.0]])
+        assert torch.equal(scope["y"], expected)
 
     def test_expand_dynamic_shape_emits_code(self):
         """Test expand with dynamic shape generates code."""
