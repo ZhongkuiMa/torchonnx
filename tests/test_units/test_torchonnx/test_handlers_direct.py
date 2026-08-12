@@ -679,8 +679,8 @@ class TestOperatorHandlersDirect:
 class TestGatherHandlerDirect:
     """Direct unit tests for _handle_gather handler."""
 
-    def test_gather_scalar_index(self):
-        """Test gather with scalar index uses bracket notation."""
+    def test_gather_length_one_vector_preserves_axis(self):
+        """A length-one vector index must not collapse the selected axis."""
         layer = SemanticLayerIR(
             name="gather_0",
             onnx_op_type="Gather",
@@ -696,8 +696,31 @@ class TestGatherHandlerDirect:
 
         code = _handle_gather(layer, {})
 
-        # Should reference gather operation
-        assert "output = " in code
+        assert "index_select" in code
+        assert "torch.select" not in code
+
+    def test_gather_scalar_index_removes_negative_axis(self):
+        """A scalar constant index removes the selected negative axis."""
+        index = ConstantInfo(
+            onnx_name="indices",
+            code_name="c_indices",
+            shape=(),
+            dtype=torch.int64,
+            data=torch.tensor(0, dtype=torch.int64),
+        )
+        layer = SemanticLayerIR(
+            name="gather_0",
+            onnx_op_type="Gather",
+            pytorch_type="gather",
+            operator_class=OperatorClass.OPERATION,
+            inputs=[make_variable("data", shape=(5, 10)), index],
+            outputs=[make_variable("output")],
+            arguments=[ArgumentInfo(onnx_name="axis", pytorch_name="axis", value=-1)],
+        )
+
+        code = _handle_gather(layer, {})
+
+        assert code == "output = torch.select(data, -1, 0)"
 
     def test_gather_vector_indices(self):
         """Test gather with vector indices."""

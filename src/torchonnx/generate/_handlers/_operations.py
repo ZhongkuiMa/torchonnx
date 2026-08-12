@@ -287,7 +287,7 @@ def _handle_gather(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
     """Handle gather operation.
 
         ONNX Gather: data[indices] along axis
-        Uses bracket slicing for simple constant indices, otherwise index_select.
+        Uses ``torch.select`` for scalar constant indices, otherwise index_select.
 
         :param layer: Semantic layer IR.
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
@@ -310,13 +310,13 @@ def _handle_gather(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
     if isinstance(indices_input, ConstantInfo):
         indices_data = indices_input.data
 
-        if indices_data.numel() == 1:
-            # Scalar index - use bracket slicing notation (don't mark as used)
+        if indices_data.ndim == 0:
+            # A rank-zero ONNX index removes the selected data axis. A length-one
+            # vector must instead preserve that axis, even though both contain one
+            # element. ``torch.select`` also handles negative axes correctly.
             idx_value = int(indices_data.item())
             idx_value = -1 if idx_value == INT64_MAX else idx_value
-            # Build slice with proper axis
-            slices = [":" for _ in range(axis)] + [str(idx_value)]
-            return f"{output} = {data}[{', '.join(slices)}]"
+            return f"{output} = torch.select({data}, {axis}, {idx_value})"
         # All indices use buffer reference for device control and performance
         # (avoid creating tensors on every forward pass). Multi-dim ONNX
         # Gather requires the post-index_select tensor to be reshaped from
