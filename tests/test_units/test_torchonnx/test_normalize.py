@@ -19,6 +19,7 @@ __docformat__ = "restructuredtext"
 import contextlib
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import onnx
 import pytest
@@ -85,6 +86,20 @@ class TestOpsetHandling:
         assert isinstance(model, onnx.ModelProto)
         # Should have valid producer name
         assert isinstance(model.producer_name, str)
+
+    def test_empty_identity_graph_skips_native_opset_conversion(self):
+        """A graph with one aliased input/output has no operator schema to convert."""
+        input_info = onnx.helper.make_tensor_value_info("value", onnx.TensorProto.FLOAT, [1, 1])
+        output_info = onnx.helper.make_tensor_value_info("value", onnx.TensorProto.FLOAT, [1, 1])
+        graph = onnx.helper.make_graph([], "identity", [input_info], [output_info])
+        model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 21)])
+
+        with patch("torchonnx.normalize.normalize.version_converter.convert_version") as convert:
+            normalized = _convert_version(model, target_opset=20)
+
+        convert.assert_not_called()
+        assert normalized is model
+        assert normalized.opset_import[0].version == 21
 
 
 class TestShapeInference:

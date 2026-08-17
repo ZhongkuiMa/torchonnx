@@ -68,6 +68,8 @@ ONNX_TO_PYTORCH_OPERATIONS: dict[str, str] = {
     "Expand": "expand",
     "Range": "torch.arange",
     "Where": "torch.where",
+    "Scatter": "torch.scatter",
+    "ScatterElements": "torch.scatter",
     "ScatterND": "scatter_nd",
     "ArgMax": "torch.argmax",
     "Min": "torch.min",
@@ -331,6 +333,12 @@ _OPERATION_ARGS_EXTRACTORS: dict[str, Any] = {
     "Expand": lambda node, initializers: {},
     "Range": lambda node, initializers: {},
     "Where": lambda node, initializers: {},
+    "Scatter": lambda node, initializers: {
+        "dim": extract_onnx_attrs(node, initializers).get("axis", 0)
+    },
+    "ScatterElements": lambda node, initializers: {
+        "dim": extract_onnx_attrs(node, initializers).get("axis", 0)
+    },
     "ScatterND": lambda node, initializers: {
         "reduction": extract_onnx_attrs(node, initializers).get("reduction", "none")
     },

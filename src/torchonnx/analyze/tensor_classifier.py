@@ -130,6 +130,14 @@ def _get_parameter_role(
     return None
 
 
+def _get_float_attr(attrs: dict[str, object], name: str, default: float) -> float:
+    """Return one numeric ONNX attribute as a concrete float."""
+    value = attrs.get(name, default)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError(f"ONNX attribute {name!r} must be numeric, got {value!r}")
+    return float(value)
+
+
 def _process_parameter_input(
     onnx_name: str,
     tensor: TensorProto,
@@ -156,27 +164,50 @@ def _process_parameter_input(
 
     torch_tensor = _tensor_proto_to_torch(tensor)
 
+    gemm_attrs: dict[str, object] = {}
+    if pytorch_type in ["Linear", "nn.Linear"] and node is not None:
+        from torchonnx.analyze.attr_extractor import extract_onnx_attrs
+
+        gemm_attrs = extract_onnx_attrs(node, initializers)
+        if gemm_attrs.get("transA", 0):
+            raise ValueError("Gemm transA is not representable by nn.Linear")
+
     # Transpose Linear layer weights from ONNX format to PyTorch format
     if (
         pytorch_type in ["Linear", "nn.Linear"]
         and param_role == "weight"
         and torch_tensor.ndim == 2
     ):
-        trans_b = 0  # Default value
-        if node is not None:
-            from torchonnx.analyze.attr_extractor import extract_onnx_attrs
-
-            attrs = extract_onnx_attrs(node, initializers)
-            trans_b = attrs.get("transB", 0)
-
+        trans_b = gemm_attrs.get("transB", 0)
         if trans_b == 0:
             torch_tensor = torch_tensor.T
+        torch_tensor = torch_tensor * _get_float_attr(gemm_attrs, "alpha", 1.0)
+
+    if pytorch_type in ["Linear", "nn.Linear"] and param_role == "bias" and node is not None:
+        weight_shape = tuple(initializers[node.input[1]].dims)
+        out_features = weight_shape[0] if gemm_attrs.get("transB", 0) else weight_shape[1]
+        if torch_tensor.numel() == 1:
+            torch_tensor = torch_tensor.reshape(1).expand(out_features).clone()
+        elif torch_tensor.ndim == 1 and torch_tensor.shape[0] == out_features:
+            torch_tensor = torch_tensor.contiguous()
+        elif (
+            torch_tensor.ndim == 2
+            and torch_tensor.shape[0] == 1
+            and torch_tensor.shape[1] == out_features
+        ):
+            torch_tensor = torch_tensor.reshape(out_features).contiguous()
+        else:
+            raise ValueError(
+                f"Gemm bias shape {tuple(torch_tensor.shape)} cannot be represented "
+                f"by nn.Linear bias ({out_features},)"
+            )
+        torch_tensor = torch_tensor * _get_float_attr(gemm_attrs, "beta", 1.0)
 
     return ParameterInfo(
         onnx_name=onnx_name,
         pytorch_name=param_role,
         code_name=code_name,
-        shape=tuple(tensor.dims),
+        shape=tuple(torch_tensor.shape),
         dtype=_onnx_dtype_to_torch(tensor.data_type),
         data=torch_tensor,
     )

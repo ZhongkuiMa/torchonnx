@@ -276,6 +276,58 @@ class TestTensorClassification:
         ]
         assert len(weight_params) >= 1
 
+    def test_classify_gemm_canonicalizes_scaling_and_broadcast_bias(self):
+        """Static Gemm controls become exact nn.Linear parameter tensors."""
+        node = onnx.helper.make_node(
+            "Gemm",
+            inputs=["x", "W", "C"],
+            outputs=["y"],
+            alpha=2.0,
+            beta=0.25,
+            transB=1,
+        )
+        initializers = {
+            "W": onnx.helper.make_tensor(
+                "W", onnx.TensorProto.FLOAT, [2, 2], [1.0, 2.0, -1.0, 3.0]
+            ),
+            "C": onnx.helper.make_tensor("C", onnx.TensorProto.FLOAT, [1, 1], [2.0]),
+        }
+
+        inputs = classify_inputs(
+            input_names=list(node.input),
+            initializers=initializers,
+            pytorch_type="Linear",
+            shapes={"x": (1, 2)},
+            code_name_counters={"var": 0, "param": 0, "const": 0},
+            node=node,
+        )
+        params = {p.pytorch_name: p for p in inputs if isinstance(p, ParameterInfo)}
+
+        torch.testing.assert_close(
+            params["weight"].data,
+            torch.tensor([[2.0, 4.0], [-2.0, 6.0]]),
+        )
+        torch.testing.assert_close(params["bias"].data, torch.tensor([0.5, 0.5]))
+        assert params["weight"].shape == (2, 2)
+        assert params["bias"].shape == (2,)
+
+    def test_classify_gemm_rejects_transa(self):
+        """nn.Linear lowering must not silently discard transA."""
+        node = onnx.helper.make_node("Gemm", inputs=["x", "W"], outputs=["y"], transA=1)
+        initializers = {
+            "W": onnx.helper.make_tensor("W", onnx.TensorProto.FLOAT, [2, 2], [1.0, 0.0, 0.0, 1.0])
+        }
+
+        with pytest.raises(ValueError, match="transA"):
+            classify_inputs(
+                input_names=list(node.input),
+                initializers=initializers,
+                pytorch_type="Linear",
+                shapes={"x": (2, 1)},
+                code_name_counters={"var": 0, "param": 0, "const": 0},
+                node=node,
+            )
+
     def test_parameter_role_detection(self, multi_input_model):
         """Verify parameter roles are correctly detected."""
         normalized = load_and_preprocess_onnx_model(multi_input_model)
@@ -711,6 +763,28 @@ class TestLayerExtractionEdgeCases:
 
         args = _extract_upsample_args(node, {})
         assert isinstance(args, dict)
+
+    def test_extract_resize_static_sizes(self):
+        """Resize sizes map to the PyTorch output-size argument, not ROI."""
+        sizes = onnx.helper.make_tensor("sizes", onnx.TensorProto.INT64, [4], [1, 1, 1, 7])
+        node = onnx.helper.make_node(
+            "Resize", inputs=["X", "", "", "sizes"], outputs=["Y"], mode="nearest"
+        )
+
+        args = _extract_upsample_args(node, {"sizes": sizes})
+
+        assert args == {"size": (1, 7), "mode": "nearest"}
+
+    def test_resize_roi_is_not_a_legacy_scale(self):
+        """A Resize ROI cannot silently become an Upsample scale factor."""
+        roi = onnx.helper.make_tensor(
+            "roi", onnx.TensorProto.FLOAT, [8], [0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]
+        )
+        node = onnx.helper.make_node("Resize", inputs=["X", "roi"], outputs=["Y"])
+
+        args = _extract_upsample_args(node, {"roi": roi})
+
+        assert args == {"mode": "nearest"}
 
     def test_globalavgpool_layer_extraction(self):
         """Test GlobalAveragePool layer extraction."""

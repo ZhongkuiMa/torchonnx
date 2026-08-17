@@ -2232,12 +2232,12 @@ class SyntheticONNXModels:
         X = onnx_helper.make_tensor_value_info(  # noqa: N806
             "X", onnx.TensorProto.FLOAT, [1, 3]
         )
-        # Weight is transposed: shape [input_size, output_size] instead of [output_size, input_size]
+        # transB=1 stores the weight as [output_size, input_size].
         W = onnx_helper.make_tensor(  # noqa: N806
             "W",
             onnx.TensorProto.FLOAT,
-            [3, 2],  # [input_size, output_size] (transposed)
-            vals=rng.standard_normal((3, 2)).astype(np.float32).flatten().tolist(),
+            [2, 3],
+            vals=rng.standard_normal((2, 3)).astype(np.float32).flatten().tolist(),
         )
         B = onnx_helper.make_tensor(  # noqa: N806
             "B",

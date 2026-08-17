@@ -59,6 +59,11 @@ class TestStandardScatterND:
         assert result[0].sum().item() == 0.0
         assert result[2].sum().item() == 0.0
 
+    def test_negative_coordinate_indexes_from_end(self):
+        data = torch.zeros(2, 3)
+        result = _standard.scatter_nd(data, torch.tensor([[0, -1]]), torch.tensor([-1.0]))
+        assert result[0, 2].item() == -1.0
+
     def test_reduction_add(self):
         data = torch.zeros(3)
         indices = torch.tensor([[0], [0], [1]])
@@ -116,6 +121,11 @@ class TestVmapScatterND:
         result = _vmap.scatter_nd(data, indices, updates)
         assert torch.equal(result[1], torch.tensor([1.0, 2.0, 3.0, 4.0]))
         assert result[0].sum().item() == 0.0
+
+    def test_negative_coordinate_indexes_from_end(self):
+        data = torch.zeros(2, 3)
+        result = _vmap.scatter_nd(data, torch.tensor([[0, -1]]), torch.tensor([-1.0]))
+        assert result[0, 2].item() == -1.0
 
     def test_valid_zero_returns_data_unchanged(self):
         data = torch.ones(2, 3)

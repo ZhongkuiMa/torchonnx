@@ -57,6 +57,12 @@ def _convert_version(
     """
     current_opset = model.opset_import[0].version if model.opset_import else 0
 
+    # A zero-node graph is an identity alias and has no versioned operator
+    # semantics. Native ONNX conversion is both unnecessary and unable to
+    # represent a rewrite for this valid degenerate graph.
+    if not model.graph.node:
+        return model
+
     # Warn if target_opset is outside recommended range
     if warn_on_diff and not (MIN_TESTED_OPSET <= target_opset <= MAX_TESTED_OPSET):
         warnings.warn(

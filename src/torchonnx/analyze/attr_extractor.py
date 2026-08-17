@@ -200,13 +200,19 @@ def _get_attrs_convtranspose(
         },
         node.attribute,
     )
-    if attrs["group"] != 1:
-        raise ValueError(f"ConvTranspose with group={attrs['group']} is not supported")
+    if not isinstance(attrs["group"], int) or attrs["group"] <= 0:
+        raise ValueError(f"ConvTranspose group must be a positive integer, got {attrs['group']!r}")
     _validate_auto_pad(attrs["auto_pad"], "ConvTranspose")
 
+    weight = initializers[node.input[1]]
+    weight_kernel = tuple(weight.dims[2:])
     if attrs["kernel_shape"] is None:
-        weight = initializers[node.input[1]]
-        attrs["kernel_shape"] = tuple(weight.dims[2:])
+        attrs["kernel_shape"] = weight_kernel
+    elif tuple(attrs["kernel_shape"]) != weight_kernel:
+        raise ValueError(
+            f"ConvTranspose kernel_shape {attrs['kernel_shape']} does not match "
+            f"weight kernel {weight_kernel}"
+        )
 
     _infer_kernel_defaults(attrs, attrs["kernel_shape"])
     if attrs["output_padding"] is None:

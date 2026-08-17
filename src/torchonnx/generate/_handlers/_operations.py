@@ -942,6 +942,26 @@ def _handle_scatter_nd(layer: SemanticLayerIR, layer_name_mapping: dict[str, str
     return f"{output} = scatter_nd({inputs[0]}, {inputs[1]}, {inputs[2]})"
 
 
+def _handle_scatter_elements(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
+    """Generate replacement-mode ONNX Scatter/ScatterElements.
+
+    ONNX orders inputs as ``data, indices, updates`` while ``torch.scatter``
+    takes ``input, dim, index, src``. ONNX also permits valid negative
+    indices; normalize only those values so positive and too-negative
+    out-of-range indices retain PyTorch's runtime error.
+
+    :param layer: Semantic layer IR.
+    :return: Generated code line.
+    """
+    _require_min_inputs(layer, 3, layer.onnx_op_type)
+    inputs = _get_input_code_names(layer)
+    output = layer.outputs[0].code_name
+    dim_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "dim"), None)
+    dim = int(dim_arg.value) if dim_arg is not None else 0
+    index = f"torch.where({inputs[1]} < 0, {inputs[1]} + {inputs[0]}.shape[{dim}], {inputs[1]})"
+    return f"{output} = torch.scatter({inputs[0]}, {dim}, {index}, {inputs[2]})"
+
+
 def _handle_reduce(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Handle reduce operations (torch.sum, torch.mean).
 
@@ -1244,6 +1264,7 @@ def register_operation_handlers() -> None:
     register_handler("torch.max", _handle_generic_torch_function)
     register_handler("torch.clamp", _handle_clip)
     register_handler("torch.where", _handle_generic_torch_function)
+    register_handler("torch.scatter", _handle_scatter_elements)
     register_handler("torch.full", _handle_constant_of_shape)
     register_handler("torch.arange", _handle_arange)
     register_handler("torch.mean", _handle_reduce)

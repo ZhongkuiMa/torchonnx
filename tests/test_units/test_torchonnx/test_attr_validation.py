@@ -13,6 +13,7 @@ Target: attr_extractor.py coverage improvement from 74.5% to 90%+
 
 __docformat__ = "restructuredtext"
 
+import numpy as np
 import onnx
 import pytest
 from onnx import TensorProto
@@ -119,13 +120,21 @@ class TestValidationErrors:
         with pytest.raises(ValueError, match="value"):
             extract_onnx_attrs(node, {})
 
-    def test_convtranspose_group_not_one_raises(self):
-        """Test ConvTranspose with group != 1 raises error."""
+    def test_convtranspose_preserves_positive_group(self):
+        """Test grouped ConvTranspose remains representable."""
         node = onnx_helper.make_node(
             "ConvTranspose", inputs=["X", "W"], outputs=["Y"], group=2, kernel_shape=[3, 3]
         )
-        with pytest.raises(ValueError, match="group"):
-            extract_onnx_attrs(node, {})
+        weight = onnx_helper.make_tensor(
+            "W",
+            TensorProto.FLOAT,
+            [4, 2, 3, 3],
+            np.zeros((4, 2, 3, 3), dtype=np.float32).ravel(),
+        )
+
+        attrs = extract_onnx_attrs(node, {"W": weight})
+
+        assert attrs["group"] == 2
 
     def test_maxpool_kernel_shape_required_raises(self):
         """Test MaxPool without kernel_shape raises error."""

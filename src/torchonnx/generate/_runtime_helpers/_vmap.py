@@ -159,6 +159,8 @@ def scatter_nd(data, indices, updates, reduction="none", valid=None):
     data_shape = data.shape
     n = data.ndim
     k = indices.shape[-1]
+    dim_sizes = torch.as_tensor(data_shape[:k], device=data.device)
+    indices = torch.where(indices < 0, indices + dim_sizes, indices)
 
     # Stride for dim i over the FULL shape: prod(data.shape[i+1:])
     full_strides = [1] * n

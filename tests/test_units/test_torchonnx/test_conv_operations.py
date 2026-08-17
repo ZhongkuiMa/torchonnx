@@ -163,6 +163,15 @@ class TestConvFunctionalOperations:
         if "output_padding" in args:
             assert args["output_padding"] != 0
 
+    def test_extract_conv_transpose_args_with_groups(self):
+        """Test grouped ConvTranspose forwards its group count."""
+        node = self.create_conv_transpose_node(group=2)
+        weight = self.create_weight_initializer([4, 2, 3, 3])
+
+        args = _extract_conv_transpose_args(node, {"W": weight})
+
+        assert args["groups"] == 2
+
     def test_extract_conv_transpose_args_asymmetric_error(self):
         """Test asymmetric padding error in ConvTranspose."""
         node = self.create_conv_transpose_node(pads=[1, 2, 2, 1])

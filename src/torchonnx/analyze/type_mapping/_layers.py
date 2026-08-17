@@ -194,6 +194,8 @@ def _extract_gemm_args(
         return {}
 
     attrs = extract_onnx_attrs(node, initializers)
+    if attrs.get("transA", 0):
+        raise ValueError("Gemm transA is not representable by nn.Linear")
 
     weight_shape = tuple(initializers[node.input[1]].dims)
 
@@ -473,22 +475,30 @@ def _extract_upsample_args(
     attrs = extract_onnx_attrs(node, initializers)
     mode = attrs.get("mode", "nearest")
 
-    # ONNX Resize has inputs: X, roi, scales, [sizes]
-    # roi at input[1] is often empty, scales at input[2] or input[3]
-    # Check input[2] first (scales), then input[1] as fallback
-
-    # Check input[2] for scales (typical for opset 10+)
+    # ONNX Resize has inputs [X, roi, scales, sizes]. Exactly one of scales
+    # and sizes is populated; roi is semantic data and must never be mistaken
+    # for a legacy Upsample scale tensor.
     if len(node.input) > 2 and node.input[2] in initializers:
         scales = numpy_helper.to_array(initializers[node.input[2]])
-        if len(scales) > 0:  # Make sure scales is not empty
+        if len(scales) > 0:
             if len(scales) > 2:
-                scales = scales[2:]  # Skip batch and channel dims
+                scales = scales[2:]
             return {"scale_factor": tuple(scales.tolist()), "mode": mode}
 
-    # Fallback: check input[1] for older opset versions
+    if len(node.input) > 3 and node.input[3] in initializers:
+        sizes = numpy_helper.to_array(initializers[node.input[3]])
+        if len(sizes) > 0:
+            if len(sizes) > 2:
+                sizes = sizes[2:]
+            return {"size": tuple(int(value) for value in sizes.tolist()), "mode": mode}
+
+    # Legacy Upsample used its second input for scales. Resize's second input
+    # is ROI, so keep this fallback exclusive to the old OpType.
     if len(node.input) > 1 and node.input[1] in initializers:
+        if node.op_type != "Upsample":
+            return {"mode": mode}
         scales = numpy_helper.to_array(initializers[node.input[1]])
-        if len(scales) > 0:  # Make sure scales is not empty
+        if len(scales) > 0:
             if len(scales) > 2:
                 scales = scales[2:]
             return {"scale_factor": tuple(scales.tolist()), "mode": mode}

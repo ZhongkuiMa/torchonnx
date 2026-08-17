@@ -60,6 +60,8 @@ def scatter_nd(data, indices, updates, reduction="none"):
     """
     result = data.clone()
     indices = indices.to(torch.long)
+    dim_sizes = torch.as_tensor(data.shape[: indices.shape[-1]], device=data.device)
+    indices = torch.where(indices < 0, indices + dim_sizes, indices)
 
     # Ensure updates has the same dtype as result (important for float64 testing)
     updates = updates.to(result.dtype)

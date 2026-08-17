@@ -40,6 +40,7 @@ from torchonnx.generate._handlers._operations import (
     _handle_pad,
     _handle_reduce,
     _handle_reshape,
+    _handle_scatter_elements,
     _handle_scatter_nd,
     _handle_shape,
     _handle_slice,
@@ -1301,6 +1302,37 @@ class TestScatterNDHandlerDirect:
         code = _handle_scatter_nd(layer, {})
 
         assert "output = " in code
+
+
+class TestScatterElementsHandlerDirect:
+    """Direct contracts for replacement scatter code generation."""
+
+    def test_reorders_inputs_and_normalizes_negative_indices(self):
+        layer = SemanticLayerIR(
+            name="scatter_elements_0",
+            onnx_op_type="ScatterElements",
+            pytorch_type="torch.scatter",
+            operator_class=OperatorClass.OPERATION,
+            inputs=[
+                make_variable("data", shape=(4,)),
+                make_constant("indices", [-1]),
+                make_constant("updates", [-1.0], dtype=torch.float32),
+            ],
+            outputs=[make_variable("output", shape=(4,))],
+            arguments=[ArgumentInfo(onnx_name="axis", pytorch_name="dim", value=0)],
+        )
+
+        set_forward_gen_context(ForwardGenContext())
+        try:
+            code = _handle_scatter_elements(layer, {})
+        finally:
+            set_forward_gen_context(None)
+
+        assert code == (
+            "output = torch.scatter(data, 0, "
+            "torch.where(self.c_indices < 0, self.c_indices + data.shape[0], "
+            "self.c_indices), self.c_updates)"
+        )
 
 
 # ===== Phase 8: Code Generator Analysis Functions =====
