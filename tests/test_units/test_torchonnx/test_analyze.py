@@ -20,7 +20,6 @@ from torchonnx.analyze.type_mapping import (
 from torchonnx.analyze.type_mapping._layers import (
     _extract_dropout_args,
     _extract_elu_args,
-    _extract_flatten_args,
     _extract_gelu_args,
     _extract_globalavgpool_args,
     _extract_leakyrelu_args,
@@ -718,11 +717,12 @@ class TestLayerExtractionEdgeCases:
 
     def test_extract_flatten_axis_attribute(self):
         """Test Flatten with axis attribute."""
-        # Flatten with start_dim parameter
         node = onnx.helper.make_node("Flatten", inputs=["X"], outputs=["Y"], axis=2)
 
-        args = _extract_flatten_args(node, {})
-        assert isinstance(args, dict)
+        args = extract_operation_args(node, {}, "Flatten")
+
+        assert convert_to_pytorch_type(node, {}) == "flatten"
+        assert args == {"axis": 2}
 
     def test_extract_leakyrelu_alpha_attribute(self):
         """Test LeakyReLU with alpha attribute."""

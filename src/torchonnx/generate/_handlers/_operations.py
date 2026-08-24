@@ -1194,6 +1194,18 @@ def _handle_reshape(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) 
     return f"{output} = {data}.reshape([int(x) for x in {shape_code}.tolist()])"
 
 
+def _handle_flatten(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
+    """Generate the two-dimensional reshape required by ONNX Flatten."""
+    _require_min_inputs(layer, 1, "Flatten")
+    data = _get_input_code_name_selective(layer.inputs[0])
+    output = layer.outputs[0].code_name
+    axis_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "axis"), None)
+    axis = int(axis_arg.value) if axis_arg is not None else 1
+    return (
+        f"{output} = {data}.reshape({data}.shape[:{axis}].numel(), {data}.shape[{axis}:].numel())"
+    )
+
+
 def _handle_transpose(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Generate Transpose code via ``.permute`` or ``.transpose(-2,-1)``."""
     inputs = _get_input_code_names(layer)
@@ -1237,6 +1249,7 @@ def _handle_unsqueeze(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]
 def register_operation_handlers() -> None:
     """Register all OPERATION handlers."""
     # Tensor methods
+    register_handler("flatten", _handle_flatten)
     register_handler("reshape", _handle_reshape)
     register_handler("permute", _handle_transpose)
     register_handler("squeeze", _handle_squeeze)

@@ -33,6 +33,7 @@ from torchonnx.generate._handlers._operations import (
     _handle_constant_of_shape,
     _handle_conv,
     _handle_expand,
+    _handle_flatten,
     _handle_gather,
     _handle_generic_method,
     _handle_generic_torch_function,
@@ -986,6 +987,33 @@ class TestReshapeHandlerDirect:
 
         assert "(-1, 2, 2)" in code
         assert "(0, 2, 2)" not in code
+
+
+class TestFlattenHandlerDirect:
+    """Direct unit tests for ONNX Flatten's two-sided reshape."""
+
+    @pytest.mark.parametrize("axis", [0, 1, 2, 3, -1])
+    def test_flatten_emits_two_dimensional_shape_products(self, axis: int) -> None:
+        layer = SemanticLayerIR(
+            name="flatten_0",
+            onnx_op_type="Flatten",
+            pytorch_type="flatten",
+            operator_class=OperatorClass.OPERATION,
+            inputs=[make_variable("X", shape=(2, 3, 4))],
+            outputs=[make_variable("Y")],
+            arguments=[
+                ArgumentInfo(
+                    onnx_name=None,
+                    pytorch_name="axis",
+                    value=axis,
+                    default_value=None,
+                )
+            ],
+        )
+
+        code = _handle_flatten(layer, {})
+
+        assert code == (f"y = x.reshape(x.shape[:{axis}].numel(), x.shape[{axis}:].numel())")
 
 
 class TestCodeGeneratorAnalysisDirect:

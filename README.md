@@ -97,11 +97,11 @@ TorchONNX is a 5-stage compiler:
 
 | Category | Operations |
 |----------|------------|
-| Layers | Conv1d/2d, ConvTranspose1d/2d, MaxPool2d, AvgPool2d, AdaptiveAvgPool2d, BatchNorm2d, Linear, Flatten, Dropout, Upsample |
+| Layers | Conv1d/2d, ConvTranspose1d/2d, MaxPool2d, AvgPool2d, AdaptiveAvgPool2d, BatchNorm2d, Linear, Dropout, Upsample |
 | Activations | ReLU, LeakyReLU, Sigmoid, Tanh, Softmax, ELU, GELU |
 | Functions | F.pad, F.interpolate, torch.cat, torch.gather, torch.mean/sum/min/max/argmax, torch.clamp, torch.where, torch.full, torch.arange |
 | Operators | add, sub, mul, div, matmul, pow, neg, equal |
-| Tensor ops | reshape, permute, squeeze, unsqueeze, expand, slice, split, cast, sign, cos, sin, floor |
+| Tensor ops | flatten, reshape, permute, squeeze, unsqueeze, expand, slice, split, cast, sign, cos, sin, floor |
 
 Transformer architectures are decomposed into these basic operations.
 

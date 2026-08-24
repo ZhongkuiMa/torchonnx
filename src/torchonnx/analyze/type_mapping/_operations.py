@@ -43,6 +43,7 @@ ONNX_TO_PYTORCH_OPERATIONS: dict[str, str] = {
     # Fallback for Gemm when constructor args fail
     "Gemm": "F.linear",
     "Pad": "F.pad",
+    "Flatten": "flatten",
     "Reshape": "reshape",
     "Transpose": "permute",
     "Squeeze": "squeeze",
@@ -283,6 +284,9 @@ def _extract_conv_transpose_args(
 # Dispatch dictionary for operation argument extraction
 _OPERATION_ARGS_EXTRACTORS: dict[str, Any] = {
     "Pad": _extract_pad_args,
+    "Flatten": lambda node, initializers: {
+        "axis": extract_onnx_attrs(node, initializers).get("axis", 1)
+    },
     "Reshape": lambda node, initializers: {},
     "Transpose": lambda node, initializers: {
         "perm": extract_onnx_attrs(node, initializers).get("perm", [])

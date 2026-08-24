@@ -34,8 +34,6 @@ class TestLayerDefaultsAutoDerivation:
             ("ReLU", "inplace", "False"),
             ("LeakyReLU", "negative_slope", "0.01"),
             ("Dropout", "p", "0.5"),
-            ("Flatten", "start_dim", "1"),
-            ("Flatten", "end_dim", "-1"),
         ],
     )
     def test_key_defaults_match_pytorch(self, layer, arg, expected):

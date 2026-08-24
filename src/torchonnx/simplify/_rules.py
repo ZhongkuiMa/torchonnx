@@ -93,7 +93,6 @@ POSITIONAL_ONLY_ARGS: dict[str, list[str]] = {
     "LSTM": ["input_size", "hidden_size"],
     "GRU": ["input_size", "hidden_size"],
     # Shape operations
-    "Flatten": ["start_dim"],
     "Unflatten": ["dim", "unflattened_size"],
     # Upsampling
     "Upsample": [],
@@ -181,7 +180,6 @@ _SUPPORTED_LAYERS: tuple[type, ...] = (
     nn.Dropout2d,
     nn.Dropout3d,
     nn.Upsample,
-    nn.Flatten,
 )
 
 LAYER_DEFAULTS: dict[str, dict[str, str]] = {

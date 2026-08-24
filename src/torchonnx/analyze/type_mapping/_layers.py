@@ -39,8 +39,6 @@ ONNX_TO_PYTORCH_LAYERS: dict[str, str] = {
     # Upsampling
     "Resize": "Upsample",
     "Upsample": "Upsample",
-    # Shape operations
-    "Flatten": "Flatten",
 }
 
 
@@ -62,7 +60,6 @@ LAYERS_WITH_ARGS: set[str] = {
     "Sigmoid",
     "Tanh",
     "Softmax",
-    "Flatten",
     "Upsample",
 }
 
@@ -520,25 +517,6 @@ def _extract_globalavgpool_args(
     return {"output_size": (1, 1)}
 
 
-def _extract_flatten_args(
-    node: NodeProto,
-    initializers: dict[str, TensorProto],
-) -> dict[str, Any]:
-    """Map ONNX Flatten attributes to PyTorch Flatten arguments.
-
-    :param node: ONNX Flatten node.
-    :param initializers: All ONNX initializers.
-
-    :return: PyTorch Flatten constructor arguments
-    """
-    attrs = extract_onnx_attrs(node, initializers)
-    axis = attrs.get("axis", 1)
-
-    return {
-        "start_dim": axis,
-    }
-
-
 _ONNX_TO_PYTORCH_ARGS: dict[str, Any] = {
     "Conv": _extract_conv_args,
     "ConvTranspose": _extract_convtranspose_args,
@@ -558,7 +536,6 @@ _ONNX_TO_PYTORCH_ARGS: dict[str, Any] = {
     "Upsample": _extract_upsample_args,
     "Resize": _extract_upsample_args,  # Resize also maps to nn.Upsample
     "GlobalAveragePool": _extract_globalavgpool_args,
-    "Flatten": _extract_flatten_args,
 }
 
 

@@ -17,7 +17,6 @@ _LAYERS_WITHOUT_BUFFERS = frozenset(
     {
         "nn.Dropout",
         "nn.ELU",
-        "nn.Flatten",
         "nn.LeakyReLU",
         "nn.ReLU",
         "nn.Sigmoid",

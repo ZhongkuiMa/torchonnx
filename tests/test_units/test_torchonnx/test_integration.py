@@ -66,6 +66,48 @@ def test_convert_inlined_reshape_loads_strict_without_orphan_keys(reshape_model,
     model.load_state_dict(state_dict, strict=True)
 
 
+@pytest.mark.parametrize(
+    "axis",
+    [pytest.param(None, id="default"), 0, 1, 2, 3, -1],
+)
+def test_convert_flatten_preserves_onnx_two_sided_semantics(
+    axis: int | None,
+    tmp_path: Path,
+) -> None:
+    """Flatten always produces the two dimensions defined by ONNX."""
+    input_info = onnx.helper.make_tensor_value_info("x", onnx.TensorProto.FLOAT, [2, 3, 4])
+    output_info = onnx.helper.make_tensor_value_info("y", onnx.TensorProto.FLOAT, [None, None])
+    attrs = {} if axis is None else {"axis": axis}
+    flatten = onnx.helper.make_node("Flatten", ["x"], ["y"], **attrs)
+    graph = onnx.helper.make_graph([flatten], "flatten", [input_info], [output_info])
+    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 13)])
+    onnx_path = tmp_path / f"flatten_{axis}.onnx"
+    py_path = tmp_path / f"flatten_{axis}.py"
+    pth_path = tmp_path / f"flatten_{axis}.pth"
+    onnx.save(model, onnx_path)
+
+    TorchONNX().convert(
+        str(onnx_path),
+        target_py_path=str(py_path),
+        target_pth_path=str(pth_path),
+    )
+    spec = importlib.util.spec_from_file_location(f"flatten_{axis}_generated", py_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    torch_model = getattr(module, module.__all__[0])()
+    torch_model.load_state_dict(torch.load(pth_path, weights_only=True), strict=True)
+
+    values = np.arange(24, dtype=np.float32).reshape(2, 3, 4)
+    expected = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"]).run(
+        None, {"x": values}
+    )[0]
+    actual = torch_model(torch.from_numpy(values)).detach().numpy()
+
+    np.testing.assert_array_equal(actual, expected)
+
+
 class IntegrationTestHelper:
     """Helper functions for integration testing."""
 

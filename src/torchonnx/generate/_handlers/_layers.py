@@ -119,8 +119,6 @@ def register_layer_handlers() -> None:
         "nn.Dropout",
         # Upsampling
         "nn.Upsample",
-        # Shape operations
-        "nn.Flatten",
     ]
 
     for layer_type in layer_types:
