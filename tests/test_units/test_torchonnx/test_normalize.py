@@ -28,6 +28,7 @@ from google.protobuf.message import DecodeError
 from torchonnx.normalize import load_and_preprocess_onnx_model
 from torchonnx.normalize.normalize import (
     _apply_shapeonnx_inference,
+    _canonicalize_opset_imports,
     _check_model,
     _convert_version,
     _infer_shapes,
@@ -100,6 +101,42 @@ class TestOpsetHandling:
         convert.assert_not_called()
         assert normalized is model
         assert normalized.opset_import[0].version == 21
+
+    def test_duplicate_opset_import_is_collapsed_before_conversion(self):
+        """Native ONNX conversion must not leave one duplicate at the old version."""
+        input_info = onnx.helper.make_tensor_value_info("X", onnx.TensorProto.FLOAT, [1])
+        output_info = onnx.helper.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, [1])
+        graph = onnx.helper.make_graph(
+            [onnx.helper.make_node("Relu", ["X"], ["Y"])],
+            "duplicate_opset",
+            [input_info],
+            [output_info],
+        )
+        model = onnx.helper.make_model(
+            graph,
+            opset_imports=[
+                onnx.helper.make_opsetid("", 11),
+                onnx.helper.make_opsetid("", 11),
+            ],
+        )
+
+        converted = _convert_version(model, target_opset=20)
+
+        assert [(item.domain, item.version) for item in converted.opset_import] == [("", 20)]
+        assert len(model.opset_import) == 2
+        onnx.checker.check_model(converted)
+
+    def test_conflicting_opset_imports_are_rejected(self):
+        model = onnx.helper.make_model(
+            onnx.helper.make_graph([], "conflict", [], []),
+            opset_imports=[
+                onnx.helper.make_opsetid("", 11),
+                onnx.helper.make_opsetid("", 13),
+            ],
+        )
+
+        with pytest.raises(ValueError, match="Conflicting opset imports"):
+            _canonicalize_opset_imports(model)
 
 
 class TestShapeInference:

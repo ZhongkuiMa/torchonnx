@@ -16,6 +16,58 @@ MAX_TESTED_OPSET = 21  # Highest tested working version
 SLIMONNX_VERSION = "1.0.0"
 
 
+def _canonicalize_opset_imports(model: ModelProto) -> ModelProto:
+    """Return a model with at most one import per ONNX domain.
+
+    Some valid models contain repeated, identical ``opset_import`` entries.
+    ONNX's native version converter updates only one duplicate and leaves a
+    semantically inconsistent model behind.  Identical duplicates carry no
+    information and are collapsed; conflicting versions are ambiguous and
+    therefore rejected before conversion.
+
+    :param model: Input ONNX model. The input is not mutated.
+    :return: Model with canonical opset imports.
+    :raises ValueError: If one domain declares conflicting versions.
+    """
+    imports: list[tuple[str, int]] = []
+    versions: dict[str, int] = {}
+    has_duplicates = False
+    for opset in model.opset_import:
+        domain = opset.domain
+        version = opset.version
+        if domain not in versions:
+            versions[domain] = version
+            imports.append((domain, version))
+            continue
+        previous = versions[domain]
+        if previous != version:
+            label = domain or "ai.onnx"
+            raise ValueError(
+                f"Conflicting opset imports for domain {label!r}: {previous} and {version}"
+            )
+        has_duplicates = True
+
+    if not has_duplicates:
+        return model
+
+    canonical = ModelProto()
+    canonical.CopyFrom(model)
+    del canonical.opset_import[:]
+    for domain, version in imports:
+        opset = canonical.opset_import.add()
+        opset.domain = domain
+        opset.version = version
+    return canonical
+
+
+def _primary_opset(model: ModelProto) -> int:
+    """Return the default ONNX-domain opset version."""
+    for opset in model.opset_import:
+        if opset.domain in ("", "ai.onnx"):
+            return int(opset.version)
+    raise ValueError("Model has no primary ONNX opset import")
+
+
 def _clear_docstrings(model: ModelProto) -> ModelProto:
     """Clear all docstrings from ONNX model nodes.
 
@@ -55,7 +107,8 @@ def _convert_version(
 
     :return: Converted model (IR version set automatically by ONNX)
     """
-    current_opset = model.opset_import[0].version if model.opset_import else 0
+    model = _canonicalize_opset_imports(model)
+    current_opset = _primary_opset(model)
 
     # A zero-node graph is an identity alias and has no versioned operator
     # semantics. Native ONNX conversion is both unnecessary and unable to
@@ -247,6 +300,7 @@ def preprocess_onnx_model(
     """
     normalized = ModelProto()
     normalized.CopyFrom(model)
+    normalized = _canonicalize_opset_imports(normalized)
 
     if check_model:
         _check_model(normalized)
