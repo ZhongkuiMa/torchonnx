@@ -12,9 +12,8 @@ Test Coverage:
 - TestStateDictValidation: 4 tests - State dict integrity
 - TestModelExecution: 2 tests - Runtime execution safety
 
-NOTE: These tests depend on working build_semantic_ir() which is blocked by
-the classify_inputs() bug in tensor_classifier.py. Tests handle this gracefully
-with pytest.skip().
+Failures in semantic IR construction are test failures; integration tests do not
+convert implementation exceptions into skips.
 """
 
 __docformat__ = "restructuredtext"
@@ -35,6 +34,411 @@ from torchonnx.analyze import build_semantic_ir
 from torchonnx.build import build_model_ir
 from torchonnx.generate import generate_pytorch_module
 from torchonnx.normalize import load_and_preprocess_onnx_model
+
+
+def _assert_converted_model_matches_onnxruntime(
+    model: onnx.ModelProto,
+    data: np.ndarray | dict[str, np.ndarray],
+    tmp_path: Path,
+    stem: str,
+    *,
+    use_shapeonnx: bool = False,
+) -> None:
+    """Convert, strict-load, run, and compare an ONNX model."""
+    onnx.checker.check_model(model)
+    onnx_path = tmp_path / f"{stem}.onnx"
+    py_path = tmp_path / f"{stem}.py"
+    pth_path = tmp_path / f"{stem}.pth"
+    onnx.save(model, onnx_path)
+
+    TorchONNX(use_shapeonnx=use_shapeonnx).convert(
+        str(onnx_path),
+        target_py_path=str(py_path),
+        target_pth_path=str(pth_path),
+    )
+    spec = importlib.util.spec_from_file_location(f"{stem}_generated", py_path)
+    assert spec is not None
+    assert spec.loader is not None
+    generated = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(generated)
+    torch_model = getattr(generated, generated.__all__[0])()
+    torch_model.load_state_dict(torch.load(pth_path, weights_only=True), strict=True)
+
+    feeds = {"data": data} if isinstance(data, np.ndarray) else data
+    session = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
+    expected = session.run(None, feeds)[0]
+    actual = torch_model(*(torch.from_numpy(feeds[item.name]) for item in session.get_inputs()))
+    np.testing.assert_allclose(actual.detach().numpy(), expected, rtol=1e-6, atol=1e-6)
+
+
+def test_clip_max_only_preserves_optional_input_position(tmp_path: Path) -> None:
+    """Clip's third input remains max when its min slot is empty."""
+    data_info = onnx.helper.make_tensor_value_info("data", onnx.TensorProto.FLOAT, [5])
+    output_info = onnx.helper.make_tensor_value_info("output", onnx.TensorProto.FLOAT, [5])
+    max_bound = onnx.numpy_helper.from_array(np.array(1.0, dtype=np.float32), name="max")
+    clip = onnx.helper.make_node("Clip", ["data", "", "max"], ["output"])
+    graph = onnx.helper.make_graph([clip], "clip_max_only", [data_info], [output_info], [max_bound])
+    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 20)])
+
+    values = np.array([-2.0, -0.5, 0.5, 2.0, 5.0], dtype=np.float32)
+    _assert_converted_model_matches_onnxruntime(model, values, tmp_path, "clip_max_only")
+
+
+def test_pad_omitted_value_with_axes_matches_onnxruntime(tmp_path: Path) -> None:
+    """Pad keeps axes in slot four and applies the omitted zero value."""
+    data_info = onnx.helper.make_tensor_value_info("data", onnx.TensorProto.FLOAT, [2, 3])
+    output_info = onnx.helper.make_tensor_value_info("output", onnx.TensorProto.FLOAT, [5, 3])
+    pads = onnx.numpy_helper.from_array(np.array([1, 2], dtype=np.int64), name="pads")
+    axes = onnx.numpy_helper.from_array(np.array([0], dtype=np.int64), name="axes")
+    pad = onnx.helper.make_node("Pad", ["data", "pads", "", "axes"], ["output"], mode="constant")
+    graph = onnx.helper.make_graph([pad], "pad_axes", [data_info], [output_info], [pads, axes])
+    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 20)])
+
+    values = np.arange(6, dtype=np.float32).reshape(2, 3) + 1.0
+    _assert_converted_model_matches_onnxruntime(model, values, tmp_path, "pad_axes")
+
+
+def test_slice_omitted_axes_with_steps_matches_onnxruntime(tmp_path: Path) -> None:
+    """Slice keeps steps in slot five when its axes slot is empty."""
+    data_info = onnx.helper.make_tensor_value_info("data", onnx.TensorProto.FLOAT, [6])
+    output_info = onnx.helper.make_tensor_value_info("output", onnx.TensorProto.FLOAT, [3])
+    starts = onnx.numpy_helper.from_array(np.array([0], dtype=np.int64), name="starts")
+    ends = onnx.numpy_helper.from_array(np.array([6], dtype=np.int64), name="ends")
+    steps = onnx.numpy_helper.from_array(np.array([2], dtype=np.int64), name="steps")
+    slice_node = onnx.helper.make_node("Slice", ["data", "starts", "ends", "", "steps"], ["output"])
+    graph = onnx.helper.make_graph(
+        [slice_node], "slice_default_axes", [data_info], [output_info], [starts, ends, steps]
+    )
+    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 20)])
+
+    values = np.arange(6, dtype=np.float32)
+    _assert_converted_model_matches_onnxruntime(model, values, tmp_path, "slice_default_axes")
+
+
+def test_slice_with_axes_and_omitted_steps_matches_onnxruntime(tmp_path: Path) -> None:
+    """Slice applies the default step when slot five is explicitly empty."""
+    data_info = onnx.helper.make_tensor_value_info("data", onnx.TensorProto.FLOAT, [6])
+    output_info = onnx.helper.make_tensor_value_info("output", onnx.TensorProto.FLOAT, [4])
+    starts = onnx.numpy_helper.from_array(np.array([1], dtype=np.int64), name="starts")
+    ends = onnx.numpy_helper.from_array(np.array([5], dtype=np.int64), name="ends")
+    axes = onnx.numpy_helper.from_array(np.array([0], dtype=np.int64), name="axes")
+    slice_node = onnx.helper.make_node("Slice", ["data", "starts", "ends", "axes", ""], ["output"])
+    graph = onnx.helper.make_graph(
+        [slice_node], "slice_default_steps", [data_info], [output_info], [starts, ends, axes]
+    )
+    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 20)])
+
+    values = np.arange(6, dtype=np.float32)
+    _assert_converted_model_matches_onnxruntime(model, values, tmp_path, "slice_default_steps")
+
+
+@pytest.mark.parametrize(
+    "input_shape",
+    [
+        pytest.param((), id="scalar"),
+        pytest.param((5,), id="rank_one"),
+        pytest.param((2, 3), id="rank_two"),
+        pytest.param((2, 3, 4), id="rank_three"),
+    ],
+)
+def test_transpose_without_perm_reverses_all_dimensions(
+    tmp_path: Path, input_shape: tuple[int, ...]
+) -> None:
+    """Honor ONNX's default permutation instead of swapping only the last two axes."""
+    output_shape = tuple(reversed(input_shape))
+    data_info = onnx.helper.make_tensor_value_info("data", onnx.TensorProto.FLOAT, input_shape)
+    output_info = onnx.helper.make_tensor_value_info("output", onnx.TensorProto.FLOAT, output_shape)
+    transpose = onnx.helper.make_node("Transpose", ["data"], ["output"])
+    graph = onnx.helper.make_graph([transpose], "transpose_default", [data_info], [output_info])
+    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 20)])
+
+    size = int(np.prod(input_shape)) if input_shape else 1
+    values = np.arange(size, dtype=np.float32).reshape(input_shape)
+    stem = f"transpose_default_rank_{len(input_shape)}"
+    _assert_converted_model_matches_onnxruntime(model, values, tmp_path, stem)
+
+
+@pytest.mark.parametrize(
+    "axes_values",
+    [
+        pytest.param([0, 3], id="positive_axes"),
+        pytest.param([-4, -1], id="negative_axes"),
+    ],
+)
+@pytest.mark.parametrize("use_shapeonnx", [False, True], ids=["onnx_shapes", "shapeonnx_shapes"])
+def test_unsqueeze_multiple_axes_matches_onnxruntime(
+    tmp_path: Path, axes_values: list[int], use_shapeonnx: bool
+) -> None:
+    """Apply constant Unsqueeze axes as final output coordinates."""
+    data_info = onnx.helper.make_tensor_value_info("data", onnx.TensorProto.FLOAT, [2, 3])
+    output_info = onnx.helper.make_tensor_value_info("output", onnx.TensorProto.FLOAT, [1, 2, 3, 1])
+    axes = onnx.numpy_helper.from_array(np.array(axes_values, dtype=np.int64), name="axes")
+    unsqueeze = onnx.helper.make_node("Unsqueeze", ["data", "axes"], ["output"])
+    graph = onnx.helper.make_graph(
+        [unsqueeze], "unsqueeze_multiple_axes", [data_info], [output_info], [axes]
+    )
+    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 20)])
+
+    values = np.arange(6, dtype=np.float32).reshape(2, 3)
+    stem = f"unsqueeze_multiple_{axes_values[0]}_{axes_values[1]}_{use_shapeonnx}"
+    _assert_converted_model_matches_onnxruntime(
+        model,
+        values,
+        tmp_path,
+        stem,
+        use_shapeonnx=use_shapeonnx,
+    )
+
+
+@pytest.mark.parametrize("op_type", ["ReduceMean", "ReduceSum"])
+@pytest.mark.parametrize("keepdims", [0, 1])
+@pytest.mark.parametrize("use_shapeonnx", [False, True], ids=["onnx_shapes", "shapeonnx_shapes"])
+def test_reduce_without_axes_matches_onnxruntime(
+    tmp_path: Path, op_type: str, keepdims: int, use_shapeonnx: bool
+) -> None:
+    """Reduce every dimension when ONNX omits the optional axes input."""
+    data_info = onnx.helper.make_tensor_value_info("data", onnx.TensorProto.FLOAT, [2, 3])
+    output_shape = [1, 1] if keepdims else []
+    output_info = onnx.helper.make_tensor_value_info("output", onnx.TensorProto.FLOAT, output_shape)
+    reduce_node = onnx.helper.make_node(
+        op_type,
+        ["data"],
+        ["output"],
+        keepdims=keepdims,
+    )
+    graph = onnx.helper.make_graph(
+        [reduce_node],
+        f"{op_type.lower()}_without_axes",
+        [data_info],
+        [output_info],
+    )
+    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 20)])
+
+    values = np.arange(6, dtype=np.float32).reshape(2, 3)
+    stem = f"{op_type.lower()}_without_axes_keepdims_{keepdims}_{use_shapeonnx}"
+    _assert_converted_model_matches_onnxruntime(
+        model,
+        values,
+        tmp_path,
+        stem,
+        use_shapeonnx=use_shapeonnx,
+    )
+
+
+def test_dilated_average_pool_is_rejected(tmp_path: Path) -> None:
+    """Fail closed when ONNX pooling semantics lack a PyTorch layer equivalent."""
+    data_info = onnx.helper.make_tensor_value_info("data", onnx.TensorProto.FLOAT, [1, 1, 5, 5])
+    output_info = onnx.helper.make_tensor_value_info("output", onnx.TensorProto.FLOAT, [1, 1, 3, 3])
+    average_pool = onnx.helper.make_node(
+        "AveragePool",
+        ["data"],
+        ["output"],
+        kernel_shape=[2, 2],
+        strides=[1, 1],
+        dilations=[2, 2],
+    )
+    graph = onnx.helper.make_graph(
+        [average_pool],
+        "dilated_average_pool",
+        [data_info],
+        [output_info],
+    )
+    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 20)])
+    onnx.checker.check_model(model)
+    onnx_path = tmp_path / "dilated_average_pool.onnx"
+    onnx.save(model, onnx_path)
+
+    with pytest.raises(ValueError, match=r"AveragePool.*dilations"):
+        TorchONNX().convert(str(onnx_path))
+
+
+@pytest.mark.parametrize("op_type", ["AveragePool", "MaxPool"])
+@pytest.mark.parametrize("use_shapeonnx", [False, True], ids=["onnx_shapes", "shapeonnx_shapes"])
+@pytest.mark.parametrize(
+    ("input_shape", "output_shape", "kernel_shape"),
+    [
+        pytest.param([1, 1, 5], [1, 1, 4], [2], id="one_dimensional"),
+        pytest.param(
+            [1, 1, 4, 4, 4],
+            [1, 1, 3, 3, 3],
+            [2, 2, 2],
+            id="three_dimensional",
+        ),
+    ],
+)
+def test_pool_dimension_matches_onnxruntime(
+    tmp_path: Path,
+    op_type: str,
+    input_shape: list[int],
+    output_shape: list[int],
+    kernel_shape: list[int],
+    use_shapeonnx: bool,
+) -> None:
+    """Select the PyTorch pooling layer matching ONNX spatial rank."""
+    data_info = onnx.helper.make_tensor_value_info("data", onnx.TensorProto.FLOAT, input_shape)
+    output_info = onnx.helper.make_tensor_value_info("output", onnx.TensorProto.FLOAT, output_shape)
+    pool = onnx.helper.make_node(
+        op_type,
+        ["data"],
+        ["output"],
+        kernel_shape=kernel_shape,
+    )
+    graph = onnx.helper.make_graph(
+        [pool],
+        f"{op_type.lower()}_{len(kernel_shape)}d",
+        [data_info],
+        [output_info],
+    )
+    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 20)])
+
+    values = np.arange(np.prod(input_shape), dtype=np.float32).reshape(input_shape)
+    stem = f"{op_type.lower()}_{len(kernel_shape)}d_{use_shapeonnx}"
+    _assert_converted_model_matches_onnxruntime(
+        model,
+        values,
+        tmp_path,
+        stem,
+        use_shapeonnx=use_shapeonnx,
+    )
+
+
+@pytest.mark.parametrize("use_shapeonnx", [False, True], ids=["onnx_shapes", "shapeonnx_shapes"])
+@pytest.mark.parametrize(
+    ("input_shape", "output_shape"),
+    [
+        pytest.param([1, 2, 5], [1, 2, 1], id="one_spatial_dimension"),
+        pytest.param([1, 2, 3, 4], [1, 2, 1, 1], id="two_spatial_dimensions"),
+        pytest.param(
+            [1, 2, 3, 4, 5],
+            [1, 2, 1, 1, 1],
+            id="three_spatial_dimensions",
+        ),
+    ],
+)
+def test_global_average_pool_matches_onnxruntime(
+    tmp_path: Path,
+    input_shape: list[int],
+    output_shape: list[int],
+    use_shapeonnx: bool,
+) -> None:
+    """Reduce every spatial axis regardless of input rank."""
+    data_info = onnx.helper.make_tensor_value_info("data", onnx.TensorProto.FLOAT, input_shape)
+    output_info = onnx.helper.make_tensor_value_info("output", onnx.TensorProto.FLOAT, output_shape)
+    pool = onnx.helper.make_node("GlobalAveragePool", ["data"], ["output"])
+    graph = onnx.helper.make_graph(
+        [pool],
+        "global_average_pool",
+        [data_info],
+        [output_info],
+    )
+    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 20)])
+
+    values = np.arange(np.prod(input_shape), dtype=np.float32).reshape(input_shape)
+    stem = f"global_average_pool_{len(input_shape) - 2}d_{use_shapeonnx}"
+    _assert_converted_model_matches_onnxruntime(
+        model,
+        values,
+        tmp_path,
+        stem,
+        use_shapeonnx=use_shapeonnx,
+    )
+
+
+@pytest.mark.parametrize("op_type", ["Min", "Max"])
+@pytest.mark.parametrize("arity", [1, 3])
+@pytest.mark.parametrize("use_shapeonnx", [False, True], ids=["onnx_shapes", "shapeonnx_shapes"])
+def test_variadic_minmax_matches_onnxruntime(
+    tmp_path: Path, op_type: str, arity: int, use_shapeonnx: bool
+) -> None:
+    """Apply elementwise Min/Max with broadcasting across every input."""
+    shapes = [[2, 3]] if arity == 1 else [[2, 1], [1, 3], []]
+    values = [np.array([[1.0, 4.0, 2.0], [5.0, 0.0, 3.0]], dtype=np.float32)]
+    if arity == 3:
+        values = [
+            np.array([[1.0], [4.0]], dtype=np.float32),
+            np.array([[2.0, 3.0, 0.0]], dtype=np.float32),
+            np.array(2.5, dtype=np.float32),
+        ]
+
+    input_names = [f"data{index}" for index in range(arity)]
+    input_infos = [
+        onnx.helper.make_tensor_value_info(name, onnx.TensorProto.FLOAT, shape)
+        for name, shape in zip(input_names, shapes, strict=True)
+    ]
+    output_shape = [2, 3]
+    output_info = onnx.helper.make_tensor_value_info("output", onnx.TensorProto.FLOAT, output_shape)
+    node = onnx.helper.make_node(op_type, input_names, ["output"])
+    graph = onnx.helper.make_graph(
+        [node], f"variadic_{op_type.lower()}", input_infos, [output_info]
+    )
+    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 20)])
+    feeds = dict(zip(input_names, values, strict=True))
+
+    _assert_converted_model_matches_onnxruntime(
+        model,
+        feeds,
+        tmp_path,
+        f"{op_type.lower()}_{arity}_{use_shapeonnx}",
+        use_shapeonnx=use_shapeonnx,
+    )
+
+
+def test_dynamic_slice_requires_non_vmap_and_preserves_runtime_length(tmp_path: Path) -> None:
+    """Reject unproven vmap shapes and preserve eager dynamic Slice semantics."""
+    data_info = onnx.helper.make_tensor_value_info("data", onnx.TensorProto.FLOAT, [5])
+    starts_info = onnx.helper.make_tensor_value_info("starts", onnx.TensorProto.INT64, [1])
+    ends_info = onnx.helper.make_tensor_value_info("ends", onnx.TensorProto.INT64, [1])
+    output_info = onnx.helper.make_tensor_value_info("output", onnx.TensorProto.FLOAT, [None])
+    axes = onnx.numpy_helper.from_array(np.array([0], dtype=np.int64), name="axes")
+    steps = onnx.numpy_helper.from_array(np.array([1], dtype=np.int64), name="steps")
+    slice_node = onnx.helper.make_node(
+        "Slice",
+        ["data", "starts", "ends", "axes", "steps"],
+        ["output"],
+    )
+    graph = onnx.helper.make_graph(
+        [slice_node],
+        "dynamic_slice",
+        [data_info, starts_info, ends_info],
+        [output_info],
+        [axes, steps],
+    )
+    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 20)])
+    onnx_path = tmp_path / "dynamic_slice.onnx"
+    py_path = tmp_path / "dynamic_slice.py"
+    pth_path = tmp_path / "dynamic_slice.pth"
+    onnx.save(model, onnx_path)
+
+    with pytest.raises(
+        ValueError,
+        match=r"cannot be proven statically with vmap_mode=True.*vmap_mode=False",
+    ):
+        TorchONNX().convert(
+            str(onnx_path),
+            target_py_path=str(py_path),
+            target_pth_path=str(pth_path),
+        )
+
+    TorchONNX().convert(
+        str(onnx_path),
+        target_py_path=str(py_path),
+        target_pth_path=str(pth_path),
+        vmap_mode=False,
+    )
+    spec = importlib.util.spec_from_file_location("dynamic_slice_generated", py_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    torch_model = getattr(module, module.__all__[0])()
+    torch_model.load_state_dict(torch.load(pth_path, weights_only=True), strict=True)
+
+    actual = torch_model(
+        torch.arange(5, dtype=torch.float32),
+        torch.tensor([1], dtype=torch.int64),
+        torch.tensor([4], dtype=torch.int64),
+    )
+    torch.testing.assert_close(actual, torch.tensor([1.0, 2.0, 3.0]))
 
 
 def test_convert_inlined_reshape_loads_strict_without_orphan_keys(reshape_model, tmp_path):
@@ -237,12 +641,7 @@ class TestExecutableCodeGeneration:
 
     def test_generated_code_is_valid_python(self, linear_model):
         """Verify generated code can be parsed as valid Python."""
-        try:
-            code, _state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                linear_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, _state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(linear_model)
 
         # Try to parse the code
 
@@ -252,12 +651,7 @@ class TestExecutableCodeGeneration:
 
     def test_generated_code_imports_succeed(self, linear_model):
         """Verify generated code can be imported without errors."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                linear_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(linear_model)
 
         temp_dir = tempfile.mkdtemp()
         try:
@@ -272,12 +666,7 @@ class TestExecutableCodeGeneration:
 
     def test_generated_class_instantiates(self, linear_model):
         """Verify generated model class can be instantiated."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                linear_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(linear_model)
 
         temp_dir = tempfile.mkdtemp()
         try:
@@ -290,12 +679,7 @@ class TestExecutableCodeGeneration:
 
     def test_state_dict_loads_successfully(self, linear_model):
         """Verify state dict can be loaded into generated model."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                linear_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(linear_model)
 
         temp_dir = tempfile.mkdtemp()
         try:
@@ -314,12 +698,7 @@ class TestNumericalValidation:
 
     def test_linear_model_output_matches_onnx(self, linear_model):
         """Verify Linear model PyTorch output matches ONNX."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                linear_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(linear_model)
 
         # Generate test input
         inputs = IntegrationTestHelper.get_onnx_inputs(linear_model, num_inputs=1)[0]
@@ -346,12 +725,7 @@ class TestNumericalValidation:
 
     def test_conv_model_output_matches_onnx(self, conv2d_model):
         """Verify Conv2d model PyTorch output matches ONNX."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                conv2d_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(conv2d_model)
 
         inputs = IntegrationTestHelper.get_onnx_inputs(conv2d_model, num_inputs=1)[0]
 
@@ -376,10 +750,7 @@ class TestNumericalValidation:
 
     def test_mlp_model_output_matches_onnx(self, mlp_model):
         """Verify MLP model PyTorch output matches ONNX."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(mlp_model)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(mlp_model)
 
         inputs = IntegrationTestHelper.get_onnx_inputs(mlp_model, num_inputs=1)[0]
 
@@ -402,12 +773,7 @@ class TestNumericalValidation:
 
     def test_batchnorm_model_output_matches_onnx(self, batchnorm_model):
         """Verify BatchNorm model PyTorch output matches ONNX."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                batchnorm_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(batchnorm_model)
 
         inputs = IntegrationTestHelper.get_onnx_inputs(batchnorm_model, num_inputs=1)[0]
 
@@ -443,10 +809,7 @@ class TestNumericalValidation:
     def test_model_output_matches_onnx(self, model_fixture_name, rtol, atol, request):
         """Verify model PyTorch output matches ONNX output."""
         model = request.getfixturevalue(model_fixture_name)
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(model)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(model)
 
         inputs = IntegrationTestHelper.get_onnx_inputs(model, num_inputs=1)[0]
 
@@ -471,12 +834,7 @@ class TestNumericalValidation:
 
     def test_concat_model_output_matches_onnx(self, concat_model):
         """Verify Concat model PyTorch output matches ONNX."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                concat_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(concat_model)
 
         inputs = IntegrationTestHelper.get_onnx_inputs(concat_model, num_inputs=1)[0]
 
@@ -500,12 +858,9 @@ class TestNumericalValidation:
 
     def test_arithmetic_model_output_matches_onnx(self, arithmetic_model):
         """Verify Arithmetic model PyTorch output matches ONNX."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                arithmetic_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
+            arithmetic_model
+        )
 
         inputs = IntegrationTestHelper.get_onnx_inputs(arithmetic_model, num_inputs=1)[0]
 
@@ -533,12 +888,7 @@ class TestStateDictValidation:
 
     def test_state_dict_keys_match_model(self, linear_model):
         """Verify state dict keys match model parameters."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                linear_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(linear_model)
 
         temp_dir = tempfile.mkdtemp()
         try:
@@ -555,12 +905,7 @@ class TestStateDictValidation:
 
     def test_state_dict_shapes_correct(self, linear_model):
         """Verify state dict tensor shapes are correct."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                linear_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(linear_model)
 
         temp_dir = tempfile.mkdtemp()
         try:
@@ -577,12 +922,7 @@ class TestStateDictValidation:
 
     def test_state_dict_dtypes_correct(self, linear_model):
         """Verify state dict tensor dtypes are correct."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                linear_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(linear_model)
 
         temp_dir = tempfile.mkdtemp()
         try:
@@ -599,12 +939,7 @@ class TestStateDictValidation:
 
     def test_state_dict_values_match_onnx(self, linear_model):
         """Verify state dict values come from ONNX initializers."""
-        try:
-            _code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                linear_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        _code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(linear_model)
 
         # Just verify state dict has tensors
         for value in state_dict.values():
@@ -617,12 +952,7 @@ class TestModelExecution:
 
     def test_forward_pass_runs_without_error(self, linear_model):
         """Verify forward pass executes without errors."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                linear_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(linear_model)
 
         inputs = IntegrationTestHelper.get_onnx_inputs(linear_model, num_inputs=1)[0]
 
@@ -643,12 +973,7 @@ class TestModelExecution:
 
     def test_model_in_eval_mode(self, linear_model):
         """Verify model is in eval mode for inference."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                linear_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(linear_model)
 
         temp_dir = tempfile.mkdtemp()
         try:
@@ -667,10 +992,7 @@ class TestMultiOutputModels:
 
     def test_multi_output_model_code_generation(self, multi_output_model):
         """Verify code generation works with multi-output models."""
-        try:
-            code, _ = IntegrationTestHelper.generate_model_code_and_state_dict(multi_output_model)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, _ = IntegrationTestHelper.generate_model_code_and_state_dict(multi_output_model)
 
         assert isinstance(code, str)
         assert len(code) > 0
@@ -679,29 +1001,22 @@ class TestMultiOutputModels:
 
     def test_multi_output_forward_returns_tuple(self, multi_output_model):
         """Verify multi-output model forward method returns tuple."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                multi_output_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
+            multi_output_model
+        )
 
         temp_dir = tempfile.mkdtemp()
         try:
-            try:
-                model, inputs = IntegrationTestHelper.load_generated_model(
-                    code, state_dict, temp_dir
-                )
+            model, _ = IntegrationTestHelper.load_generated_model(code, state_dict, temp_dir)
+            inputs = IntegrationTestHelper.get_onnx_inputs(multi_output_model)[0]
+            torch_inputs = [torch.from_numpy(value) for value in inputs.values()]
 
-                # Run inference
-                with torch.no_grad():
-                    outputs = model(*inputs) if isinstance(inputs, (list, tuple)) else model(inputs)
+            # Run inference
+            with torch.no_grad():
+                outputs = model(*torch_inputs)
 
-                # Multi-output should return tuple or list (not single tensor)
-                assert isinstance(outputs, (tuple, list)) or torch.is_tensor(outputs)
-            except AttributeError:
-                # Some multi-output model types may not be fully supported yet
-                pytest.skip("Multi-output model not fully supported in code generation")
+            # Multi-output should return tuple or list (not single tensor)
+            assert isinstance(outputs, (tuple, list)) or torch.is_tensor(outputs)
         finally:
             import shutil
 
@@ -709,12 +1024,9 @@ class TestMultiOutputModels:
 
     def test_multi_output_state_dict_complete(self, multi_output_model):
         """Verify state dict contains all parameters for multi-output model."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                multi_output_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
+            multi_output_model
+        )
 
         temp_dir = tempfile.mkdtemp()
         try:
@@ -731,61 +1043,39 @@ class TestMultiOutputModels:
 
     def test_multi_output_numerical_validation(self, multi_output_model):
         """Compare multi-output model ONNX and PyTorch outputs numerically."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                multi_output_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
+            multi_output_model
+        )
 
         temp_dir = tempfile.mkdtemp()
         try:
-            try:
-                # ONNX inference
-                onnx_session = ort.InferenceSession(
-                    multi_output_model, providers=["CPUExecutionProvider"]
-                )
-            except (ValueError, RuntimeError, Exception) as e:
-                # Catch ONNX validation or runtime errors
-                if "Split" in str(e) or isinstance(e, (ValueError, RuntimeError)):
-                    pytest.skip("Multi-output ONNX model has invalid structure")
-                raise
+            # ONNX inference
+            onnx_session = ort.InferenceSession(
+                multi_output_model, providers=["CPUExecutionProvider"]
+            )
 
-            try:
-                model, inputs = IntegrationTestHelper.load_generated_model(
-                    code, state_dict, temp_dir
-                )
+            model, _ = IntegrationTestHelper.load_generated_model(code, state_dict, temp_dir)
+            input_dict = IntegrationTestHelper.get_onnx_inputs(multi_output_model)[0]
+            torch_inputs = [torch.from_numpy(value) for value in input_dict.values()]
 
-                if isinstance(inputs, (list, tuple)):
-                    input_dict = {
-                        onnx_session.get_inputs()[i].name: inp.numpy()
-                        for i, inp in enumerate(inputs)
-                    }
-                else:
-                    input_dict = {onnx_session.get_inputs()[0].name: inputs.numpy()}
+            onnx_outputs = onnx_session.run(None, input_dict)
 
-                onnx_outputs = onnx_session.run(None, input_dict)
+            # PyTorch inference
+            with torch.no_grad():
+                pytorch_outputs = model(*torch_inputs)
 
-                # PyTorch inference
-                with torch.no_grad():
-                    pytorch_outputs = (
-                        model(*inputs) if isinstance(inputs, (list, tuple)) else model(inputs)
-                    )
+            # Compare outputs (allowing numerical tolerance)
+            if isinstance(pytorch_outputs, torch.Tensor):
+                pytorch_outputs = [pytorch_outputs]
+            else:
+                pytorch_outputs = list(pytorch_outputs)
 
-                # Compare outputs (allowing numerical tolerance)
-                if isinstance(pytorch_outputs, torch.Tensor):
-                    pytorch_outputs = [pytorch_outputs]
-                else:
-                    pytorch_outputs = list(pytorch_outputs)
+            assert len(onnx_outputs) == len(pytorch_outputs)
 
-                assert len(onnx_outputs) == len(pytorch_outputs)
-
-                for onnx_out, torch_out in zip(onnx_outputs, pytorch_outputs, strict=True):
-                    if torch.is_tensor(torch_out):
-                        torch_out = torch_out.numpy()
-                    np.testing.assert_allclose(onnx_out, torch_out, rtol=1e-4, atol=1e-5)
-            except AttributeError:
-                pytest.skip("Multi-output model not fully supported in code generation")
+            for onnx_out, torch_out in zip(onnx_outputs, pytorch_outputs, strict=True):
+                if torch.is_tensor(torch_out):
+                    torch_out = torch_out.numpy()
+                np.testing.assert_allclose(onnx_out, torch_out, rtol=1e-4, atol=1e-5)
         finally:
             import shutil
 
@@ -793,30 +1083,24 @@ class TestMultiOutputModels:
 
     def test_multi_output_with_independent_branches(self, multi_output_model):
         """Verify multi-output model with independent computation branches."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                multi_output_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
+            multi_output_model
+        )
 
         temp_dir = tempfile.mkdtemp()
         try:
-            try:
-                model, inputs = IntegrationTestHelper.load_generated_model(
-                    code, state_dict, temp_dir
-                )
+            model, _ = IntegrationTestHelper.load_generated_model(code, state_dict, temp_dir)
+            inputs = IntegrationTestHelper.get_onnx_inputs(multi_output_model)[0]
+            torch_inputs = [torch.from_numpy(value) for value in inputs.values()]
 
-                # Code should generate successfully
-                assert "def forward" in code
-                # Model should be executable
-                model.eval()
-                with torch.no_grad():
-                    outputs = model(*inputs) if isinstance(inputs, (list, tuple)) else model(inputs)
-                # Should produce outputs (type doesn't matter)
-                assert isinstance(outputs, (torch.Tensor, tuple, list))
-            except AttributeError:
-                pytest.skip("Multi-output model not fully supported in code generation")
+            # Code should generate successfully
+            assert "def forward" in code
+            # Model should be executable
+            model.eval()
+            with torch.no_grad():
+                outputs = model(*torch_inputs)
+            # Should produce outputs (type doesn't matter)
+            assert isinstance(outputs, (torch.Tensor, tuple, list))
         finally:
             import shutil
 
@@ -828,10 +1112,7 @@ class TestStateDictEdgeCases:
 
     def test_state_dict_parameter_names_unique(self, linear_model):
         """Verify parameter names in state dict are unique."""
-        try:
-            _, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(linear_model)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        _, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(linear_model)
 
         # All parameter names should be unique
         param_names = list(state_dict.keys())
@@ -840,10 +1121,7 @@ class TestStateDictEdgeCases:
 
     def test_state_dict_with_nested_modules(self, mlp_model):
         """Verify state dict handles nested module parameters."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(mlp_model)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(mlp_model)
 
         temp_dir = tempfile.mkdtemp()
         try:
@@ -862,12 +1140,7 @@ class TestStateDictEdgeCases:
 
     def test_state_dict_dtype_preservation(self, linear_model):
         """Verify state dict preserves parameter data types."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                linear_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(linear_model)
 
         temp_dir = tempfile.mkdtemp()
         try:
@@ -901,12 +1174,7 @@ class TestStateDictEdgeCases:
             temp_path = f.name
 
         try:
-            try:
-                code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                    temp_path
-                )
-            except TypeError:
-                pytest.skip("classify_inputs() bug prevents semantic IR generation")
+            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(temp_path)
 
             temp_dir = tempfile.mkdtemp()
             try:
@@ -927,12 +1195,7 @@ class TestStateDictEdgeCases:
 
     def test_state_dict_buffer_handling(self, linear_model):
         """Verify state dict correctly handles buffers (e.g., running stats in BatchNorm)."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                linear_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(linear_model)
 
         temp_dir = tempfile.mkdtemp()
         try:
@@ -952,12 +1215,7 @@ class TestStateDictEdgeCases:
 
     def test_state_dict_parameter_values_preserved(self, linear_model):
         """Verify actual parameter values are preserved in state dict."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                linear_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(linear_model)
 
         temp_dir = tempfile.mkdtemp()
         try:
@@ -978,12 +1236,7 @@ class TestStateDictEdgeCases:
 
     def test_state_dict_shape_mismatch_detection(self, linear_model):
         """Verify shape mismatches are detected when loading state dict."""
-        try:
-            code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(
-                linear_model
-            )
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        code, state_dict = IntegrationTestHelper.generate_model_code_and_state_dict(linear_model)
 
         temp_dir = tempfile.mkdtemp()
         try:

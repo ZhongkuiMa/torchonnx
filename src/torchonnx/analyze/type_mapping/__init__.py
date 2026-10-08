@@ -13,6 +13,7 @@ __all__ = [
 ]
 from onnx import NodeProto, TensorProto, numpy_helper
 
+from torchonnx.analyze.attr_extractor import extract_onnx_attrs
 from torchonnx.analyze.type_mapping._layers import (
     ONNX_TO_PYTORCH_LAYERS,
     extract_layer_args,
@@ -65,6 +66,18 @@ def _get_convtranspose_pytorch_type(node: NodeProto, initializers: dict[str, Ten
     return "F.conv_transpose"
 
 
+def _get_pool_pytorch_type(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
+    """Select a pooling module from the ONNX spatial rank."""
+    attrs = extract_onnx_attrs(node, initializers)
+    kernel_shape = attrs["kernel_shape"]
+    spatial_rank = len(kernel_shape)
+    if spatial_rank not in (1, 2, 3):
+        raise NotImplementedError(f"Unsupported {node.op_type}: {spatial_rank} spatial dimensions")
+
+    pool_name = "MaxPool" if node.op_type == "MaxPool" else "AvgPool"
+    return f"nn.{pool_name}{spatial_rank}d"
+
+
 def convert_to_pytorch_type(node: NodeProto, initializers: dict[str, TensorProto]) -> str:
     """Infer PyTorch layer type from ONNX node.
 
@@ -79,6 +92,8 @@ def convert_to_pytorch_type(node: NodeProto, initializers: dict[str, TensorProto
         return _get_conv_pytorch_type(node, initializers)
     if node.op_type == "ConvTranspose":
         return _get_convtranspose_pytorch_type(node, initializers)
+    if node.op_type in {"AveragePool", "MaxPool"}:
+        return _get_pool_pytorch_type(node, initializers)
     if (
         node.op_type == "Gemm"
         and node.op_type in ONNX_TO_PYTORCH_LAYERS

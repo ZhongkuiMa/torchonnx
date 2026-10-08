@@ -121,6 +121,10 @@ def _get_attrs_avgpool(node: NodeProto, initializers: dict[str, TensorProto]) ->
     _validate_auto_pad(attrs["auto_pad"], "AveragePool")
     _infer_kernel_defaults(attrs, attrs["kernel_shape"])
     _check_pads_symmetric(attrs["pads"])
+    if any(dilation != 1 for dilation in attrs["dilations"]):
+        raise ValueError(
+            f"AveragePool with dilations={attrs['dilations']} is not supported by PyTorch"
+        )
     return attrs
 
 
@@ -350,10 +354,7 @@ def _get_attrs_shape(node: NodeProto, initializers: dict[str, TensorProto]) -> d
 
 def _get_attrs_transpose(node: NodeProto, initializers: dict[str, TensorProto]) -> dict[str, Any]:
     """Extract Transpose operator attributes."""
-    attrs = _scan_attrs({"perm": None}, node.attribute)
-    if attrs["perm"] is None:
-        raise ValueError("Transpose perm is required")
-    return attrs
+    return _scan_attrs({"perm": None}, node.attribute)
 
 
 EXTRACT_ATTRS_MAP: dict[str, Callable[[NodeProto, dict[str, TensorProto]], dict[str, Any]]] = {

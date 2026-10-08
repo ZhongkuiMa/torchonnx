@@ -102,8 +102,12 @@ def register_layer_handlers() -> None:
         "nn.ConvTranspose1d",
         "nn.ConvTranspose2d",
         # Pooling
+        "nn.MaxPool1d",
         "nn.MaxPool2d",
+        "nn.MaxPool3d",
+        "nn.AvgPool1d",
         "nn.AvgPool2d",
+        "nn.AvgPool3d",
         "nn.AdaptiveAvgPool2d",
         # Linear
         "nn.Linear",

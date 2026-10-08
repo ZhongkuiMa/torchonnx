@@ -6,6 +6,7 @@ All ONNX data is resolved to PyTorch tensors.
 
 __docformat__ = "restructuredtext"
 __all__ = [
+    "AbsentInputInfo",
     "ArgumentInfo",
     "ConstantInfo",
     "OperatorClass",
@@ -17,10 +18,35 @@ __all__ = [
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, NoReturn
 
 import torch
 from torch import Tensor
+
+
+@dataclass(frozen=True)
+class AbsentInputInfo:
+    """An explicitly unprovided ONNX optional input slot.
+
+    ONNX encodes a skipped optional input as an empty string while retaining
+    its position in ``NodeProto.input``.  Keeping that position in semantic IR
+    prevents a later input from being reinterpreted as the skipped argument.
+
+    :param position: Zero-based position in the original ONNX input list.
+
+    """
+
+    position: int
+
+    @property
+    def code_name(self) -> NoReturn:
+        """Reject accidental rendering of an absent input as executable code."""
+        raise ValueError(f"ONNX input slot {self.position} is absent")
+
+    @property
+    def shape(self) -> None:
+        """Absent inputs have no tensor shape."""
+        return None
 
 
 @dataclass(frozen=True)
@@ -132,7 +158,8 @@ class SemanticLayerIR:
     :param onnx_op_type: ONNX operator type (e.g., "Conv", "Add", "Reshape").
     :param pytorch_type: PyTorch type (e.g., "Conv2d", "Linear", "+", "reshape").
     :param operator_class: Layer, Operation, or Operator.
-    :param inputs: Ordered list of typed inputs (VariableInfo | ParameterInfo | ConstantInfo).
+    :param inputs: Ordered list of typed inputs, including explicit absent
+        optional slots.
     :param outputs: Ordered list of typed outputs (all VariableInfo).
     :param arguments: Literal arguments (for __init__ or forward()).
 
@@ -147,7 +174,7 @@ class SemanticLayerIR:
     operator_class: OperatorClass
 
     # Classified Inputs/Outputs (single ordered list - preserves input order)
-    inputs: list[VariableInfo | ParameterInfo | ConstantInfo]
+    inputs: list[AbsentInputInfo | VariableInfo | ParameterInfo | ConstantInfo]
     outputs: list[VariableInfo]
 
     # Arguments (unified - for both __init__ and forward())

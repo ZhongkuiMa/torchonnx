@@ -21,13 +21,13 @@ from torchonnx.analyze.type_mapping._layers import (
     _extract_dropout_args,
     _extract_elu_args,
     _extract_gelu_args,
-    _extract_globalavgpool_args,
     _extract_leakyrelu_args,
     _extract_softmax_args,
     _extract_upsample_args,
     _simplify_tuple,
 )
 from torchonnx.analyze.types import (
+    AbsentInputInfo,
     ConstantInfo,
     ParameterInfo,
     VariableInfo,
@@ -54,6 +54,25 @@ class TestBuildSemanticIR:
         assert len(semantic_ir.output_names) == 1
         assert len(semantic_ir.variables) >= 1
         assert semantic_ir.variables[0].code_name == "x0"
+
+    def test_semantic_ir_preserves_absent_optional_input_position(self):
+        """An empty ONNX input remains an explicit positional IR slot."""
+        data = onnx.helper.make_tensor_value_info("data", onnx.TensorProto.FLOAT, [3])
+        output = onnx.helper.make_tensor_value_info("output", onnx.TensorProto.FLOAT, [3])
+        max_bound = onnx.helper.make_tensor("max", onnx.TensorProto.FLOAT, [], [1.0])
+        clip = onnx.helper.make_node("Clip", ["data", "", "max"], ["output"])
+        graph = onnx.helper.make_graph([clip], "clip_max_only", [data], [output], [max_bound])
+        model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 20)])
+
+        semantic_ir = build_semantic_ir(build_model_ir(model))
+
+        inputs = semantic_ir.layers[0].inputs
+        assert len(inputs) == 3
+        assert isinstance(inputs[0], VariableInfo)
+        assert inputs[0].onnx_name == "data"
+        assert inputs[1] == AbsentInputInfo(position=1)
+        assert isinstance(inputs[2], ConstantInfo)
+        assert inputs[2].onnx_name == "max"
 
     def test_build_semantic_ir_from_conv_model(self, conv2d_model):
         """Build semantic IR from conv2d model."""
@@ -392,6 +411,20 @@ class TestTypeMappingLayers:
         assert is_layer_with_args("Linear")
         assert is_layer_with_args("BatchNorm2d")
         assert is_layer_with_args("nn.Conv2d")
+
+    @pytest.mark.parametrize("op_type", ["AveragePool", "MaxPool"])
+    @pytest.mark.parametrize("spatial_rank", [1, 2, 3])
+    def test_pool_type_matches_spatial_rank(self, op_type, spatial_rank):
+        """Map ONNX pooling to the PyTorch module with matching rank."""
+        node = onnx.helper.make_node(
+            op_type,
+            inputs=["X"],
+            outputs=["Y"],
+            kernel_shape=[2] * spatial_rank,
+        )
+        pool_name = "AvgPool" if op_type == "AveragePool" else "MaxPool"
+
+        assert convert_to_pytorch_type(node, {}) == f"nn.{pool_name}{spatial_rank}d"
 
 
 class TestDynamicWeightConv:
@@ -786,10 +819,9 @@ class TestLayerExtractionEdgeCases:
 
         assert args == {"mode": "nearest"}
 
-    def test_globalavgpool_layer_extraction(self):
-        """Test GlobalAveragePool layer extraction."""
-        # GlobalAveragePool has no special attributes
+    def test_globalavgpool_maps_to_rank_agnostic_operation(self):
+        """Map GlobalAveragePool to its spatial reduction operation."""
         node = onnx.helper.make_node("GlobalAveragePool", inputs=["X"], outputs=["Y"])
 
-        args = _extract_globalavgpool_args(node, {})
-        assert isinstance(args, dict)
+        assert convert_to_pytorch_type(node, {}) == "global_average_pool"
+        assert extract_operation_args(node, {}, "GlobalAveragePool") == {}

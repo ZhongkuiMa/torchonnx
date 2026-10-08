@@ -1793,8 +1793,15 @@ class TestUnsqueezeHandlerDirect:
         assert "y = " in code
         assert "unsqueeze" in code
 
-    def test_unsqueeze_multiple_axes(self):
-        """Test unsqueeze with multiple axes."""
+    @pytest.mark.parametrize(
+        ("axes", "expected"),
+        [
+            pytest.param((0, 3), "y = x.unsqueeze(0).unsqueeze(3)", id="positive"),
+            pytest.param((-4, -1), "y = x.unsqueeze(0).unsqueeze(3)", id="negative"),
+        ],
+    )
+    def test_unsqueeze_multiple_axes(self, axes, expected):
+        """Generate one unsqueeze per normalized output axis."""
         layer = SemanticLayerIR(
             name="unsqueeze_0",
             onnx_op_type="Unsqueeze",
@@ -1803,14 +1810,31 @@ class TestUnsqueezeHandlerDirect:
             inputs=[make_variable("X", shape=(2, 3))],
             outputs=[make_variable("Y", shape=(1, 2, 3, 1))],
             arguments=[
-                ArgumentInfo(onnx_name="axes", pytorch_name="dim", value=[0, 3]),
+                ArgumentInfo(onnx_name="axes", pytorch_name="dim", value=axes),
             ],
         )
 
         code = _handle_unsqueeze(layer, {})
 
-        assert "y = " in code
-        assert "unsqueeze" in code
+        assert code == expected
+
+    def test_unsqueeze_rejects_dynamic_multiple_axes(self):
+        """Do not emit a scalar .item() path for a multi-element runtime axes tensor."""
+        layer = SemanticLayerIR(
+            name="unsqueeze_0",
+            onnx_op_type="Unsqueeze",
+            pytorch_type="unsqueeze",
+            operator_class=OperatorClass.OPERATION,
+            inputs=[
+                make_variable("x", shape=(2, 3)),
+                make_variable("axes", shape=(2,)),
+            ],
+            outputs=[make_variable("y", shape=(1, 2, 3, 1))],
+            arguments=[],
+        )
+
+        with pytest.raises(ValueError, match="exactly one element"):
+            _handle_unsqueeze(layer, {})
 
 
 class TestTransposeHandlerDirect:
@@ -2258,11 +2282,8 @@ class TestGraphTraversalFunctions:
             shapes={},
         )
 
-        ctx = _get_helper_needs_from_ir(semantic_ir, vmap_mode=True)
-
-        # Dynamic slice should need helper
-        assert ctx.needs_dynamic_slice is True
-        assert ctx.vmap_mode is True
+        with pytest.raises(ValueError, match="cannot be proven statically"):
+            _get_helper_needs_from_ir(semantic_ir, vmap_mode=True)
 
     def test_get_helper_needs_from_ir_scatter_nd(self):
         """Test helper needs detection for ScatterND."""
@@ -4514,21 +4535,30 @@ class TestTransposeHandlerEdgeCases:
         assert "y = " in code
         assert "t" in code.lower()
 
-    def test_transpose_no_perm_attribute(self):
+    @pytest.mark.parametrize(
+        ("input_shape", "output_shape"),
+        [
+            pytest.param((), (), id="scalar"),
+            pytest.param((5,), (5,), id="rank_one"),
+            pytest.param((2, 3), (3, 2), id="rank_two"),
+            pytest.param((2, 3, 4), (4, 3, 2), id="rank_three"),
+        ],
+    )
+    def test_transpose_no_perm_attribute(self, input_shape, output_shape):
         """Test transpose with implicit perm (reverse all dims)."""
         layer = SemanticLayerIR(
             name="transpose_0",
             onnx_op_type="Transpose",
             pytorch_type="transpose",
             operator_class=OperatorClass.OPERATION,
-            inputs=[make_variable("x", shape=(2, 3, 4))],
-            outputs=[make_variable("y", shape=(4, 3, 2))],
+            inputs=[make_variable("x", shape=input_shape)],
+            outputs=[make_variable("y", shape=output_shape)],
             arguments=[],
         )
 
         code = _handle_transpose(layer, {})
 
-        assert "y = " in code
+        assert code == "y = x.permute(tuple(range(x.dim() - 1, -1, -1)))"
 
 
 class TestSqueezeUnsqueezeEdgeCases:

@@ -12,13 +12,20 @@ unchanged.
 __docformat__ = "restructuredtext"
 __all__ = ["register_operation_handlers"]
 
-from torchonnx.analyze import ConstantInfo, ParameterInfo, SemanticLayerIR, VariableInfo
+from torchonnx.analyze import (
+    AbsentInputInfo,
+    ConstantInfo,
+    ParameterInfo,
+    SemanticLayerIR,
+    VariableInfo,
+)
 from torchonnx.generate._context import _get_ctx
 from torchonnx.generate._handlers._operations_utils import (
     INT64_MAX,
     _can_infer_reshape_statically,
     _compute_inferred_dim,
     _format_args_with_inputs,
+    _format_unsqueeze_expression,
     _get_input_code_name_selective,
     _get_input_code_names,
     _require_min_inputs,
@@ -91,6 +98,51 @@ def _prepare_concat_inputs(
     return inputs, axis_value
 
 
+def _is_absent_input(input_info) -> bool:
+    """Return whether a semantic input represents an omitted optional slot."""
+    return input_info is None or isinstance(input_info, AbsentInputInfo)
+
+
+def _convert_onnx_pads_to_torch(
+    pads: list[int], axes: list[int] | None, input_rank: int | None
+) -> list[int]:
+    """Convert ONNX Pad ordering, expanding an optional axes subset."""
+    if len(pads) % 2:
+        raise ValueError(f"Pad expects an even pads length, got {len(pads)}")
+
+    half = len(pads) // 2
+    begins = pads[:half]
+    ends = pads[half:]
+    if axes is None:
+        return [
+            value for pair in zip(reversed(begins), reversed(ends), strict=True) for value in pair
+        ]
+
+    if input_rank is None:
+        raise ValueError("Pad with axes requires a statically known input rank")
+    if len(axes) != half:
+        raise ValueError(
+            f"Pad expects one begin/end pair per axis, got {half} pair(s) for {len(axes)} axis/axes"
+        )
+
+    normalized_axes = [axis + input_rank if axis < 0 else axis for axis in axes]
+    if any(axis < 0 or axis >= input_rank for axis in normalized_axes):
+        raise ValueError(f"Pad axes {axes} are invalid for input rank {input_rank}")
+    if len(set(normalized_axes)) != len(normalized_axes):
+        raise ValueError(f"Pad axes must be unique, got {axes}")
+
+    full_begins = [0] * input_rank
+    full_ends = [0] * input_rank
+    for axis, begin, end in zip(normalized_axes, begins, ends, strict=True):
+        full_begins[axis] = begin
+        full_ends[axis] = end
+    return [
+        value
+        for pair in zip(reversed(full_begins), reversed(full_ends), strict=True)
+        for value in pair
+    ]
+
+
 def _handle_concat(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Handle concat operation.
 
@@ -137,16 +189,39 @@ def _handle_pad(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> s
     :return: Generated code line.
     :raises ValueError: If ``vmap_mode=True`` and pads or value is runtime.
     """
-    inputs = _get_input_code_names(layer)
     output = layer.outputs[0].code_name
 
     _require_min_inputs(layer, 2, "Pad")
 
-    data = inputs[0]
+    data_input = layer.inputs[0]
+    if _is_absent_input(data_input):
+        raise ValueError("Pad data input cannot be absent")
+    data = _get_input_code_name_selective(data_input)
     pads_input = layer.inputs[1]
-    pads_code = inputs[1]
+    if _is_absent_input(pads_input):
+        raise ValueError("Pad pads input cannot be absent")
+    pads_code = (
+        None if isinstance(pads_input, ConstantInfo) else _get_input_code_name_selective(pads_input)
+    )
     value_input = layer.inputs[2] if len(layer.inputs) >= 3 else None
-    value_code = inputs[2] if len(inputs) >= 3 else None
+    axes_input = layer.inputs[3] if len(layer.inputs) >= 4 else None
+
+    value_present = not _is_absent_input(value_input)
+    axes_present = not _is_absent_input(axes_input)
+    if axes_present and not isinstance(axes_input, ConstantInfo):
+        raise ValueError("Pad with runtime axes is not supported")
+
+    axes: list[int] | None = None
+    if isinstance(axes_input, ConstantInfo):
+        raw_axes = axes_input.data.tolist()
+        axes = raw_axes if isinstance(raw_axes, list) else [raw_axes]
+        axes = [int(axis) for axis in axes]
+
+    input_rank = len(data_input.shape) if data_input.shape is not None else None
+    value_code = None
+    if value_present and not isinstance(value_input, ConstantInfo):
+        assert value_input is not None
+        value_code = _get_input_code_name_selective(value_input)
 
     # Get mode from arguments
     mode_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "mode"), None)
@@ -154,7 +229,7 @@ def _handle_pad(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> s
 
     runtime_pads = not isinstance(pads_input, ConstantInfo)
     runtime_value = bool(
-        value_input
+        value_present
         and not (isinstance(value_input, ConstantInfo) and value_input.data.numel() == 1)
     )
     ctx = _get_ctx()
@@ -169,37 +244,47 @@ def _handle_pad(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> s
 
     # Check if pads is a constant - if so, convert to Python literal
     if isinstance(pads_input, ConstantInfo):
-        pads_data = pads_input.data.tolist()
-        # Convert ONNX pads to PyTorch format
-        # ONNX: [begin0, begin1, ..., end0, end1, ...]
-        # PyTorch: [last_begin, last_end, ..., first_begin, first_end]
-        half = len(pads_data) // 2
-        begins = pads_data[:half]
-        ends = pads_data[half:]
-        # Reverse and interleave
-        pytorch_pads = []
-        for b, e in zip(reversed(begins), reversed(ends), strict=False):
-            pytorch_pads.extend([b, e])
+        raw_pads = pads_input.data.tolist()
+        pads_data = raw_pads if isinstance(raw_pads, list) else [raw_pads]
+        pytorch_pads = _convert_onnx_pads_to_torch(
+            [int(pad) for pad in pads_data], axes, input_rank
+        )
         pads_str = str(pytorch_pads)
     else:
         # Runtime pads - need dynamic conversion
-        pads_str = (
-            f"(lambda p: [v for pair in zip(p[len(p)//2:][::-1], p[:len(p)//2][::-1]) "
-            f"for v in pair])({pads_code}.tolist())"
-        )
+        assert pads_code is not None
+        if axes is None:
+            pads_str = (
+                f"(lambda p: [v for pair in zip(p[:len(p)//2][::-1], "
+                f"p[len(p)//2:][::-1]) for v in pair])({pads_code}.tolist())"
+            )
+        else:
+            if input_rank is None:
+                raise ValueError("Pad with axes requires a statically known input rank")
+            normalized_axes = [axis + input_rank if axis < 0 else axis for axis in axes]
+            index_by_axis = {axis: index for index, axis in enumerate(normalized_axes)}
+            entries = []
+            for axis in reversed(range(input_rank)):
+                if axis in index_by_axis:
+                    index = index_by_axis[axis]
+                    entries.extend([f"p[{index}]", f"p[{len(axes) + index}]"])
+                else:
+                    entries.extend(["0", "0"])
+            pads_str = f"(lambda p: [{', '.join(entries)}])({pads_code}.tolist())"
 
     # Build argument list
     args_parts = [data, pads_str]
     args_parts.append(f"mode={mode}")
 
     # Handle value - check if it's a constant scalar
-    if value_input:
+    if value_present:
         if isinstance(value_input, ConstantInfo) and value_input.data.numel() == 1:
             # Constant scalar - use Python literal
             value_literal = format_argument(value_input.data.item())
             args_parts.append(f"value={value_literal}")
         else:
             # Runtime value
+            assert value_code is not None
             args_parts.append(f"value={value_code}.item()")
 
     args_str = ", ".join(args_parts)
@@ -215,7 +300,7 @@ def _format_bound_arg(bound_name: str, bound_input, both_bounds_constant: bool) 
 
         :return: Formatted argument string or None
     """
-    if bound_input is None:
+    if _is_absent_input(bound_input):
         return None
 
     if both_bounds_constant and isinstance(bound_input, ConstantInfo):
@@ -243,6 +328,8 @@ def _handle_clip(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> 
 
     # Process data input
     data_input = layer.inputs[0]
+    if _is_absent_input(data_input):
+        raise ValueError("Clip data input cannot be absent")
     if isinstance(data_input, (ParameterInfo, ConstantInfo)):
         ctx = _get_ctx()
         if isinstance(data_input, ConstantInfo):
@@ -260,9 +347,9 @@ def _handle_clip(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> 
     max_input = layer.inputs[2] if len(layer.inputs) > 2 else None
 
     # Check if both bounds are constant
-    both_bounds_constant = (min_input is None or isinstance(min_input, ConstantInfo)) and (
-        max_input is None or isinstance(max_input, ConstantInfo)
-    )
+    both_bounds_constant = (
+        _is_absent_input(min_input) or isinstance(min_input, ConstantInfo)
+    ) and (_is_absent_input(max_input) or isinstance(max_input, ConstantInfo))
 
     # Add formatted bound arguments
     min_arg = _format_bound_arg("min", min_input, both_bounds_constant)
@@ -524,7 +611,7 @@ def _try_narrow_slice(
         :return: Generated code or None if narrow can't be used
     """
     # Get axes and steps values
-    if axes_input is None:
+    if _is_absent_input(axes_input):
         axes_list = [0]
     else:
         assert isinstance(axes_input, ConstantInfo)
@@ -532,7 +619,7 @@ def _try_narrow_slice(
         if not isinstance(axes_list, list):
             axes_list = [axes_list]
 
-    if steps_input is None:
+    if _is_absent_input(steps_input):
         steps_list = [1] * len(axes_list)
     else:
         assert isinstance(steps_input, ConstantInfo)
@@ -572,7 +659,7 @@ def _encode_slice_input(input_val, default: str) -> str:
 
         :return: Code representation
     """
-    if input_val is None:
+    if _is_absent_input(input_val):
         return default
     if isinstance(input_val, ConstantInfo):
         values = _normalize_int64_max(input_val.data.tolist())
@@ -615,8 +702,8 @@ def _handle_slice(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) ->
     all_constants = (
         isinstance(starts_input, ConstantInfo)
         and isinstance(ends_input, ConstantInfo)
-        and (axes_input is None or isinstance(axes_input, ConstantInfo))
-        and (steps_input is None or isinstance(steps_input, ConstantInfo))
+        and (_is_absent_input(axes_input) or isinstance(axes_input, ConstantInfo))
+        and (_is_absent_input(steps_input) or isinstance(steps_input, ConstantInfo))
     )
 
     if all_constants:
@@ -637,8 +724,8 @@ def _handle_slice(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) ->
         return _generate_literal_slice(data, starts, ends, axes, steps, output)
 
     # Check if we can use torch.narrow
-    axes_constant = axes_input is None or isinstance(axes_input, ConstantInfo)
-    steps_constant = steps_input is None or isinstance(steps_input, ConstantInfo)
+    axes_constant = _is_absent_input(axes_input) or isinstance(axes_input, ConstantInfo)
+    steps_constant = _is_absent_input(steps_input) or isinstance(steps_input, ConstantInfo)
     starts_constant = isinstance(starts_input, ConstantInfo)
     ends_constant = isinstance(ends_input, ConstantInfo)
 
@@ -807,7 +894,7 @@ def _handle_expand_constant_shape(
 
 def _handle_expand_runtime_shape(
     data: str,
-    shape_input: VariableInfo | ParameterInfo | ConstantInfo,
+    shape_input: AbsentInputInfo | VariableInfo | ParameterInfo | ConstantInfo,
     output: str,
 ) -> str:
     """Handle expand with runtime shape input.
@@ -990,6 +1077,11 @@ def _handle_reduce(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
         axes_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "axes"), None)
         if axes_arg and axes_arg.value is not None:
             args_parts.append(format_argument(axes_arg.value))
+        else:
+            # ONNX reduces over every axis when the optional axes input and
+            # legacy axes attribute are both absent. PyTorch requires an
+            # explicit dim whenever keepdim is passed.
+            args_parts.append(f"dim=tuple(range({data}.dim()))")
 
     # Add keepdim (note: PyTorch uses 'keepdim' not 'keepdims')
     keepdims_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "keepdims"), None)
@@ -998,6 +1090,25 @@ def _handle_reduce(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -
 
     args_str = ", ".join(args_parts)
     return f"{output} = {layer.pytorch_type}({args_str})"
+
+
+def _handle_global_average_pool(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
+    """Reduce every ONNX spatial dimension while preserving N and C."""
+    _require_min_inputs(layer, 1, layer.onnx_op_type)
+    data = _get_input_code_names(layer)[0]
+    output = layer.outputs[0].code_name
+    return f"{output} = torch.mean({data}, dim=tuple(range(2, {data}.dim())), keepdim=True)"
+
+
+def _handle_variadic_minmax(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
+    """Fold ONNX variadic Min/Max with elementwise broadcasting."""
+    _require_min_inputs(layer, 1, layer.onnx_op_type)
+    inputs = _get_input_code_names(layer)
+    function = "torch.minimum" if layer.onnx_op_type == "Min" else "torch.maximum"
+    expression = inputs[0]
+    for input_code in inputs[1:]:
+        expression = f"{function}({expression}, {input_code})"
+    return f"{layer.outputs[0].code_name} = {expression}"
 
 
 def _handle_linear(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
@@ -1207,14 +1318,14 @@ def _handle_flatten(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) 
 
 
 def _handle_transpose(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
-    """Generate Transpose code via ``.permute`` or ``.transpose(-2,-1)``."""
+    """Generate Transpose code, reversing all dimensions when perm is omitted."""
     inputs = _get_input_code_names(layer)
     output = layer.outputs[0].code_name
     perm_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "perm"), None)
-    if perm_arg:
+    if perm_arg and perm_arg.value is not None:
         perm = format_argument(perm_arg.value)
         return f"{output} = {inputs[0]}.permute({perm})"
-    return f"{output} = {inputs[0]}.transpose(-2, -1)"
+    return f"{output} = {inputs[0]}.permute(tuple(range({inputs[0]}.dim() - 1, -1, -1)))"
 
 
 def _handle_squeeze(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
@@ -1229,18 +1340,39 @@ def _handle_squeeze(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) 
 
 
 def _handle_unsqueeze(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
-    """Generate Unsqueeze code via ``.unsqueeze(dim)`` or dynamic-axes path."""
+    """Generate Unsqueeze code for constant axes or a proven scalar runtime axis."""
     output = layer.outputs[0].code_name
     dim_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "dim"), None)
     data = _get_input_code_name_selective(layer.inputs[0])
     if dim_arg and dim_arg.value is not None:
-        dim = format_argument(dim_arg.value)
-        return f"{output} = {data}.unsqueeze({dim})"
+        axes = dim_arg.value
+        axes_count = 1 if isinstance(axes, int) else len(axes)
+        output_shape = layer.outputs[0].shape
+        input_shape = layer.inputs[0].shape
+        if output_shape is not None:
+            output_rank = len(output_shape)
+        elif input_shape is not None:
+            output_rank = len(input_shape) + axes_count
+        else:
+            raise ValueError("Unsqueeze with constant axes requires a known tensor rank")
+        expression = _format_unsqueeze_expression(data, axes, output_rank)
+        return f"{output} = {expression}"
     if len(layer.inputs) >= 2:
         axes_input = layer.inputs[1]
         if isinstance(axes_input, ConstantInfo):
-            axes_value = int(axes_input.data.item())
-            return f"{output} = {data}.unsqueeze({axes_value})"
+            axes = axes_input.data.reshape(-1).tolist()
+            output_shape = layer.outputs[0].shape
+            input_shape = layer.inputs[0].shape
+            if output_shape is not None:
+                output_rank = len(output_shape)
+            elif input_shape is not None:
+                output_rank = len(input_shape) + len(axes)
+            else:
+                raise ValueError("Unsqueeze with constant axes requires a known tensor rank")
+            expression = _format_unsqueeze_expression(data, axes, output_rank)
+            return f"{output} = {expression}"
+        if axes_input.shape != (1,):
+            raise ValueError("Runtime Unsqueeze axes must have exactly one element")
         axes_code = _get_input_code_name_selective(axes_input)
         return f"{output} = {data}.unsqueeze({axes_code}.item())"
     return f"{output} = {data}.unsqueeze(0)"
@@ -1273,8 +1405,8 @@ def register_operation_handlers() -> None:
     register_handler("torch.cat", _handle_concat)
     register_handler("torch.gather", _handle_gather)
     register_handler("torch.argmax", _handle_generic_torch_function)
-    register_handler("torch.min", _handle_generic_torch_function)
-    register_handler("torch.max", _handle_generic_torch_function)
+    register_handler("torch.min", _handle_variadic_minmax)
+    register_handler("torch.max", _handle_variadic_minmax)
     register_handler("torch.clamp", _handle_clip)
     register_handler("torch.where", _handle_generic_torch_function)
     register_handler("torch.scatter", _handle_scatter_elements)
@@ -1282,6 +1414,7 @@ def register_operation_handlers() -> None:
     register_handler("torch.arange", _handle_arange)
     register_handler("torch.mean", _handle_reduce)
     register_handler("torch.sum", _handle_reduce)
+    register_handler("global_average_pool", _handle_global_average_pool)
     register_handler("scatter_nd", _handle_scatter_nd)
 
     # F.* functions

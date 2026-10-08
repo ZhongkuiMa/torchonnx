@@ -39,13 +39,9 @@ class TestGeneratePyTorchModule:
 
     def test_generate_module_from_linear_model(self, linear_model):
         """Generate complete PyTorch module from linear model."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            # Skip if semantic IR building fails due to classify_inputs bug
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, state_dict = generate_pytorch_module(semantic_ir)
 
@@ -57,12 +53,9 @@ class TestGeneratePyTorchModule:
 
     def test_generate_module_has_imports(self, linear_model):
         """Verify generated module includes required imports."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -73,12 +66,9 @@ class TestGeneratePyTorchModule:
 
     def test_generate_module_has_class_definition(self, linear_model):
         """Verify generated module has nn.Module class."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -86,12 +76,9 @@ class TestGeneratePyTorchModule:
 
     def test_generate_module_has_init_method(self, linear_model):
         """Verify generated module has __init__ method."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -99,12 +86,9 @@ class TestGeneratePyTorchModule:
 
     def test_generate_module_has_forward_method(self, linear_model):
         """Verify generated module has forward() method."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -112,12 +96,9 @@ class TestGeneratePyTorchModule:
 
     def test_generate_module_with_custom_name(self, linear_model):
         """Generate module with custom class name."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, module_name="CustomModel")
 
@@ -125,12 +106,9 @@ class TestGeneratePyTorchModule:
 
     def test_generate_module_vmap_mode_true(self, linear_model):
         """Generate module with vmap mode enabled."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -139,12 +117,9 @@ class TestGeneratePyTorchModule:
 
     def test_generate_module_vmap_mode_false(self, linear_model):
         """Generate module with vmap mode disabled."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=False)
 
@@ -157,12 +132,9 @@ class TestGenerateInitMethod:
 
     def test_init_registers_layers(self, linear_model):
         """Verify __init__ registers layers as nn.Module attributes."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -172,12 +144,9 @@ class TestGenerateInitMethod:
 
     def test_init_calls_super(self, linear_model):
         """Verify __init__ calls super().__init__()."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -185,12 +154,9 @@ class TestGenerateInitMethod:
 
     def test_init_registers_parameters(self, linear_model):
         """Verify __init__ registers parameters (weights, biases)."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, state_dict = generate_pytorch_module(semantic_ir)
 
@@ -202,12 +168,9 @@ class TestGenerateInitMethod:
 
     def test_init_registers_buffers(self, batchnorm_model):
         """Verify __init__ registers buffers (running_mean, running_var)."""
-        try:
-            normalized = load_and_preprocess_onnx_model(batchnorm_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(batchnorm_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, state_dict = generate_pytorch_module(semantic_ir)
 
@@ -219,12 +182,9 @@ class TestGenerateInitMethod:
 
     def test_init_layer_name_mapping(self, linear_model):
         """Verify layer names are correctly mapped in __init__."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -239,12 +199,9 @@ class TestGenerateForwardMethod:
 
     def test_forward_takes_input_tensor(self, linear_model):
         """Verify forward() accepts input tensor."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -253,12 +210,9 @@ class TestGenerateForwardMethod:
 
     def test_forward_variable_naming_pattern(self, linear_model):
         """Verify forward() uses x0, x1, x2 variable naming."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -267,12 +221,9 @@ class TestGenerateForwardMethod:
 
     def test_forward_returns_output(self, linear_model):
         """Verify forward() returns output."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -281,12 +232,9 @@ class TestGenerateForwardMethod:
 
     def test_forward_no_in_place_operations(self, linear_model):
         """Verify forward() avoids in-place operations."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -296,12 +244,9 @@ class TestGenerateForwardMethod:
 
     def test_forward_uses_self_layers(self, linear_model):
         """Verify forward() calls registered layers via self."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -310,12 +255,9 @@ class TestGenerateForwardMethod:
 
     def test_forward_handles_multiple_outputs(self, multi_output_model):
         """Verify forward() can handle models with multiple outputs."""
-        try:
-            normalized = load_and_preprocess_onnx_model(multi_output_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(multi_output_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -328,12 +270,9 @@ class TestStateDictGeneration:
 
     def test_state_dict_has_all_parameters(self, linear_model):
         """Verify state dict contains all parameters."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         _, state_dict = generate_pytorch_module(semantic_ir)
 
@@ -344,12 +283,9 @@ class TestStateDictGeneration:
 
     def test_state_dict_has_correct_dtypes(self, linear_model):
         """Verify state dict tensors have correct dtypes."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         _, state_dict = generate_pytorch_module(semantic_ir)
 
@@ -361,12 +297,9 @@ class TestStateDictGeneration:
 
     def test_state_dict_tensor_shapes_match(self, linear_model):
         """Verify state dict tensor shapes are preserved."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         _, state_dict = generate_pytorch_module(semantic_ir)
 
@@ -377,12 +310,9 @@ class TestStateDictGeneration:
 
     def test_state_dict_has_no_nan_values(self, linear_model):
         """Verify state dict tensors don't contain NaN."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         _, state_dict = generate_pytorch_module(semantic_ir)
 
@@ -460,12 +390,9 @@ class TestCodeValidation:
 
     def test_generated_code_is_valid_python_linear(self, linear_model):
         """Verify generated code is valid Python syntax."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -475,12 +402,9 @@ class TestCodeValidation:
 
     def test_generated_code_is_valid_python_conv(self, conv2d_model):
         """Verify generated code from conv model is valid Python."""
-        try:
-            normalized = load_and_preprocess_onnx_model(conv2d_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(conv2d_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -490,12 +414,9 @@ class TestCodeValidation:
 
     def test_generated_code_has_valid_class_structure(self, linear_model):
         """Verify generated code has valid class structure."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -513,12 +434,9 @@ class TestVmapModeValidation:
 
     def test_vmap_mode_true_avoids_self_references(self, linear_model):
         """Verify vmap mode generates functional code without self.layer references."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code_vmap, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -529,12 +447,9 @@ class TestVmapModeValidation:
 
     def test_vmap_mode_false_uses_self_references(self, linear_model):
         """Verify non-vmap mode uses self.layer style references."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code_nonvmap, _ = generate_pytorch_module(semantic_ir, vmap_mode=False)
 
@@ -544,12 +459,9 @@ class TestVmapModeValidation:
 
     def test_vmap_mode_state_dict_structure(self, linear_model):
         """Verify state dict is compatible with generated module."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         _, state_dict = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -558,12 +470,9 @@ class TestVmapModeValidation:
 
     def test_vmap_mode_code_syntax_valid(self, linear_model):
         """Verify generated vmap mode code has valid Python syntax."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -573,12 +482,9 @@ class TestVmapModeValidation:
 
     def test_vmap_mode_nonvmap_code_syntax_valid(self, linear_model):
         """Verify non-vmap mode generated code has valid Python syntax."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=False)
 
@@ -588,12 +494,9 @@ class TestVmapModeValidation:
 
     def test_vmap_mode_with_complex_model(self, mlp_model):
         """Test vmap mode with multi-layer MLP model."""
-        try:
-            normalized = load_and_preprocess_onnx_model(mlp_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(mlp_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, state_dict = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -608,12 +511,9 @@ class TestVmapModeValidation:
 
     def test_vmap_mode_both_modes_generate_valid_modules(self, linear_model):
         """Verify both vmap and non-vmap modes produce valid modules."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         # Generate both vmap and non-vmap versions
         vmap_code, vmap_dict = generate_pytorch_module(semantic_ir, vmap_mode=True)
@@ -644,29 +544,14 @@ class TestVmapModeValidation:
 class TestSliceCodeGeneratorPaths:
     """Test code generator analysis paths for slice operations."""
 
-    def test_slice_dynamic_with_add_pattern(self, slice_dynamic_starts_model):
-        """Test slice with ends=starts+const pattern triggers code generator analysis.
+    def test_slice_dynamic_without_proven_length_raises(self, slice_dynamic_starts_model):
+        """Reject a dynamic Slice whose output length is input-dependent."""
+        normalized = load_and_preprocess_onnx_model(slice_dynamic_starts_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
-        This exercises:
-        - _detect_static_slice_lengths
-        - _try_add_pattern_case
-        - _find_producer_through_shape_ops
-        """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_dynamic_starts_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
-
-        # Should generate valid code without helper (if pattern recognized)
-        module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
-
-        assert isinstance(module_code, str)
-        assert len(module_code) > 0
-        ast.parse(module_code)
-        # Should handle dynamic slicing
-        assert "torch" in module_code.lower()
+        with pytest.raises(ValueError, match="cannot be proven statically"):
+            generate_pytorch_module(semantic_ir, vmap_mode=True)
 
     def test_expand_with_runtime_shape(self, expand_runtime_shape_model):
         """Test expand with runtime shape triggers expand helper generation.
@@ -676,12 +561,9 @@ class TestSliceCodeGeneratorPaths:
         - _get_helper_needs_from_ir (expand path)
         - _generate_helpers_from_context
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(expand_runtime_shape_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(expand_runtime_shape_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         # Should generate expand helper
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
@@ -699,12 +581,9 @@ class TestSliceCodeGeneratorPaths:
         - _get_helper_needs_from_ir (scatter_nd path)
         - _generate_helpers_from_context
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(scatter_nd_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(scatter_nd_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         # Should generate scatter_nd helper
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
@@ -717,27 +596,14 @@ class TestSliceCodeGeneratorPaths:
 class TestCodeGeneratorVmapMode:
     """Test code generator vmap mode optimization paths."""
 
-    def test_vmap_mode_static_slice_lengths(self, slice_dynamic_starts_model):
-        """Test vmap mode slice length detection.
+    def test_vmap_mode_rejects_unproven_slice_lengths(self, slice_dynamic_starts_model):
+        """Require a static length proof before generating vmap Slice code."""
+        normalized = load_and_preprocess_onnx_model(slice_dynamic_starts_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
-        Exercises:
-        - _detect_static_slice_lengths
-        - slice_length_hints tracking
-        """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_dynamic_starts_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
-
-        # Generate with vmap mode
-        vmap_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
-
-        # Should generate valid code
-        assert isinstance(vmap_code, str)
-        assert len(vmap_code) > 0
-        ast.parse(vmap_code)
+        with pytest.raises(ValueError, match="vmap_mode=False"):
+            generate_pytorch_module(semantic_ir, vmap_mode=True)
 
     def test_vmap_mode_vs_nonvmap_mode_slice(self, slice_dynamic_starts_model):
         """Test vmap vs non-vmap code generation for slice.
@@ -746,49 +612,30 @@ class TestCodeGeneratorVmapMode:
         - _get_helper_needs_from_ir with vmap_mode=True vs False
         - Different helper selection based on mode
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_dynamic_starts_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_dynamic_starts_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
-        # Generate both modes
-        vmap_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
+        with pytest.raises(ValueError, match="cannot be proven statically"):
+            generate_pytorch_module(semantic_ir, vmap_mode=True)
         nonvmap_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=False)
 
-        # Both should be valid
-        assert isinstance(vmap_code, str)
-        assert len(vmap_code) > 0
         assert isinstance(nonvmap_code, str)
         assert len(nonvmap_code) > 0
-        ast.parse(vmap_code)
         ast.parse(nonvmap_code)
 
 
 class TestCodeGeneratorHelperSelection:
     """Test code generator helper selection logic."""
 
-    def test_helpers_from_context_dynamic_slice(self, slice_dynamic_starts_model):
-        """Test that dynamic slice helpers are selected correctly.
+    def test_unproven_vmap_slice_does_not_emit_helper(self, slice_dynamic_starts_model):
+        """Fail before emitting a shape-changing vmap helper."""
+        normalized = load_and_preprocess_onnx_model(slice_dynamic_starts_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
-        Exercises:
-        - _check_slice_needs_helper
-        - _generate_helpers_from_context
-        """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_dynamic_starts_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
-
-        module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
-
-        # Check if appropriate slice helper is included
-        assert isinstance(module_code, str)
-        assert len(module_code) > 0
-        ast.parse(module_code)
+        with pytest.raises(ValueError, match="cannot be proven statically"):
+            generate_pytorch_module(semantic_ir, vmap_mode=True)
 
     def test_helpers_from_context_expand(self, expand_runtime_shape_model):
         """Test that expand helpers are selected correctly.
@@ -797,12 +644,9 @@ class TestCodeGeneratorHelperSelection:
         - _check_expand_needs_helper
         - _generate_helpers_from_context
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(expand_runtime_shape_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(expand_runtime_shape_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -816,12 +660,9 @@ class TestCodeGeneratorImportGeneration:
 
     def test_imports_include_torch(self, linear_model):
         """Test that generated code includes torch import."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -830,38 +671,18 @@ class TestCodeGeneratorImportGeneration:
 
     def test_imports_include_nn_module(self, linear_model):
         """Test that generated code includes nn module import."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
         # Exercises: _generate_imports
         assert "import torch.nn as nn" in module_code
 
-    def test_imports_functional_when_needed(self):  # wct:skip ASN1
-        """Test that functional imports are included when needed.
-
-        Exercises:
-        - _generate_imports conditional functional import
-        """
-        pytest.skip("Complex model creation needed")
-
 
 class TestCodeGeneratorEdgeCases:
     """Test code generator edge cases and special paths."""
-
-    def test_generate_with_no_layers(self):  # wct:skip ASN1
-        """Test code generation with minimal model.
-
-        Exercises:
-        - _generate_forward_body with minimal layers
-        - _generate_forward_with_context
-        """
-        pytest.skip("Test requires empty model creation")
 
     def test_slice_constant_all_params_optimization(self, slice_static_model):
         """Test slice optimization when all params are constants.
@@ -870,12 +691,9 @@ class TestCodeGeneratorEdgeCases:
         - _check_slice_needs_helper early return
         - torch.narrow optimization detection
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_static_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_static_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -892,12 +710,9 @@ class TestCodeGeneratorEdgeCases:
         - _check_expand_needs_helper early return
         - reshape vs expand optimization
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(expand_constant_shape_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(expand_constant_shape_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -917,12 +732,9 @@ class TestCodeGeneratorStateDictGeneration:
         - _generate_forward_with_context
         - build_state_dict paths
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         _, state_dict = generate_pytorch_module(semantic_ir)
 
@@ -937,12 +749,9 @@ class TestCodeGeneratorStateDictGeneration:
         - _get_helper_needs_from_ir with different modes
         - build_state_dict with context
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         _, dict_vmap = generate_pytorch_module(semantic_ir, vmap_mode=True)
         _, dict_nonvmap = generate_pytorch_module(semantic_ir, vmap_mode=False)
@@ -973,12 +782,9 @@ class TestPhase15PatternMatching:
         - _detect_static_slice_lengths (pattern matching)
         - _are_from_same_source validation
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         # Should detect and handle Add pattern
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
@@ -997,12 +803,9 @@ class TestPhase15PatternMatching:
         - _trace_to_source tracing through multiple ops
         - _detect_static_slice_lengths with traced sources
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_through_shape_ops_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_through_shape_ops_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         # Should trace through shape ops to find Add pattern
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
@@ -1019,12 +822,9 @@ class TestPhase15PatternMatching:
         - Graph analysis for expand shape computation
         - Dynamic expand detection with computed shapes
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(expand_through_computation_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(expand_through_computation_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         # Should detect dynamic shape computation and emit helper or optimize to reshape
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
@@ -1042,12 +842,9 @@ class TestPhase15PatternMatching:
         - _get_helper_needs_from_ir (ScatterND path)
         - scatter_nd_vmap_helper generation
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(scatter_nd_with_runtime_indices_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(scatter_nd_with_runtime_indices_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         # Should generate scatter_nd helper
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
@@ -1068,12 +865,9 @@ class TestPhase15DeepAnalysisVmapMode:
         - slice_length_hints population
         - ForwardGenContext.get_slice_lengths
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         # Generate with vmap mode - should detect static length
         vmap_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
@@ -1089,12 +883,9 @@ class TestPhase15DeepAnalysisVmapMode:
         - _get_helper_needs_from_ir with vmap_mode=True vs False
         - Different helper selection based on static length detection
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         # Generate both modes
         vmap_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
@@ -1116,12 +907,9 @@ class TestPhase15DeepAnalysisVmapMode:
         - _are_from_same_source validation
         - Static length detection through multiple ops
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_through_shape_ops_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_through_shape_ops_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         # Should handle complex tracing
         vmap_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
@@ -1141,12 +929,9 @@ class TestPhase15OptimizationPaths:
         - _try_add_pattern_case constant offset detection
         - Pattern matching success condition
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1162,12 +947,9 @@ class TestPhase15OptimizationPaths:
         - _check_expand_needs_helper with computed shape
         - Helper emission logic
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(expand_through_computation_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(expand_through_computation_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1187,12 +969,9 @@ class TestPhase15MultipleOperationChains:
         - _trace_to_source with multiple hops
         - Pattern matching after tracing
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_through_shape_ops_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_through_shape_ops_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1207,12 +986,9 @@ class TestPhase15MultipleOperationChains:
         - Multiple analysis functions in sequence
         - _detect_static_slice_lengths with complex graph
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_through_shape_ops_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_through_shape_ops_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         # Generate with vmap mode
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
@@ -1236,12 +1012,9 @@ class TestPhase16HelperNeedsEdgeCases:
 
         Exercises early return when inputs < 3.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_static_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_static_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1254,12 +1027,9 @@ class TestPhase16HelperNeedsEdgeCases:
 
         Exercises early return when inputs < 2.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(expand_constant_shape_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(expand_constant_shape_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1276,12 +1046,9 @@ class TestPhase16PatternMatchingEdgeCases:
 
         Exercises case where ends is produced by non-Add operation.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_static_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_static_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1294,12 +1061,9 @@ class TestPhase16PatternMatchingEdgeCases:
 
         Exercises case where Add operand is not constant.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1316,12 +1080,9 @@ class TestPhase16GraphTracingEdgeCases:
 
         Exercises case where onnx_name is not in producer_map.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_static_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_static_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1334,12 +1095,9 @@ class TestPhase16GraphTracingEdgeCases:
 
         Exercises case where trace results are identical.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_through_shape_ops_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_through_shape_ops_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1356,12 +1114,9 @@ class TestPhase16ComplexGraphPatterns:
 
         Exercises full tracing chain: Unsqueeze -> Squeeze -> Add.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_through_shape_ops_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_through_shape_ops_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         # Should detect pattern through chain
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
@@ -1375,12 +1130,9 @@ class TestPhase16ComplexGraphPatterns:
 
         Exercises code paths with Add pattern inside slice computation.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1397,12 +1149,9 @@ class TestPhase16NonVmapPaths:
 
         Exercises _get_helper_needs_from_ir with vmap_mode=False.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         # Generate non-vmap version
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=False)
@@ -1416,12 +1165,9 @@ class TestPhase16NonVmapPaths:
 
         Exercises different helper selection path.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(expand_runtime_shape_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(expand_runtime_shape_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=False)
 
@@ -1444,12 +1190,9 @@ class TestPhase17SliceOptimizations:
 
         Exercises _check_slice_needs_helper narrow optimization detection.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_narrow_compatible_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_narrow_compatible_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1461,12 +1204,9 @@ class TestPhase17SliceOptimizations:
 
     def test_slice_multi_axis_disables_narrow(self, slice_multi_axis_model):
         """Test slice with multiple axes (narrow not applicable)."""
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_multi_axis_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_multi_axis_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1483,12 +1223,9 @@ class TestPhase17FunctionalImports:
 
         Exercises _generate_imports conditional import.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(model_with_functional_ops)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(model_with_functional_ops)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -1511,12 +1248,9 @@ class TestPhase17ReshapeInference:
 
         Exercises _compute_inferred_dim for dimension inference.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(reshape_with_inferred_dim_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(reshape_with_inferred_dim_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1532,12 +1266,9 @@ class TestPhase17AnalysisEdgeCases:
 
     def test_axes_list_extraction_default(self, slice_static_model):
         """Test _extract_axes_list with default axes (None input)."""
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_static_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_static_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1545,14 +1276,11 @@ class TestPhase17AnalysisEdgeCases:
         assert len(module_code) > 0
         ast.parse(module_code)
 
-    def test_steps_list_extraction_default(self, slice_dynamic_starts_model):
+    def test_steps_list_extraction_default(self, slice_with_add_pattern_model):
         """Test _extract_steps_list with default steps (None input)."""
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_dynamic_starts_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1566,12 +1294,9 @@ class TestPhase17HelperContextDetection:
 
     def test_helper_context_no_dynamic_slice(self, slice_static_model):
         """Test helper context when dynamic_slice not needed."""
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_static_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_static_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1581,14 +1306,11 @@ class TestPhase17HelperContextDetection:
         # Static slice should not generate dynamic_slice helper
         assert "def dynamic_slice" not in module_code
 
-    def test_helper_context_with_dynamic_slice(self, slice_dynamic_starts_model):
-        """Test helper context when dynamic_slice is needed."""
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_dynamic_starts_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+    def test_helper_context_with_dynamic_slice(self, slice_with_add_pattern_model):
+        """Test helper context when a fixed-length dynamic Slice is needed."""
+        normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1602,12 +1324,9 @@ class TestPhase17ExpandAnalysis:
 
     def test_expand_constant_shape_no_helper(self, expand_constant_shape_model):
         """Test expand with constant shape (no helper needed)."""
-        try:
-            normalized = load_and_preprocess_onnx_model(expand_constant_shape_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(expand_constant_shape_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1617,12 +1336,9 @@ class TestPhase17ExpandAnalysis:
 
     def test_expand_dynamic_shape_needs_helper(self, expand_runtime_shape_model):
         """Test expand with dynamic shape (helper needed)."""
-        try:
-            normalized = load_and_preprocess_onnx_model(expand_runtime_shape_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(expand_runtime_shape_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1636,12 +1352,9 @@ class TestPhase17StaticLengthDetection:
 
     def test_detect_slice_lengths_with_add_pattern(self, slice_with_add_pattern_model):
         """Test _detect_static_slice_lengths with Add pattern."""
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1653,20 +1366,14 @@ class TestPhase17StaticLengthDetection:
 class TestPhase17ProducerMapHandling:
     """Test producer map handling in helper detection."""
 
-    def test_check_slice_needs_helper_empty_producer_map(self, slice_dynamic_starts_model):
-        """Test _check_slice_needs_helper with empty producer_map."""
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_dynamic_starts_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+    def test_missing_slice_length_proof_raises(self, slice_dynamic_starts_model):
+        """Reject a Slice when producer analysis cannot prove its length."""
+        normalized = load_and_preprocess_onnx_model(slice_dynamic_starts_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
-        module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
-
-        assert isinstance(module_code, str)
-        assert len(module_code) > 0
-        ast.parse(module_code)
+        with pytest.raises(ValueError, match="cannot be proven statically"):
+            generate_pytorch_module(semantic_ir, vmap_mode=True)
 
 
 # ============================================================================
@@ -1683,12 +1390,9 @@ class TestPhase18SliceMinimalInputs:
 
         Tests early return path when all slice parameters are constants.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_narrow_compatible_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_narrow_compatible_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1705,12 +1409,9 @@ class TestPhase18ExpandMinimalInputs:
 
         Tests path where shape is computed at runtime (helper needed).
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(expand_runtime_shape_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(expand_runtime_shape_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1727,12 +1428,9 @@ class TestPhase18ExpandDynamicShape:
 
         Tests case where output shape contains None/dynamic dimensions.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(expand_dynamic_shape_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(expand_dynamic_shape_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1751,12 +1449,9 @@ class TestPhase18SliceLargeIndices:
 
         Tests slicing near the end of a dimension.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_large_indices_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_large_indices_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1777,12 +1472,9 @@ class TestPhase18NumericBoundaryConditions:
 
         Tests numeric boundary: end_val - start_val edge cases.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_static_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_static_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1796,12 +1488,9 @@ class TestPhase18NegativeIndices:
 
     def test_gather_with_vector_indices(self, gather_vector_indices_model):
         """Test Gather operation with vector indices handling."""
-        try:
-            normalized = load_and_preprocess_onnx_model(gather_vector_indices_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(gather_vector_indices_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1819,12 +1508,9 @@ class TestPhase18ComplexOptimizationBranches:
 
         Tests the complex condition checking (lines 141-151).
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_narrow_compatible_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_narrow_compatible_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1841,12 +1527,9 @@ class TestPhase18ErrorHandlingPaths:
 
         Tests path where shape tensor interpretation might fail.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(expand_dynamic_shape_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except (TypeError, ValueError):
-            pytest.skip("Invalid model caught at validation")
+        normalized = load_and_preprocess_onnx_model(expand_dynamic_shape_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1869,12 +1552,9 @@ class TestPhase19ConditionalImports:
 
         Tests the needs_functional condition that adds torch.nn.functional import.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(model_with_functional_ops)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(model_with_functional_ops)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -1897,12 +1577,9 @@ class TestPhase19ScatterNDOptimization:
 
         Tests error handling path in scatter_nd operations.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(scatter_nd_with_runtime_indices_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(scatter_nd_with_runtime_indices_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1921,12 +1598,9 @@ class TestPhase19MultiAxisOperations:
 
         Tests axis computation and dimension handling.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(reduce_mean_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(reduce_mean_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1944,12 +1618,9 @@ class TestPhase19ConcurrentHelperNeeds:
 
         Tests helper combination logic.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(concat_batch_expand_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(concat_batch_expand_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1966,12 +1637,9 @@ class TestPhase19TransposeOptimization:
 
         Tests permutation axis computation.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(transpose_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(transpose_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -1989,12 +1657,9 @@ class TestPhase19SplitAndConcatCombo:
 
         Tests split size computation and validation.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(split_unequal_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(split_unequal_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2011,12 +1676,9 @@ class TestPhase19InterpolateScaling:
 
         Tests interpolation parameter calculation.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(interpolate_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(interpolate_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2033,12 +1695,9 @@ class TestPhase19MatmulBufferHandling:
 
         Tests matmul buffer tracking and helper generation.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(matmul_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(matmul_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2056,12 +1715,9 @@ class TestPhase19ConvolutionOperations:
 
         Tests convolution parameter handling.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(conv1d_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(conv1d_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2075,12 +1731,9 @@ class TestPhase19ConvolutionOperations:
 
         Tests transposed convolution parameter handling.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(conv_transpose_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(conv_transpose_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2097,12 +1750,9 @@ class TestPhase19PaddingOperations:
 
         Tests padding parameter computation.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(pad_constant_pads_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(pad_constant_pads_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2115,12 +1765,9 @@ class TestPhase19PaddingOperations:
 
         Tests constant value padding.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(pad_with_value_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(pad_with_value_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2137,12 +1784,9 @@ class TestPhase19ShapeOperations:
 
         Tests dimension computation.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(squeeze_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(squeeze_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2156,12 +1800,9 @@ class TestPhase19ShapeOperations:
 
         Tests dimension insertion logic.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(unsqueeze_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(unsqueeze_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2179,12 +1820,9 @@ class TestPhase19ReductionOperations:
 
         Tests sum reduction parameter computation.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(reduce_sum_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(reduce_sum_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2202,12 +1840,9 @@ class TestPhase19PoolingOperations:
 
         Tests pooling parameter handling.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(maxpool_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(maxpool_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2220,12 +1855,9 @@ class TestPhase19PoolingOperations:
 
         Tests average pooling implementation.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(avgpool_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(avgpool_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2242,12 +1874,9 @@ class TestPhase19NormalizationOperations:
 
         Tests batch normalization parameter handling.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(batchnorm_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(batchnorm_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2270,12 +1899,9 @@ class TestPhase20TrigonometricOperations:
 
         Tests trigonometric function code generation.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(trigonometric_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(trigonometric_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2292,12 +1918,9 @@ class TestPhase20ClipOperations:
 
         Tests clamp parameter extraction.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(clip_constant_bounds_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(clip_constant_bounds_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2311,12 +1934,9 @@ class TestPhase20ClipOperations:
 
         Tests dynamic bounds handling.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(clip_tensor_bounds_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(clip_tensor_bounds_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2333,12 +1953,9 @@ class TestPhase20CastOperations:
 
         Tests dtype computation and conversion.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(cast_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(cast_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2355,12 +1972,9 @@ class TestPhase20ArithmeticOperations:
 
         Tests arithmetic code generation.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(arithmetic_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(arithmetic_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2377,12 +1991,9 @@ class TestPhase20SignOperation:
 
         Tests sign function implementation.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(sign_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(sign_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2399,12 +2010,9 @@ class TestPhase20FloorOperation:
 
         Tests floor function implementation.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(floor_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(floor_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2421,12 +2029,9 @@ class TestPhase20ShapeAndConstantOfShape:
 
         Tests shape extraction.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(shape_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(shape_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2439,12 +2044,9 @@ class TestPhase20ShapeAndConstantOfShape:
 
         Tests shape-based constant generation.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(constantofshape_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(constantofshape_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2456,35 +2058,21 @@ class TestPhase20ShapeAndConstantOfShape:
 class TestPhase20IdentityOperation:
     """Test identity and constant operations."""
 
-    def test_identity_operation(self, identity_model):
-        """Test Identity operation (pass-through).
-
-        Tests no-op code generation.
-        """
-        try:
-            normalized = load_and_preprocess_onnx_model(identity_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except (TypeError, ValueError):
-            pytest.skip("Identity operation may not be supported or classify_inputs() bug")
-
-        module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
-
-        assert isinstance(module_code, str)
-        assert len(module_code) > 0
-        ast.parse(module_code)
+    def test_identity_operation_is_rejected(self, identity_model):
+        """Report the currently unsupported Identity operator explicitly."""
+        normalized = load_and_preprocess_onnx_model(identity_model)
+        model_ir = build_model_ir(normalized)
+        with pytest.raises(ValueError, match=r"Unsupported ONNX operator: Identity"):
+            build_semantic_ir(model_ir)
 
     def test_constant_node(self, constant_node_model):
         """Test Constant node operation.
 
         Tests constant value handling.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(constant_node_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(constant_node_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2501,12 +2089,9 @@ class TestPhase20ArangeOperation:
 
         Tests arange with constant parameters.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(arange_literal_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(arange_literal_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2519,12 +2104,9 @@ class TestPhase20ArangeOperation:
 
         Tests arange with dynamic parameters.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(arange_runtime_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(arange_runtime_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2541,12 +2123,9 @@ class TestPhase20MultiInputMultiOutput:
 
         Tests multi-input handling.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(multi_input_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(multi_input_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2559,12 +2138,9 @@ class TestPhase20MultiInputMultiOutput:
 
         Tests multi-output handling.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(multi_output_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(multi_output_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2581,12 +2157,9 @@ class TestPhase20ResNetBlock:
 
         Tests complex operation composition.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(resnet_block_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(resnet_block_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2603,12 +2176,9 @@ class TestPhase20MLPModel:
 
         Tests neural network composition.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(mlp_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(mlp_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2625,12 +2195,9 @@ class TestPhase20LinearTransposed:
 
         Tests transposed linear layer handling.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_transposed_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_transposed_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2647,12 +2214,9 @@ class TestPhase20ArgmaxArgmin:
 
         Tests argmax parameter handling.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(argmax_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(argmax_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2670,12 +2234,9 @@ class TestPhase20AsyncPadDynamic:
 
         Tests asymmetric pad parameter handling.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(asymmetric_padding_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(asymmetric_padding_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2693,22 +2254,16 @@ class TestPhase20AsyncPadDynamic:
 class TestPhase21SliceEdgeCases:
     """Test slice handler with complex edge conditions."""
 
-    def test_slice_dynamic_axes(self, slice_dynamic_starts_model):
-        """Test slice with dynamic axes computation.
+    def test_slice_dynamic_length_requires_eager_mode(self, slice_dynamic_starts_model):
+        """Keep input-dependent Slice shapes on the eager code path."""
+        normalized = load_and_preprocess_onnx_model(slice_dynamic_starts_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
-        Tests complex axis handling in slice operations.
-        """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_dynamic_starts_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        with pytest.raises(ValueError, match="vmap_mode=False"):
+            generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
-
-        assert isinstance(module_code, str)
-        assert len(module_code) > 0
+        module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=False)
         ast.parse(module_code)
 
     def test_slice_through_shape_ops(self, slice_through_shape_ops_model):
@@ -2716,12 +2271,9 @@ class TestPhase21SliceEdgeCases:
 
         Tests producer tracking through shape operations.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_through_shape_ops_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_through_shape_ops_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2738,12 +2290,9 @@ class TestPhase21ExpandEdgeCases:
 
         Tests broadcast shape computation in expand.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(expand_broadcast_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(expand_broadcast_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2756,12 +2305,9 @@ class TestPhase21ExpandEdgeCases:
 
         Tests tracking shape computation chains.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(expand_through_computation_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(expand_through_computation_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2778,12 +2324,9 @@ class TestPhase21GatherEdgeCases:
 
         Tests scalar index computation in gather.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(gather_scalar_index_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(gather_scalar_index_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2804,12 +2347,9 @@ class TestPhase21PadEdgeCases:
         raise at codegen time; with ``vmap_mode=False`` the runtime branch
         is still emitted.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(pad_dynamic_pads_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(pad_dynamic_pads_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         with pytest.raises((RuntimeError, ValueError), match="vmap_mode=True"):
             generate_pytorch_module(semantic_ir, vmap_mode=True)
@@ -2828,12 +2368,9 @@ class TestPhase21ConcatEdgeCases:
 
         Tests concatenation with complex shape patterns.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(concat_batch_expand_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(concat_batch_expand_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2846,12 +2383,9 @@ class TestPhase21ConcatEdgeCases:
 
         Tests basic concat parameter handling.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(concat_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(concat_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2868,12 +2402,9 @@ class TestPhase21ScatterNDEdgeCases:
 
         Tests basic scatter_nd parameter computation.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(scatter_nd_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(scatter_nd_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2890,12 +2421,9 @@ class TestPhase21ReduceEdgeCases:
 
         Tests extreme value handling in index operations.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_int64max_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_int64max_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2912,12 +2440,9 @@ class TestPhase21ConvEdgeCases:
 
         Tests conv padding and stride computation.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(conv2d_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(conv2d_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2926,23 +2451,12 @@ class TestPhase21ConvEdgeCases:
         ast.parse(module_code)
         assert "conv" in module_code.lower()
 
-    def test_conv3d_handling(self, conv3d_model):
-        """Test 3D convolution operation.
-
-        Tests 3D conv parameter handling.
-        """
-        try:
-            normalized = load_and_preprocess_onnx_model(conv3d_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except (TypeError, NotImplementedError):
-            pytest.skip("Conv3D not supported or classify_inputs() bug prevents generation")
-
-        module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
-
-        assert isinstance(module_code, str)
-        assert len(module_code) > 0
-        ast.parse(module_code)
+    def test_conv3d_is_rejected(self, conv3d_model):
+        """Report the currently unsupported three-dimensional convolution."""
+        normalized = load_and_preprocess_onnx_model(conv3d_model)
+        model_ir = build_model_ir(normalized)
+        with pytest.raises(NotImplementedError, match=r"Unsupported Conv: 5D"):
+            build_semantic_ir(model_ir)
 
 
 class TestPhase21LinearEdgeCases:
@@ -2953,12 +2467,9 @@ class TestPhase21LinearEdgeCases:
 
         Tests bias parameter handling.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -2978,12 +2489,9 @@ class TestPhase21BatchNormEdgeCases:
         unsupported shapes at compile time instead of getting a module that
         ast-parses but crashes on the first forward pass.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(batchnorm3d_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(batchnorm3d_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         with pytest.raises(RuntimeError, match="Failed to generate code"):
             generate_pytorch_module(semantic_ir, vmap_mode=True)
@@ -3003,12 +2511,9 @@ class TestPhase22SliceHelperAnalysis:
 
         Tests line 132-133: all_constants early return path.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_static_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_static_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -3021,12 +2526,9 @@ class TestPhase22SliceHelperAnalysis:
 
         Tests lines 141-151: narrow optimization decision logic.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_narrow_compatible_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_narrow_compatible_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -3043,12 +2545,9 @@ class TestPhase22ExpandHelperAnalysis:
 
         Tests lines 202-203: early return when output shape is fully known.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(expand_constant_shape_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(expand_constant_shape_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -3061,12 +2560,9 @@ class TestPhase22ExpandHelperAnalysis:
 
         Tests lines 206-211: constant shape with known data shape.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(expand_constant_shape_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(expand_constant_shape_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -3083,12 +2579,9 @@ class TestPhase22StaticSliceLengthDetection:
 
         Tests lines 275-278, 283, 292: Add pattern detection for static lengths.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -3105,12 +2598,9 @@ class TestPhase22PatternCaseMatching:
 
         Tests lines 364, 367, 383, 390, 413: Pattern detection logic.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -3127,12 +2617,9 @@ class TestPhase22GraphTracing:
 
         Tests lines 438, 447-452, 469, 490, 497: Graph traversal logic.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_through_shape_ops_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_through_shape_ops_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -3145,12 +2632,9 @@ class TestPhase22GraphTracing:
 
         Tests lines 504-514, 522: Producer detection through computation chains.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(expand_through_computation_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(expand_through_computation_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -3167,12 +2651,9 @@ class TestPhase22ExtractAxisList:
 
         Tests axis extraction from slice parameters.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_multi_axis_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_multi_axis_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -3185,12 +2666,9 @@ class TestPhase22ExtractAxisList:
 
         Tests step extraction from slice parameters.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_static_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_static_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -3203,18 +2681,15 @@ class TestPhase22HelperGeneration:
     """Test helper function generation logic."""
 
     def test_slice_with_dynamic_parameters(self, slice_dynamic_starts_model):
-        """Test slice helper generation with dynamic parameters.
+        """Emit the eager helper only for an unproven dynamic Slice."""
+        normalized = load_and_preprocess_onnx_model(slice_dynamic_starts_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
-        Tests helper emission paths for dynamic slice operations.
-        """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_dynamic_starts_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        with pytest.raises(ValueError, match="vmap_mode=False"):
+            generate_pytorch_module(semantic_ir, vmap_mode=True)
 
-        module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
+        module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=False)
 
         assert isinstance(module_code, str)
         assert len(module_code) > 0
@@ -3227,12 +2702,9 @@ class TestPhase22HelperGeneration:
 
         Tests expand helper emission for dynamic shapes.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(expand_runtime_shape_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(expand_runtime_shape_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
 
@@ -3249,12 +2721,9 @@ class TestPhase22VmapOptimizations:
 
         Tests vmap-specific optimization paths for static length inference.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_with_add_pattern_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         # Test with vmap_mode=True to trigger vmap-specific paths
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=True)
@@ -3268,12 +2737,9 @@ class TestPhase22VmapOptimizations:
 
         Tests code generation without vmap optimization.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(slice_static_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(slice_static_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         # Test with vmap_mode=False
         module_code, _ = generate_pytorch_module(semantic_ir, vmap_mode=False)
@@ -3291,12 +2757,9 @@ class TestPhase23OperatorHandlers:
 
         Tests lines 97-114: _handle_sub function for subtraction operations.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(sub_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(sub_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -3311,12 +2774,9 @@ class TestPhase23OperatorHandlers:
 
         Tests lines 137-154: _handle_div function for division operations.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(div_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(div_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -3331,12 +2791,9 @@ class TestPhase23OperatorHandlers:
 
         Tests lines 172-189: _handle_pow function for power operations.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(pow_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(pow_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -3351,12 +2808,9 @@ class TestPhase23OperatorHandlers:
 
         Tests lines 192-203: _handle_neg function for negation operations.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(neg_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(neg_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -3371,12 +2825,9 @@ class TestPhase23OperatorHandlers:
 
         Tests lines 206-218: _handle_equal function for equality comparison.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(equal_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(equal_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -3391,12 +2842,9 @@ class TestPhase23OperatorHandlers:
 
         Tests lines 30-45: Scalar literal conversion in _get_input_code_name.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(add_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(add_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -3411,12 +2859,9 @@ class TestPhase23OperatorHandlers:
 
         Tests lines 56-63: Parameter context tracking via get_forward_gen_context.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(add_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(add_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, state_dict = generate_pytorch_module(semantic_ir)
 
@@ -3430,12 +2875,9 @@ class TestPhase23OperatorHandlers:
 
         Tests lines 117-134: _handle_mul function with literal handling.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(add_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(add_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -3448,12 +2890,9 @@ class TestPhase23OperatorHandlers:
 
         Tests lines 157-169: _handle_matmul with use_literal_for_scalar=False.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(add_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(add_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -3466,12 +2905,9 @@ class TestPhase23OperatorHandlers:
 
         Tests lines 77-78: Error handling for Add with insufficient inputs.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(add_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(add_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -3489,12 +2925,9 @@ class TestPhase24OperatorEdgeCases:
 
         Tests lines 30-55: Constant handling in _get_input_code_name.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(add_with_vector_constant_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(add_with_vector_constant_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, state_dict = generate_pytorch_module(semantic_ir)
 
@@ -3509,12 +2942,9 @@ class TestPhase24OperatorEdgeCases:
 
         Tests lines 30-45: Scalar constant literal conversion.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(mul_with_scalar_constant_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(mul_with_scalar_constant_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -3529,12 +2959,9 @@ class TestPhase24OperatorEdgeCases:
 
         Tests lines 56-63: Parameter marking in Sub, Mul, Add handlers.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(chained_operators_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(chained_operators_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, state_dict = generate_pytorch_module(semantic_ir)
 
@@ -3553,12 +2980,9 @@ class TestPhase24OperatorEdgeCases:
 
         Tests lines 107-114: _handle_div with parameter context.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(div_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(div_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -3572,12 +2996,9 @@ class TestPhase24OperatorEdgeCases:
 
         Tests lines 107-114: _handle_sub with parameter context.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(sub_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(sub_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -3591,12 +3012,9 @@ class TestPhase24OperatorEdgeCases:
 
         Tests lines 172-189: _handle_pow with various input types.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(pow_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(pow_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -3610,12 +3028,9 @@ class TestPhase24OperatorEdgeCases:
 
         Tests lines 201-203: _handle_neg with context marking.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(neg_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(neg_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -3629,12 +3044,9 @@ class TestPhase24OperatorEdgeCases:
 
         Tests lines 215-218: _handle_equal with context marking.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(equal_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(equal_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -3648,12 +3060,9 @@ class TestPhase24OperatorEdgeCases:
 
         Tests lines 26-64: Combined paths through _get_input_code_name.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(add_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(add_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, state_dict = generate_pytorch_module(semantic_ir)
 
@@ -3671,12 +3080,9 @@ class TestPhase25OperationHandlers:
 
         Tests reshape with runtime shape (lines 122-182).
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(reshape_with_shape_tensor_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(reshape_with_shape_tensor_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -3691,12 +3097,9 @@ class TestPhase25OperationHandlers:
 
         Tests gather with non-default axis (lines 476-527).
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(gather_with_axis_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(gather_with_axis_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -3711,12 +3114,9 @@ class TestPhase25OperationHandlers:
 
         Tests concat with 3+ inputs (lines 257-327).
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(multi_concat_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(multi_concat_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -3731,12 +3131,9 @@ class TestPhase25OperationHandlers:
 
         Tests reduce operation behavior (lines 1093-1129).
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(reduce_with_keepdims_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(reduce_with_keepdims_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -3751,12 +3148,9 @@ class TestPhase25OperationHandlers:
 
         Tests expand operation (lines 975-1016).
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(expand_with_runtime_shape_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(expand_with_runtime_shape_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -3776,12 +3170,9 @@ class TestPhase25OperationHandlers:
 
         Tests split operation (lines 1017-1058).
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(split_equal_parts_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except (TypeError, ValueError, RuntimeError):  # Handle ONNX validation errors and IR errors
-            pytest.skip("Split model validation or IR generation failed")
+        normalized = load_and_preprocess_onnx_model(split_equal_parts_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -3796,12 +3187,9 @@ class TestPhase25OperationHandlers:
 
         Tests operation handler integration.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(reshape_with_shape_tensor_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(reshape_with_shape_tensor_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 
@@ -3816,12 +3204,9 @@ class TestPhase25OperationHandlers:
 
         Tests axis parameter handling in gather.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(gather_with_axis_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(gather_with_axis_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, state_dict = generate_pytorch_module(semantic_ir)
 
@@ -3835,12 +3220,9 @@ class TestPhase25OperationHandlers:
 
         Tests reduce with axes input.
         """
-        try:
-            normalized = load_and_preprocess_onnx_model(reduce_with_keepdims_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(reduce_with_keepdims_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         module_code, _ = generate_pytorch_module(semantic_ir)
 

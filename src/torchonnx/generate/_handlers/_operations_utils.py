@@ -12,6 +12,7 @@ __all__ = [
     "_can_infer_reshape_statically",
     "_compute_inferred_dim",
     "_format_args_with_inputs",
+    "_format_unsqueeze_expression",
     "_get_input_code_name_selective",
     "_get_input_code_names",
     "_require_min_inputs",
@@ -19,7 +20,13 @@ __all__ = [
 
 import math
 
-from torchonnx.analyze import ConstantInfo, ParameterInfo, SemanticLayerIR, VariableInfo
+from torchonnx.analyze import (
+    AbsentInputInfo,
+    ConstantInfo,
+    ParameterInfo,
+    SemanticLayerIR,
+    VariableInfo,
+)
 from torchonnx.generate._context import _get_ctx
 from torchonnx.generate._utils import format_argument
 
@@ -54,7 +61,7 @@ def _get_input_code_names(layer: SemanticLayerIR) -> list[str]:
 
 
 def _get_input_code_name_selective(
-    inp: VariableInfo | ParameterInfo | ConstantInfo,
+    inp: AbsentInputInfo | VariableInfo | ParameterInfo | ConstantInfo,
 ) -> str:
     """Get code name for a single input, marking constants / parameters as used.
 
@@ -62,6 +69,8 @@ def _get_input_code_name_selective(
 
     :return: Code name string (e.g., ``'self.const_0'``, ``'x1'``).
     """
+    if isinstance(inp, AbsentInputInfo):
+        raise ValueError(f"ONNX input slot {inp.position} is absent")
     if isinstance(inp, ConstantInfo):
         _get_ctx().mark_constant_used(inp.code_name)
         return f"self.{inp.code_name}"
@@ -98,6 +107,33 @@ def _format_args_with_inputs(layer: SemanticLayerIR, extra_inputs: list[str] | N
         args_parts.append(f"{arg.pytorch_name}={formatted_value}")
 
     return ", ".join(args_parts)
+
+
+def _format_unsqueeze_expression(
+    data: str,
+    axes: int | list[int] | tuple[int, ...],
+    output_rank: int,
+) -> str:
+    """Render sequential PyTorch unsqueezes for ONNX output-coordinate axes."""
+    axes_values = [axes] if isinstance(axes, int) else list(axes)
+    if not axes_values:
+        raise ValueError("Unsqueeze axes must not be empty")
+
+    normalized_axes: set[int] = set()
+    for axis in axes_values:
+        if axis < -output_rank or axis >= output_rank:
+            raise ValueError(
+                f"Unsqueeze axis {axis} is outside [-{output_rank}, {output_rank - 1}]"
+            )
+        normalized_axis = axis % output_rank
+        if normalized_axis in normalized_axes:
+            raise ValueError(f"Unsqueeze axes must be unique, got {axes_values}")
+        normalized_axes.add(normalized_axis)
+
+    expression = data
+    for axis in sorted(normalized_axes):
+        expression = f"{expression}.unsqueeze({axis})"
+    return expression
 
 
 def _compute_inferred_dim(

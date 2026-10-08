@@ -11,7 +11,7 @@ import torch
 from onnx import NodeProto, TensorProto, numpy_helper
 from torch import Tensor
 
-from torchonnx.analyze.types import ConstantInfo, ParameterInfo, VariableInfo
+from torchonnx.analyze.types import AbsentInputInfo, ConstantInfo, ParameterInfo, VariableInfo
 
 # ONNX dtype to PyTorch dtype mapping.
 # Maps each ONNX TensorProto.DataType enum value to the corresponding
@@ -259,7 +259,7 @@ def classify_inputs(
     variable_mapping: dict[str, str] | None = None,
     constant_mapping: dict[str, ConstantInfo] | None = None,
     node: "NodeProto | None" = None,
-) -> list[VariableInfo | ParameterInfo | ConstantInfo]:
+) -> list[AbsentInputInfo | VariableInfo | ParameterInfo | ConstantInfo]:
     """Classify each input name into Variable, Parameter, or Constant.
 
     Converts Stage 2's input_names (list of strings) into Stage 3's typed containers.
@@ -274,21 +274,19 @@ def classify_inputs(
     :param constant_mapping: Optional mapping from onnx_name to ConstantInfo for constants.
     :param node: Optional ONNX NodeProto for extracting attributes (e.g., transB for Gemm).
 
-    :return: Ordered list of typed input info objects
+    :return: Ordered list of typed input info objects. Empty ONNX names become
+        :class:`AbsentInputInfo` entries so optional-slot positions are retained.
     """
-    results: list[VariableInfo | ParameterInfo | ConstantInfo] = []
+    results: list[AbsentInputInfo | VariableInfo | ParameterInfo | ConstantInfo] = []
 
-    # Filter empty-string input names so that the results list positions
-    # align with the indices used by _get_parameter_role. ONNX uses empty
-    # strings for unprovided optional inputs; skipping them keeps the
-    # results contiguous and prevents _get_parameter_role from reading a
-    # wrong position via input_names.index().
-    non_empty_names = [n for n in input_names if n]
+    for position, onnx_name in enumerate(input_names):
+        if not onnx_name:
+            results.append(AbsentInputInfo(position=position))
+            continue
 
-    for onnx_name in non_empty_names:
         if onnx_name in initializers:
             tensor = initializers[onnx_name]
-            param_role = _get_parameter_role(onnx_name, non_empty_names, pytorch_type)
+            param_role = _get_parameter_role(onnx_name, input_names, pytorch_type)
 
             if param_role:
                 param_info = _process_parameter_input(

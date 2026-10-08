@@ -7,13 +7,19 @@ Generate code like: x2 = x0 + x1, x3 = x1 @ x2, etc.
 __docformat__ = "restructuredtext"
 __all__ = ["register_operator_handlers"]
 
-from torchonnx.analyze import ConstantInfo, ParameterInfo, SemanticLayerIR, VariableInfo
+from torchonnx.analyze import (
+    AbsentInputInfo,
+    ConstantInfo,
+    ParameterInfo,
+    SemanticLayerIR,
+    VariableInfo,
+)
 from torchonnx.generate._context import _get_ctx
 from torchonnx.generate._handlers._registry import register_handler
 
 
 def _get_input_code_name(
-    inp: VariableInfo | ParameterInfo | ConstantInfo,
+    inp: AbsentInputInfo | VariableInfo | ParameterInfo | ConstantInfo,
     use_literal_for_scalar: bool = False,
     use_literal_for_small_vector: bool = False,
 ) -> str:
@@ -25,6 +31,8 @@ def _get_input_code_name(
 
     :return: Code name string
     """
+    if isinstance(inp, AbsentInputInfo):
+        raise ValueError(f"ONNX input slot {inp.position} is absent")
     if isinstance(inp, ConstantInfo):
         # Check if we should use literal
         should_use_literal = False

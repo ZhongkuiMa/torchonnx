@@ -202,16 +202,29 @@ class TestRequiredAttributes:
         with pytest.raises(ValueError, match="axis"):
             extract_onnx_attrs(node, {})
 
-    def test_transpose_perm_required(self):
-        """Test Transpose requires perm attribute."""
+    def test_transpose_without_perm_uses_onnx_default(self):
+        """Transpose may omit perm to request reversal of all dimensions."""
         node = onnx_helper.make_node("Transpose", inputs=["X"], outputs=["Y"])
-        with pytest.raises(ValueError, match="perm"):
-            extract_onnx_attrs(node, {})
+
+        assert extract_onnx_attrs(node, {}) == {"perm": None}
 
     def test_averagepool_kernel_shape_required(self):
         """Test AveragePool requires kernel_shape attribute."""
         node = onnx_helper.make_node("AveragePool", inputs=["X"], outputs=["Y"])
         with pytest.raises(ValueError, match="kernel_shape"):
+            extract_onnx_attrs(node, {})
+
+    def test_dilated_averagepool_raises(self):
+        """Reject dilation that PyTorch AvgPool cannot represent."""
+        node = onnx_helper.make_node(
+            "AveragePool",
+            inputs=["X"],
+            outputs=["Y"],
+            kernel_shape=[2, 2],
+            dilations=[2, 2],
+        )
+
+        with pytest.raises(ValueError, match=r"AveragePool.*dilations"):
             extract_onnx_attrs(node, {})
 
 

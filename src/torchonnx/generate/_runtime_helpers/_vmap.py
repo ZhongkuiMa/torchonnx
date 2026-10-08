@@ -65,11 +65,16 @@ def dynamic_slice(data, starts, ends, axes=None, steps=None, slice_lengths=None)
     else:
         steps_list = [int(steps)]
 
-    # Handle slice_lengths - default to 1 if not provided
+    if len(steps_list) != len(axes_list) or any(int(step) != 1 for step in steps_list):
+        raise ValueError("vmap dynamic_slice currently requires one unit step per axis")
+
+    # A vmap output must have a fixed shape. Code generation proves and
+    # supplies these lengths; guessing would silently change Slice semantics.
     if slice_lengths is None:
-        lengths_list = [1] * len(axes_list)
-    else:
-        lengths_list = list(slice_lengths)
+        raise ValueError("vmap dynamic_slice requires statically proven slice_lengths")
+    lengths_list = list(slice_lengths)
+    if len(lengths_list) != len(axes_list):
+        raise ValueError("vmap dynamic_slice requires one statically proven slice length per axis")
 
     result = data
     # Track validity: 1.0 if all slices non-empty, 0.0 if any slice empty

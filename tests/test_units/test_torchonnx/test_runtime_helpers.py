@@ -98,6 +98,25 @@ class TestStandardDynamicExpand:
 class TestVmapDynamicSlice:
     """``_vmap.dynamic_slice`` -- returns (result, valid_flag)."""
 
+    def test_missing_static_lengths_raises(self):
+        data = torch.arange(5.0)
+
+        with pytest.raises(ValueError, match="statically proven slice_lengths"):
+            _vmap.dynamic_slice(data, starts=[1], ends=[4], axes=[0])
+
+    def test_non_unit_step_raises(self):
+        data = torch.arange(5.0)
+
+        with pytest.raises(ValueError, match="requires one unit step per axis"):
+            _vmap.dynamic_slice(
+                data,
+                starts=[0],
+                ends=[4],
+                axes=[0],
+                steps=[2],
+                slice_lengths=[2],
+            )
+
     def test_returns_result_and_valid_flag(self):
         data = torch.arange(20.0).reshape(4, 5)
         result, valid = _vmap.dynamic_slice(data, starts=[1], ends=[3], axes=[0], slice_lengths=[2])

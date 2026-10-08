@@ -21,7 +21,6 @@ ONNX_TO_PYTORCH_LAYERS: dict[str, str] = {
     # Pooling
     "MaxPool": "MaxPool2d",
     "AveragePool": "AvgPool2d",
-    "GlobalAveragePool": "AdaptiveAvgPool2d",
     # Linear and matrix operations
     "Gemm": "Linear",
     # Normalization
@@ -49,8 +48,12 @@ LAYERS_WITH_ARGS: set[str] = {
     "ConvTranspose2d",
     "Linear",
     "BatchNorm2d",
+    "MaxPool1d",
     "MaxPool2d",
+    "MaxPool3d",
+    "AvgPool1d",
     "AvgPool2d",
+    "AvgPool3d",
     "AdaptiveAvgPool2d",
     "Dropout",
     "ReLU",
@@ -276,12 +279,12 @@ def _extract_averagepool_args(
     node: NodeProto,
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
-    """Map ONNX AveragePool attributes to PyTorch AvgPool2d arguments.
+    """Map ONNX AveragePool attributes to PyTorch AvgPool arguments.
 
     :param node: ONNX AveragePool node.
     :param initializers: All ONNX initializers.
 
-    :return: PyTorch AvgPool2d constructor arguments
+    :return: PyTorch AvgPool constructor arguments
     """
     attrs = extract_onnx_attrs(node, initializers)
 
@@ -332,12 +335,12 @@ def _extract_maxpool_args(
     node: NodeProto,
     initializers: dict[str, TensorProto],
 ) -> dict[str, Any]:
-    """Map ONNX MaxPool attributes to PyTorch MaxPool2d arguments.
+    """Map ONNX MaxPool attributes to PyTorch MaxPool arguments.
 
     :param node: ONNX MaxPool node.
     :param initializers: All ONNX initializers.
 
-    :return: PyTorch MaxPool2d constructor arguments
+    :return: PyTorch MaxPool constructor arguments
     """
     attrs = extract_onnx_attrs(node, initializers)
 
@@ -503,20 +506,6 @@ def _extract_upsample_args(
     return {"mode": mode}
 
 
-def _extract_globalavgpool_args(
-    node: NodeProto,
-    initializers: dict[str, TensorProto],
-) -> dict[str, Any]:
-    """Map ONNX GlobalAveragePool to PyTorch AdaptiveAvgPool2d arguments.
-
-    :param node: ONNX GlobalAveragePool node.
-    :param initializers: All ONNX initializers.
-
-    :return: PyTorch AdaptiveAvgPool2d constructor arguments
-    """
-    return {"output_size": (1, 1)}
-
-
 _ONNX_TO_PYTORCH_ARGS: dict[str, Any] = {
     "Conv": _extract_conv_args,
     "ConvTranspose": _extract_convtranspose_args,
@@ -535,7 +524,6 @@ _ONNX_TO_PYTORCH_ARGS: dict[str, Any] = {
     "Softmax": _extract_softmax_args,
     "Upsample": _extract_upsample_args,
     "Resize": _extract_upsample_args,  # Resize also maps to nn.Upsample
-    "GlobalAveragePool": _extract_globalavgpool_args,
 }
 
 

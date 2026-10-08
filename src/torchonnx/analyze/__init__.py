@@ -5,6 +5,7 @@ This module performs semantic analysis on raw IR to classify tensors and operato
 
 __docformat__ = "restructuredtext"
 __all__ = [
+    "AbsentInputInfo",
     "ArgumentInfo",
     "ConstantInfo",
     "OperatorClass",
@@ -20,6 +21,7 @@ __all__ = [
 from torchonnx.analyze.builder import build_semantic_ir
 from torchonnx.analyze.tensor_classifier import classify_inputs, classify_outputs
 from torchonnx.analyze.types import (
+    AbsentInputInfo,
     ArgumentInfo,
     ConstantInfo,
     OperatorClass,

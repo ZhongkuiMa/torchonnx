@@ -10,7 +10,7 @@ import inspect
 
 from torch import Tensor
 
-from torchonnx.analyze import ConstantInfo, SemanticModelIR, VariableInfo
+from torchonnx.analyze import AbsentInputInfo, ConstantInfo, SemanticModelIR, VariableInfo
 from torchonnx.generate._forward_gen import (
     ForwardGenContext,
     generate_forward_method,
@@ -155,15 +155,15 @@ def _check_slice_needs_helper(
     all_constants = (
         isinstance(starts_input, ConstantInfo)
         and isinstance(ends_input, ConstantInfo)
-        and (axes_input is None or isinstance(axes_input, ConstantInfo))
-        and (steps_input is None or isinstance(steps_input, ConstantInfo))
+        and (_is_absent_input(axes_input) or isinstance(axes_input, ConstantInfo))
+        and (_is_absent_input(steps_input) or isinstance(steps_input, ConstantInfo))
     )
     if all_constants:
         return False
 
     # Check if can use torch.narrow (all params constant, single axis, step=1)
-    axes_constant = axes_input is None or isinstance(axes_input, ConstantInfo)
-    steps_constant = steps_input is None or isinstance(steps_input, ConstantInfo)
+    axes_constant = _is_absent_input(axes_input) or isinstance(axes_input, ConstantInfo)
+    steps_constant = _is_absent_input(steps_input) or isinstance(steps_input, ConstantInfo)
     starts_constant = isinstance(starts_input, ConstantInfo)
     ends_constant = isinstance(ends_input, ConstantInfo)
 
@@ -184,15 +184,20 @@ def _check_slice_needs_helper(
         static_lengths = _detect_static_slice_lengths(
             layer, starts_input, ends_input, axes_input, steps_input, producer_map
         )
-        if static_lengths is not None:
-            ctx.slice_length_hints[layer.name] = static_lengths
+        if static_lengths is None:
+            raise ValueError(
+                f"Slice layer {layer.name!r} has an input-dependent output length that "
+                "cannot be proven statically with vmap_mode=True. "
+                "Use vmap_mode=False for eager dynamic slicing."
+            )
+        ctx.slice_length_hints[layer.name] = static_lengths
 
     return True
 
 
 def _extract_axes_list(axes_input) -> list:
     """Extract axes list from axes input."""
-    if axes_input is None:
+    if _is_absent_input(axes_input):
         return [0]
     assert isinstance(axes_input, ConstantInfo)
     axes_data = axes_input.data.tolist()
@@ -201,7 +206,7 @@ def _extract_axes_list(axes_input) -> list:
 
 def _extract_steps_list(steps_input, axes_len: int) -> list:
     """Extract steps list from steps input."""
-    if steps_input is None:
+    if _is_absent_input(steps_input):
         return [1] * axes_len
     assert isinstance(steps_input, ConstantInfo)
     steps_data = steps_input.data.tolist()
@@ -275,6 +280,11 @@ def _get_helper_needs_from_ir(
     return ctx
 
 
+def _is_absent_input(input_info) -> bool:
+    """Return whether a semantic input represents an omitted optional slot."""
+    return input_info is None or isinstance(input_info, AbsentInputInfo)
+
+
 def _detect_static_slice_lengths(
     layer, starts_input, ends_input, axes_input, steps_input, producer_map
 ) -> list[int] | None:
@@ -294,7 +304,7 @@ def _detect_static_slice_lengths(
     :return: List of static slice lengths, or None if can't determine
     """
     # Get axes list
-    if axes_input is None:
+    if _is_absent_input(axes_input):
         # Default: slice all axes from 0
         num_axes = 1  # Assume single axis if starts is 1D
         if hasattr(starts_input, "shape") and starts_input.shape:
@@ -307,13 +317,19 @@ def _detect_static_slice_lengths(
         return None  # Dynamic axes - can't determine static lengths
 
     # Get steps list
-    if steps_input is None:
+    if _is_absent_input(steps_input):
         steps_list = [1] * len(axes_list)
     elif isinstance(steps_input, ConstantInfo):
         steps_data = steps_input.data.tolist()
         steps_list = steps_data if isinstance(steps_data, list) else [steps_data]
     else:
         return None  # Dynamic steps - can't determine static lengths
+
+    # The vmap helper currently proves validity using contiguous ranges. A
+    # strided dynamic slice needs a different bounds proof, so keep it on the
+    # eager path instead of emitting a fixed-shape approximation.
+    if len(steps_list) != len(axes_list) or any(step != 1 for step in steps_list):
+        return None
 
     static_lengths = []
 
@@ -392,28 +408,27 @@ def _try_add_pattern_case(
     add_input0 = ends_producer.inputs[0]
     add_input1 = ends_producer.inputs[1]
 
-    # Find constant and variable operands
+    def same_source(candidate, starts) -> bool:
+        if isinstance(candidate, ConstantInfo) and isinstance(starts, ConstantInfo):
+            return candidate.onnx_name == starts.onnx_name
+        if isinstance(candidate, VariableInfo) and isinstance(starts, VariableInfo):
+            return _are_from_same_source(candidate, starts, producer_map)
+        return False
+
     const_operand = None
-    var_operand = None
-    if isinstance(add_input0, ConstantInfo):
-        const_operand = add_input0
-        var_operand = add_input1
-    elif isinstance(add_input1, ConstantInfo):
-        const_operand = add_input1
-        var_operand = add_input0
+    for source_operand, offset_operand in (
+        (add_input0, add_input1),
+        (add_input1, add_input0),
+    ):
+        if isinstance(offset_operand, ConstantInfo) and same_source(source_operand, starts_input):
+            const_operand = offset_operand
+            break
 
-    if const_operand is None or var_operand is None:
-        return None
-
-    # Check if var_operand and starts_input share the same source
-    if not (isinstance(var_operand, VariableInfo) and isinstance(starts_input, VariableInfo)):
-        return None
-
-    if not _are_from_same_source(var_operand, starts_input, producer_map):
+    if const_operand is None:
         return None
 
     # Pattern matched: slice_length = const_val / step
-    const_val = int(const_operand.data.item())
+    const_val = int(_extract_value_at_index(const_operand.data.tolist(), axis_idx))
     length = (const_val + step - 1) // step
     return max(0, length)
 

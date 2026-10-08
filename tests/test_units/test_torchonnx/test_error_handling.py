@@ -155,14 +155,11 @@ class TestAnalyzeErrors:
 
     def test_analyze_constant_node_handling(self, constant_node_model):
         """Verify handling of constant nodes."""
-        try:
-            normalized = load_and_preprocess_onnx_model(constant_node_model)
-            model_ir = build_model_ir(normalized)
-            # Constant nodes should be handled (not necessarily error)
-            semantic_ir = build_semantic_ir(model_ir)
-            assert len(semantic_ir.layers) >= 0
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(constant_node_model)
+        model_ir = build_model_ir(normalized)
+        # Constant nodes should be handled (not necessarily error)
+        semantic_ir = build_semantic_ir(model_ir)
+        assert len(semantic_ir.layers) >= 0
 
 
 class TestGenerateErrors:
@@ -186,12 +183,9 @@ class TestGenerateErrors:
 
     def test_generate_with_invalid_module_name(self, linear_model):
         """Verify error handling for invalid module names."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         # Generate with invalid name should be sanitized, not error
         # Test that it handles special characters
@@ -280,12 +274,6 @@ class TestPipelineErrors:
 class TestEdgeCases:
     """Test edge cases and boundary conditions."""
 
-    def test_very_large_model_input(self):  # wct:skip ASN1
-        """Test handling of very large tensor inputs."""
-        # This is more of a memory stress test
-        # Skip if not enough memory
-        pytest.skip("Memory-intensive test")
-
     def test_zero_sized_tensors(self):
         """Test handling of zero-sized tensors."""
         zero_tensor = np.zeros((0, 10), dtype=np.float32)
@@ -351,12 +339,9 @@ class TestTypeErrors:
 
     def test_invalid_module_name_type(self, linear_model):
         """Verify error handling for invalid module name type."""
-        try:
-            normalized = load_and_preprocess_onnx_model(linear_model)
-            model_ir = build_model_ir(normalized)
-            semantic_ir = build_semantic_ir(model_ir)
-        except TypeError:
-            pytest.skip("classify_inputs() bug prevents semantic IR generation")
+        normalized = load_and_preprocess_onnx_model(linear_model)
+        model_ir = build_model_ir(normalized)
+        semantic_ir = build_semantic_ir(model_ir)
 
         # Should handle non-string module names (convert or error)
         raised = False

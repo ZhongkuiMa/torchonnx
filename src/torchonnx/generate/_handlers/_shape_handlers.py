@@ -22,6 +22,7 @@ from torchonnx.analyze import ConstantInfo, SemanticLayerIR
 from torchonnx.generate._handlers._operations_utils import (
     _can_infer_reshape_statically,
     _compute_inferred_dim,
+    _format_unsqueeze_expression,
     _get_input_code_name_selective,
     _get_input_code_names,
     _require_min_inputs,
@@ -101,7 +102,8 @@ def _handle_transpose(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]
     """Handle transpose / permute operation.
 
     Generates ``output = input.permute(dims)`` when an explicit ``perm``
-    attribute is present, otherwise the default ``transpose(-2, -1)``.
+    attribute is present. Without ``perm``, ONNX reverses every dimension;
+    the generated runtime range preserves that behavior for any input rank.
 
     :param layer: Semantic layer IR.
     :param layer_name_mapping: Mapping from ONNX layer name to clean Python name.
@@ -114,11 +116,10 @@ def _handle_transpose(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]
     # Get perm argument
     perm_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "perm"), None)
 
-    if perm_arg:
+    if perm_arg and perm_arg.value is not None:
         perm = format_argument(perm_arg.value)
         return f"{output} = {inputs[0]}.permute({perm})"
-    # Default transpose (swap last two dims)
-    return f"{output} = {inputs[0]}.transpose(-2, -1)"
+    return f"{output} = {inputs[0]}.permute(tuple(range({inputs[0]}.dim() - 1, -1, -1)))"
 
 
 def _handle_squeeze(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
@@ -161,16 +162,36 @@ def _handle_unsqueeze(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]
     data = _get_input_code_name_selective(layer.inputs[0])
 
     if dim_arg and dim_arg.value is not None:
-        dim = format_argument(dim_arg.value)
-        return f"{output} = {data}.unsqueeze({dim})"
+        axes = dim_arg.value
+        axes_count = 1 if isinstance(axes, int) else len(axes)
+        output_shape = layer.outputs[0].shape
+        input_shape = layer.inputs[0].shape
+        if output_shape is not None:
+            output_rank = len(output_shape)
+        elif input_shape is not None:
+            output_rank = len(input_shape) + axes_count
+        else:
+            raise ValueError("Unsqueeze with constant axes requires a known tensor rank")
+        expression = _format_unsqueeze_expression(data, axes, output_rank)
+        return f"{output} = {expression}"
     if len(layer.inputs) >= 2:
         # ONNX opset 13+: axes is the second input
         axes_input = layer.inputs[1]
         if isinstance(axes_input, ConstantInfo):
-            # Use literal (don't mark as used)
-            axes_value = int(axes_input.data.item())
-            return f"{output} = {data}.unsqueeze({axes_value})"
+            axes = axes_input.data.reshape(-1).tolist()
+            output_shape = layer.outputs[0].shape
+            input_shape = layer.inputs[0].shape
+            if output_shape is not None:
+                output_rank = len(output_shape)
+            elif input_shape is not None:
+                output_rank = len(input_shape) + len(axes)
+            else:
+                raise ValueError("Unsqueeze with constant axes requires a known tensor rank")
+            expression = _format_unsqueeze_expression(data, axes, output_rank)
+            return f"{output} = {expression}"
         # Dynamic axes (mark as used)
+        if axes_input.shape != (1,):
+            raise ValueError("Runtime Unsqueeze axes must have exactly one element")
         axes_code = _get_input_code_name_selective(axes_input)
         return f"{output} = {data}.unsqueeze({axes_code}.item())"
     # Fallback: unsqueeze at dim 0

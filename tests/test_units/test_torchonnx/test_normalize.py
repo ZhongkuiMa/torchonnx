@@ -473,20 +473,17 @@ class TestShapeONNXIntegration:
             or len(converted.graph.node) <= original_nodes
         )  # May differ due to optimization
 
-    def test_shapeonnx_import_error_handling(self):
-        """Test graceful fallback when shapeonnx is not available."""
+    def test_shapeonnx_failure_falls_back_to_onnx(self):
+        """Test fallback when ShapeONNX rejects an operator."""
         X = onnx.helper.make_tensor_value_info("X", onnx.TensorProto.FLOAT, [1, 10])  # noqa: N806
         Y = onnx.helper.make_tensor_value_info("Y", onnx.TensorProto.FLOAT, [1, 10])  # noqa: N806
 
-        node = onnx.helper.make_node("Identity", inputs=["X"], outputs=["Y"])
+        # Use a valid ONNX operator that ShapeONNX deliberately does not support.
+        # Identity is supported and must not be used as a synthetic failure fixture.
+        node = onnx.helper.make_node("Erf", inputs=["X"], outputs=["Y"])
         graph = onnx.helper.make_graph([node], "TestModel", [X], [Y])
         model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 13)])
 
-        # Should handle missing shapeonnx gracefully
-        try:
+        with pytest.warns(UserWarning, match="ShapeONNX inference failed"):
             result = _infer_shapes(model, use_shapeonnx=True)
-            # Should complete without error (either using shapeonnx or falling back)
-            assert isinstance(result, onnx.ModelProto)
-        except ImportError:
-            # If shapeonnx is not installed, this is expected
-            pytest.skip("shapeonnx not installed")
+        assert isinstance(result, onnx.ModelProto)
