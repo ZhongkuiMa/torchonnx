@@ -2387,6 +2387,23 @@ class TestGenericMethodHandlers:
         assert "y = " in code
         assert "cos" in code
 
+    def test_atan_method_handling(self):
+        """Test atan method handler."""
+        layer = SemanticLayerIR(
+            name="atan_0",
+            onnx_op_type="Atan",
+            pytorch_type="atan",
+            operator_class=OperatorClass.OPERATION,
+            inputs=[make_variable("x", shape=(3, 4))],
+            outputs=[make_variable("y", shape=(3, 4))],
+            arguments=[],
+        )
+
+        code = _handle_generic_method(layer, {})
+
+        assert "y = " in code
+        assert "atan" in code
+
     def test_sin_method_handling(self):
         """Test sin method handler."""
         layer = SemanticLayerIR(

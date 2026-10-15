@@ -1390,6 +1390,7 @@ def register_operation_handlers() -> None:
     register_handler("slice", _handle_slice)
     register_handler("sign", _handle_generic_method)
     register_handler("split", _handle_split)
+    register_handler("atan", _handle_generic_method)
     register_handler("cos", _handle_generic_method)
     register_handler("sin", _handle_generic_method)
     register_handler("floor", _handle_generic_method)

@@ -59,6 +59,7 @@ ONNX_TO_PYTORCH_OPERATIONS: dict[str, str] = {
     "ReduceMean": "torch.mean",
     "ReduceSum": "torch.sum",
     "GlobalAveragePool": "global_average_pool",
+    "Atan": "atan",
     "Cos": "cos",
     "Sin": "sin",
     "Floor": "floor",

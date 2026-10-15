@@ -71,6 +71,18 @@ def _assert_converted_model_matches_onnxruntime(
     np.testing.assert_allclose(actual.detach().numpy(), expected, rtol=1e-6, atol=1e-6)
 
 
+def test_atan_matches_onnxruntime(tmp_path: Path) -> None:
+    """Atan lowers to the exact elementwise PyTorch operation."""
+    data_info = onnx.helper.make_tensor_value_info("data", onnx.TensorProto.FLOAT, [7])
+    output_info = onnx.helper.make_tensor_value_info("output", onnx.TensorProto.FLOAT, [7])
+    atan = onnx.helper.make_node("Atan", ["data"], ["output"])
+    graph = onnx.helper.make_graph([atan], "atan", [data_info], [output_info])
+    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 20)])
+
+    values = np.array([-100.0, -2.0, -0.25, 0.0, 0.25, 2.0, 100.0], dtype=np.float32)
+    _assert_converted_model_matches_onnxruntime(model, values, tmp_path, "atan")
+
+
 def test_clip_max_only_preserves_optional_input_position(tmp_path: Path) -> None:
     """Clip's third input remains max when its min slot is empty."""
     data_info = onnx.helper.make_tensor_value_info("data", onnx.TensorProto.FLOAT, [5])
