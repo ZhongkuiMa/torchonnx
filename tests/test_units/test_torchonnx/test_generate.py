@@ -2021,6 +2021,27 @@ class TestPhase20FloorOperation:
         ast.parse(module_code)
 
 
+class TestPhase20RoundOperation:
+    """Test exact-forward Round with its attack surrogate gradient."""
+
+    def test_round_forward_and_gradient(self, round_model):
+        """Preserve ties-to-even values while exposing identity gradients."""
+        normalized = load_and_preprocess_onnx_model(round_model)
+        semantic_ir = build_semantic_ir(build_model_ir(normalized))
+        module_code, state_dict = generate_pytorch_module(semantic_ir, vmap_mode=True)
+        namespace: dict[str, object] = {}
+        exec(module_code, namespace)
+        module = namespace["ONNXModel"]()
+        module.load_state_dict(state_dict)
+
+        inputs = torch.tensor([[-2.5, -1.5, 0.5, 1.5, 2.5]], requires_grad=True)
+        output = module(inputs)
+        assert torch.equal(output, torch.tensor([[-2.0, -2.0, 0.0, 2.0, 2.0]]))
+        output.sum().backward()
+        assert torch.equal(inputs.grad, torch.ones_like(inputs))
+        assert "def round_ste" in module_code
+
+
 class TestPhase20ShapeAndConstantOfShape:
     """Test shape-related operations."""
 
@@ -2451,12 +2472,28 @@ class TestPhase21ConvEdgeCases:
         ast.parse(module_code)
         assert "conv" in module_code.lower()
 
-    def test_conv3d_is_rejected(self, conv3d_model):
-        """Report the currently unsupported three-dimensional convolution."""
+    def test_conv3d_generates_native_layer(self, conv3d_model):
+        """Generate a native Conv3d module from a five-dimensional ONNX Conv."""
         normalized = load_and_preprocess_onnx_model(conv3d_model)
         model_ir = build_model_ir(normalized)
-        with pytest.raises(NotImplementedError, match=r"Unsupported Conv: 5D"):
-            build_semantic_ir(model_ir)
+        semantic_ir = build_semantic_ir(model_ir)
+
+        module_code, state_dict = generate_pytorch_module(semantic_ir, vmap_mode=True)
+
+        assert "nn.Conv3d" in module_code
+        assert set(state_dict) == {"conv3d1.weight", "conv3d1.bias"}
+        ast.parse(module_code)
+        namespace: dict[str, object] = {}
+        exec(module_code, namespace)
+        module = namespace["ONNXModel"]()
+        module.load_state_dict(state_dict)
+        values = torch.randn(1, 3, 8, 8, 8)
+        expected = torch.nn.functional.conv3d(
+            values,
+            state_dict["conv3d1.weight"],
+            state_dict["conv3d1.bias"],
+        )
+        torch.testing.assert_close(module(values), expected)
 
 
 class TestPhase21LinearEdgeCases:

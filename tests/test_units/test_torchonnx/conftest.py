@@ -1044,6 +1044,15 @@ def floor_model(tmp_path):
     return str(path)
 
 
+@pytest.fixture
+def round_model(tmp_path):
+    """Create and save a Round model."""
+    model = SyntheticONNXModels.create_round_model()
+    path = tmp_path / "round.onnx"
+    onnx.save(model, str(path))
+    return str(path)
+
+
 # ============================================================================
 # PHASE 15: Pattern-Specific Models for Deep Analysis Testing
 # ============================================================================

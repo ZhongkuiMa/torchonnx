@@ -44,6 +44,7 @@ ONNX_TO_PYTORCH_LAYERS: dict[str, str] = {
 LAYERS_WITH_ARGS: set[str] = {
     "Conv1d",
     "Conv2d",
+    "Conv3d",
     "ConvTranspose1d",
     "ConvTranspose2d",
     "Linear",

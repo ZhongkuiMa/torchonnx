@@ -1255,6 +1255,14 @@ def _handle_generic_method(layer: SemanticLayerIR, layer_name_mapping: dict[str,
     return f"{output} = {inputs[0]}.{method_name}({args_str})"
 
 
+def _handle_round_ste(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
+    """Emit exact-forward ONNX Round with an identity surrogate gradient."""
+    inputs = _get_input_code_names(layer)
+    if len(inputs) != 1:
+        raise ValueError(f"Round requires exactly one input, got {len(inputs)}")
+    return f"{layer.outputs[0].code_name} = round_ste({inputs[0]})"
+
+
 def _handle_reshape(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
     """Generate Reshape code with flatten/squeeze-first-dim optimizations.
 
@@ -1392,8 +1400,10 @@ def register_operation_handlers() -> None:
     register_handler("split", _handle_split)
     register_handler("atan", _handle_generic_method)
     register_handler("cos", _handle_generic_method)
+    register_handler("erf", _handle_generic_method)
     register_handler("sin", _handle_generic_method)
     register_handler("floor", _handle_generic_method)
+    register_handler("round_ste", _handle_round_ste)
     register_handler("abs", _handle_generic_method)
     register_handler("sqrt", _handle_generic_method)
     register_handler("exp", _handle_generic_method)

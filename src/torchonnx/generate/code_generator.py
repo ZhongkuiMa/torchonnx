@@ -95,6 +95,7 @@ def generate_pytorch_module(
         imports=imports,
         helpers=helpers,
         class_name=class_name,
+        metadata=_generate_interface_metadata(semantic_ir),
         init_method=init_method,
         forward_method=forward_method,
     )
@@ -103,6 +104,13 @@ def generate_pytorch_module(
     state_dict = build_state_dict(semantic_ir, layer_name_mapping)
 
     return module_code, state_dict
+
+
+def _generate_interface_metadata(semantic_ir: SemanticModelIR) -> str:
+    """Generate immutable ONNX input/output-name metadata for the class."""
+    input_names = tuple(semantic_ir.input_names)
+    output_names = tuple(semantic_ir.output_names)
+    return f"    onnx_input_names = {input_names!r}\n    onnx_output_names = {output_names!r}"
 
 
 def _generate_forward_with_context(
@@ -276,6 +284,8 @@ def _get_helper_needs_from_ir(
             ctx.needs_scatter_nd = True
         elif layer.onnx_op_type == "Expand" and _check_expand_needs_helper(layer):
             ctx.needs_dynamic_expand = True
+        elif layer.onnx_op_type == "Round":
+            ctx.needs_round_ste = True
 
     return ctx
 
@@ -599,6 +609,9 @@ def _generate_helpers_from_context(ctx: ForwardGenContext, vmap_mode: bool = Tru
     if ctx.needs_dynamic_expand:
         helpers.append(EXPAND_VMAP_HELPER if vmap_mode else EXPAND_HELPER)
 
+    if ctx.needs_round_ste:
+        helpers.append(ROUND_STE_HELPER)
+
     return "\n\n".join(helpers)
 
 
@@ -610,6 +623,7 @@ DYNAMIC_SLICE_HELPER = _helper_source(_standard.dynamic_slice)
 
 SCATTER_ND_HELPER = _helper_source(_standard.scatter_nd)
 EXPAND_HELPER = _helper_source(_standard.dynamic_expand)
+ROUND_STE_HELPER = _helper_source(_standard.round_ste)
 
 DYNAMIC_SLICE_VMAP_HELPER = _helper_source(_vmap.dynamic_slice)
 SCATTER_ND_VMAP_HELPER = _helper_source(_vmap.scatter_nd)

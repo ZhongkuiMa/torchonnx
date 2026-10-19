@@ -372,6 +372,7 @@ EXTRACT_ATTRS_MAP: dict[str, Callable[[NodeProto, dict[str, TensorProto]], dict[
     "Cos": _get_attrs_simple({}),
     "Dropout": _get_attrs_simple({"ratio": 0.5}),
     "Elu": _get_attrs_simple({"alpha": 1.0}),
+    "Erf": _get_attrs_simple({}),
     "Exp": _get_attrs_simple({}),
     "Expand": _get_attrs_simple({}),
     "Floor": _get_attrs_simple({}),

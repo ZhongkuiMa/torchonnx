@@ -44,6 +44,8 @@ def _get_conv_pytorch_type(node: NodeProto, initializers: dict[str, TensorProto]
             return "nn.Conv1d"
         if weight_ndim == 4:
             return "nn.Conv2d"
+        if weight_ndim == 5:
+            return "nn.Conv3d"
         raise NotImplementedError(f"Unsupported Conv: {weight_ndim}D")
     return "F.conv"
 

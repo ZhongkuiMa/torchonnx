@@ -71,6 +71,127 @@ def _assert_converted_model_matches_onnxruntime(
     np.testing.assert_allclose(actual.detach().numpy(), expected, rtol=1e-6, atol=1e-6)
 
 
+def _load_converted_model(py_path: Path, pth_path: Path, module_name: str):
+    """Load one generated module and its strict state dictionary."""
+    spec = importlib.util.spec_from_file_location(module_name, py_path)
+    assert spec is not None
+    assert spec.loader is not None
+    generated = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(generated)
+    torch_model = getattr(generated, generated.__all__[0])()
+    torch_model.load_state_dict(torch.load(pth_path, weights_only=True), strict=True)
+    return torch_model
+
+
+def test_multi_input_output_metadata_and_onnxruntime_parity(tmp_path: Path) -> None:
+    """Generated metadata and positional ABI preserve declared ONNX order."""
+    z_input = onnx.helper.make_tensor_value_info("z_input", onnx.TensorProto.FLOAT, [3])
+    a_input = onnx.helper.make_tensor_value_info("a_input", onnx.TensorProto.FLOAT, [3])
+    legacy_bias = onnx.helper.make_tensor_value_info("bias", onnx.TensorProto.FLOAT, [3])
+    second_output = onnx.helper.make_tensor_value_info("second_output", onnx.TensorProto.FLOAT, [3])
+    first_output = onnx.helper.make_tensor_value_info("first_output", onnx.TensorProto.FLOAT, [3])
+    bias = onnx.numpy_helper.from_array(np.array([0.25, -0.5, 1.0], dtype=np.float32), name="bias")
+    nodes = [
+        onnx.helper.make_node("Add", ["z_input", "a_input"], ["sum_without_bias"]),
+        onnx.helper.make_node("Sub", ["z_input", "a_input"], ["second_output"]),
+        onnx.helper.make_node("Add", ["sum_without_bias", "bias"], ["first_output"]),
+    ]
+    graph = onnx.helper.make_graph(
+        nodes,
+        "multi_io",
+        [z_input, a_input, legacy_bias],
+        [second_output, first_output],
+        [bias],
+    )
+    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 20)])
+    onnx_path = tmp_path / "multi_io.onnx"
+    py_path = tmp_path / "multi_io.py"
+    pth_path = tmp_path / "multi_io.pth"
+    onnx.save(model, onnx_path)
+
+    TorchONNX().convert(str(onnx_path), target_py_path=str(py_path), target_pth_path=str(pth_path))
+    torch_model = _load_converted_model(py_path, pth_path, "multi_io_generated")
+
+    assert torch_model.onnx_input_names == ("z_input", "a_input")
+    assert torch_model.onnx_output_names == ("second_output", "first_output")
+    assert "onnx_input_names" not in torch_model.state_dict()
+    assert "onnx_output_names" not in torch_model.state_dict()
+
+    feeds = {
+        "z_input": np.array([1.0, 3.0, -2.0], dtype=np.float32),
+        "a_input": np.array([0.5, -1.0, 4.0], dtype=np.float32),
+    }
+    expected = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"]).run(
+        None, feeds
+    )
+    actual = torch_model(*(torch.from_numpy(feeds[name]) for name in torch_model.onnx_input_names))
+
+    assert isinstance(actual, tuple)
+    assert len(actual) == 2
+    for actual_output, expected_output in zip(actual, expected, strict=True):
+        np.testing.assert_allclose(
+            actual_output.detach().numpy(), expected_output, rtol=1e-6, atol=1e-6
+        )
+
+
+def test_convert_model_vnnlib2_like_flat_binding_matches_onnxruntime(
+    tmp_path: Path,
+) -> None:
+    """An in-memory flat-input composite keeps named multi-output semantics."""
+    flat_input = onnx.helper.make_tensor_value_info("query_input", onnx.TensorProto.FLOAT, [4])
+    left_output = onnx.helper.make_tensor_value_info(
+        "network_left_output", onnx.TensorProto.FLOAT, [2]
+    )
+    right_output = onnx.helper.make_tensor_value_info(
+        "network_right_output", onnx.TensorProto.FLOAT, [2]
+    )
+    left_indices = onnx.numpy_helper.from_array(
+        np.array([0, 2], dtype=np.int64), name="left_indices"
+    )
+    right_indices = onnx.numpy_helper.from_array(
+        np.array([1, 3], dtype=np.int64), name="right_indices"
+    )
+    nodes = [
+        onnx.helper.make_node(
+            "Gather", ["query_input", "left_indices"], ["network_left_output"], axis=0
+        ),
+        onnx.helper.make_node(
+            "Gather", ["query_input", "right_indices"], ["network_right_output"], axis=0
+        ),
+    ]
+    graph = onnx.helper.make_graph(
+        nodes,
+        "vnnlib2_like_composite",
+        [flat_input],
+        [left_output, right_output],
+        [left_indices, right_indices],
+    )
+    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 20)])
+    py_path = tmp_path / "vnnlib2_composite.py"
+    pth_path = tmp_path / "vnnlib2_composite.pth"
+
+    TorchONNX().convert_model(
+        model,
+        target_py_path=str(py_path),
+        target_pth_path=str(pth_path),
+        source_label="vnnlib2_composite",
+    )
+    torch_model = _load_converted_model(py_path, pth_path, "vnnlib2_composite_generated")
+    values = np.array([1.0, 10.0, 2.0, 20.0], dtype=np.float32)
+    expected = ort.InferenceSession(
+        model.SerializeToString(), providers=["CPUExecutionProvider"]
+    ).run(None, {"query_input": values})
+    actual = torch_model(torch.from_numpy(values))
+
+    assert torch_model.onnx_input_names == ("query_input",)
+    assert torch_model.onnx_output_names == (
+        "network_left_output",
+        "network_right_output",
+    )
+    for actual_output, expected_output in zip(actual, expected, strict=True):
+        np.testing.assert_array_equal(actual_output.detach().numpy(), expected_output)
+
+
 def test_atan_matches_onnxruntime(tmp_path: Path) -> None:
     """Atan lowers to the exact elementwise PyTorch operation."""
     data_info = onnx.helper.make_tensor_value_info("data", onnx.TensorProto.FLOAT, [7])
@@ -81,6 +202,18 @@ def test_atan_matches_onnxruntime(tmp_path: Path) -> None:
 
     values = np.array([-100.0, -2.0, -0.25, 0.0, 0.25, 2.0, 100.0], dtype=np.float32)
     _assert_converted_model_matches_onnxruntime(model, values, tmp_path, "atan")
+
+
+def test_erf_matches_onnxruntime(tmp_path: Path) -> None:
+    """Erf lowers to the exact elementwise PyTorch operation."""
+    data_info = onnx.helper.make_tensor_value_info("data", onnx.TensorProto.FLOAT, [7])
+    output_info = onnx.helper.make_tensor_value_info("output", onnx.TensorProto.FLOAT, [7])
+    erf = onnx.helper.make_node("Erf", ["data"], ["output"])
+    graph = onnx.helper.make_graph([erf], "erf", [data_info], [output_info])
+    model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 20)])
+
+    values = np.array([-100.0, -2.0, -0.25, 0.0, 0.25, 2.0, 100.0], dtype=np.float32)
+    _assert_converted_model_matches_onnxruntime(model, values, tmp_path, "erf")
 
 
 def test_clip_max_only_preserves_optional_input_position(tmp_path: Path) -> None:

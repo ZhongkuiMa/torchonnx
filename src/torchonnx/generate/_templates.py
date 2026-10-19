@@ -27,6 +27,7 @@ MODULE_TEMPLATE = """\
 {helpers}
 
 class {class_name}(nn.Module):
+{metadata}
 {init_method}
 
 {forward_method}

@@ -2608,3 +2608,18 @@ class SyntheticONNXModels:
         model = onnx_helper.make_model(graph, opset_imports=[onnx_helper.make_opsetid("", 20)])
         model.ir_version = 8
         return model
+
+    @staticmethod
+    def create_round_model():
+        """Create an ONNX model containing ties-to-even Round."""
+        X = onnx_helper.make_tensor_value_info(  # noqa: N806
+            "X", onnx.TensorProto.FLOAT, [1, 5]
+        )
+        Y = onnx_helper.make_tensor_value_info(  # noqa: N806
+            "Y", onnx.TensorProto.FLOAT, [1, 5]
+        )
+        node = onnx_helper.make_node("Round", inputs=["X"], outputs=["Y"])
+        graph = onnx_helper.make_graph([node], "RoundModel", [X], [Y])
+        model = onnx_helper.make_model(graph, opset_imports=[onnx_helper.make_opsetid("", 20)])
+        model.ir_version = 8
+        return model

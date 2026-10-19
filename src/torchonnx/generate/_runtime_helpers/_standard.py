@@ -6,9 +6,20 @@ or ``index_put_`` (legal in eager mode, forbidden under ``torch.vmap``).
 """
 
 __docformat__ = "restructuredtext"
-__all__ = ["dynamic_expand", "dynamic_slice", "scatter_nd"]
+__all__ = ["dynamic_expand", "dynamic_slice", "round_ste", "scatter_nd"]
 
 import torch
+
+
+def round_ste(data):
+    """Apply ONNX ties-to-even Round with an identity surrogate gradient.
+
+    The concrete value is ``torch.round(data)``.  The straight-through term
+    only changes autograd, which lets attack optimizers traverse quantization;
+    callers must still validate any witness against the original ONNX model.
+    """
+    exact = torch.round(data)
+    return exact.detach() + data - data.detach()
 
 
 def dynamic_slice(data, starts, ends, axes=None, steps=None):

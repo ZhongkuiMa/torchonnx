@@ -119,7 +119,7 @@ def _get_parameter_role(
 
     # Determine role based on layer type and position
     # First input (idx=0) is always the data input, not a parameter
-    conv_types = ("Conv2d", "Conv1d", "ConvTranspose2d", "ConvTranspose1d")
+    conv_types = ("Conv3d", "Conv2d", "Conv1d", "ConvTranspose2d", "ConvTranspose1d")
     if layer_type in conv_types or layer_type == "Linear":
         return _get_conv_or_linear_role(idx)
 

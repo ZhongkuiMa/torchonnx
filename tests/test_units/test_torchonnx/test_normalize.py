@@ -480,7 +480,7 @@ class TestShapeONNXIntegration:
 
         # Use a valid ONNX operator that ShapeONNX deliberately does not support.
         # Identity is supported and must not be used as a synthetic failure fixture.
-        node = onnx.helper.make_node("Erf", inputs=["X"], outputs=["Y"])
+        node = onnx.helper.make_node("HardSigmoid", inputs=["X"], outputs=["Y"])
         graph = onnx.helper.make_graph([node], "TestModel", [X], [Y])
         model = onnx.helper.make_model(graph, opset_imports=[onnx.helper.make_opsetid("", 13)])
 

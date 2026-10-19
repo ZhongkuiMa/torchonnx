@@ -99,6 +99,7 @@ def register_layer_handlers() -> None:
         # Convolution
         "nn.Conv1d",
         "nn.Conv2d",
+        "nn.Conv3d",
         "nn.ConvTranspose1d",
         "nn.ConvTranspose2d",
         # Pooling

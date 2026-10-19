@@ -15,6 +15,15 @@ torch = pytest.importorskip("torch")
 from torchonnx.generate._runtime_helpers import _standard, _vmap  # noqa: E402
 
 
+def test_round_ste_has_exact_values_and_identity_gradient() -> None:
+    """The helper changes gradients only, never concrete Round values."""
+    data = torch.tensor([-2.5, -1.5, 0.5, 1.5, 2.5], requires_grad=True)
+    result = _standard.round_ste(data)
+    assert torch.equal(result, torch.round(data))
+    result.sum().backward()
+    assert torch.equal(data.grad, torch.ones_like(data))
+
+
 class TestStandardDynamicSlice:
     """``_standard.dynamic_slice`` -- the simple eager-mode variant."""
 
