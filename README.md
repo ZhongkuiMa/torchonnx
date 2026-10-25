@@ -101,9 +101,16 @@ TorchONNX is a 5-stage compiler:
 | Activations | ReLU, LeakyReLU, Sigmoid, Tanh, Softmax, ELU, GELU |
 | Functions | F.pad, F.interpolate, torch.cat, torch.gather, torch.mean/sum/min/max/argmax, torch.clamp, torch.where, torch.full, torch.arange |
 | Operators | add, sub, mul, div, matmul, pow, neg, equal |
-| Tensor ops | flatten, reshape, permute, squeeze, unsqueeze, expand, slice, split, cast, sign, atan, cos, sin, floor |
+| Tensor ops | flatten, reshape, permute, squeeze, unsqueeze, expand, slice, split, cast, sign, atan, cos, sin, floor, round |
+| Quantization | QuantizeLinear, DequantizeLinear (scalar and per-axis) |
+| ORT fusions | BiasGelu, LayerNormalization, SimplifiedLayerNormalization, SkipLayerNormalization |
 
 Transformer architectures are decomposed into these basic operations.
+
+Generated modules preserve ONNX forward values, shapes, and dtypes and depend
+only on PyTorch at runtime. Operators without an exact pure-PyTorch conversion,
+including fused QLinear kernels, are rejected instead of delegated to ONNX
+Runtime or replaced with search-specific semantics.
 
 ## Project Structure
 

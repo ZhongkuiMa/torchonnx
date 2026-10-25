@@ -2623,3 +2623,317 @@ class SyntheticONNXModels:
         model = onnx_helper.make_model(graph, opset_imports=[onnx_helper.make_opsetid("", 20)])
         model.ir_version = 8
         return model
+
+    @staticmethod
+    def create_qdq_model():
+        """Create a per-axis QuantizeLinear-DequantizeLinear model."""
+        X = onnx_helper.make_tensor_value_info(  # noqa: N806
+            "X", onnx.TensorProto.FLOAT, [1, 3]
+        )
+        Y = onnx_helper.make_tensor_value_info(  # noqa: N806
+            "Y", onnx.TensorProto.FLOAT, [1, 3]
+        )
+        scale = onnx_helper.make_tensor("scale", onnx.TensorProto.FLOAT, [3], vals=[0.1, 0.2, 0.5])
+        zero_point = onnx_helper.make_tensor(
+            "zero_point", onnx.TensorProto.UINT8, [3], vals=[10, 20, 30]
+        )
+        quantize = onnx_helper.make_node(
+            "QuantizeLinear",
+            inputs=["X", "scale", "zero_point"],
+            outputs=["quantized"],
+            axis=1,
+        )
+        dequantize = onnx_helper.make_node(
+            "DequantizeLinear",
+            inputs=["quantized", "scale", "zero_point"],
+            outputs=["Y"],
+            axis=1,
+        )
+        graph = onnx_helper.make_graph(
+            [quantize, dequantize], "QDQModel", [X], [Y], [scale, zero_point]
+        )
+        model = onnx_helper.make_model(graph, opset_imports=[onnx_helper.make_opsetid("", 20)])
+        model.ir_version = 8
+        return model
+
+    @staticmethod
+    def create_qlinear_add_model():
+        """Create a Microsoft QLinearAdd model with a constant second operand."""
+        A = onnx_helper.make_tensor_value_info(  # noqa: N806
+            "A", onnx.TensorProto.UINT8, [1, 2]
+        )
+        Y = onnx_helper.make_tensor_value_info(  # noqa: N806
+            "Y", onnx.TensorProto.UINT8, [1, 2]
+        )
+        initializers = [
+            onnx_helper.make_tensor("a_scale", onnx.TensorProto.FLOAT, [], vals=[0.5]),
+            onnx_helper.make_tensor("a_zero", onnx.TensorProto.UINT8, [], vals=[128]),
+            onnx_helper.make_tensor("B", onnx.TensorProto.UINT8, [1, 2], vals=[120, 122]),
+            onnx_helper.make_tensor("b_scale", onnx.TensorProto.FLOAT, [], vals=[0.25]),
+            onnx_helper.make_tensor("b_zero", onnx.TensorProto.UINT8, [], vals=[120]),
+            onnx_helper.make_tensor("y_scale", onnx.TensorProto.FLOAT, [], vals=[0.25]),
+            onnx_helper.make_tensor("y_zero", onnx.TensorProto.UINT8, [], vals=[100]),
+        ]
+        node = onnx_helper.make_node(
+            "QLinearAdd",
+            inputs=[
+                "A",
+                "a_scale",
+                "a_zero",
+                "B",
+                "b_scale",
+                "b_zero",
+                "y_scale",
+                "y_zero",
+            ],
+            outputs=["Y"],
+            domain="com.microsoft",
+        )
+        graph = onnx_helper.make_graph([node], "QLinearAddModel", [A], [Y], initializers)
+        model = onnx_helper.make_model(
+            graph,
+            opset_imports=[
+                onnx_helper.make_opsetid("", 20),
+                onnx_helper.make_opsetid("com.microsoft", 1),
+            ],
+        )
+        model.ir_version = 8
+        return model
+
+    @staticmethod
+    def create_fused_normalization_model():
+        """Create BiasGelu and LayerNormalization-family fusion coverage."""
+        X = onnx_helper.make_tensor_value_info(  # noqa: N806
+            "X", onnx.TensorProto.FLOAT, [1, 3]
+        )
+        skip = onnx_helper.make_tensor_value_info("skip", onnx.TensorProto.FLOAT, [1, 3])
+        Y = onnx_helper.make_tensor_value_info(  # noqa: N806
+            "Y", onnx.TensorProto.FLOAT, [1, 3]
+        )
+        initializers = [
+            onnx_helper.make_tensor(
+                "gelu_bias", onnx.TensorProto.FLOAT, [3], vals=[0.2, -0.1, 0.4]
+            ),
+            onnx_helper.make_tensor("weight", onnx.TensorProto.FLOAT, [3], vals=[1.0, 1.5, 0.5]),
+            onnx_helper.make_tensor(
+                "norm_bias", onnx.TensorProto.FLOAT, [3], vals=[0.1, -0.2, 0.3]
+            ),
+        ]
+        nodes = [
+            onnx_helper.make_node(
+                "BiasGelu",
+                ["X", "gelu_bias"],
+                ["gelu"],
+                domain="com.microsoft",
+            ),
+            onnx_helper.make_node(
+                "LayerNormalization",
+                ["gelu", "weight", "norm_bias"],
+                ["normalized"],
+                axis=-1,
+                epsilon=1e-5,
+                stash_type=1,
+            ),
+            onnx_helper.make_node(
+                "SkipLayerNormalization",
+                ["normalized", "skip", "weight", "norm_bias"],
+                ["skipped"],
+                epsilon=1e-5,
+                domain="com.microsoft",
+            ),
+            onnx_helper.make_node(
+                "SimplifiedLayerNormalization",
+                ["skipped", "weight"],
+                ["Y"],
+                axis=-1,
+                epsilon=1e-5,
+                stash_type=1,
+                domain="com.microsoft",
+            ),
+        ]
+        value_info = [
+            onnx_helper.make_tensor_value_info(name, onnx.TensorProto.FLOAT, [1, 3])
+            for name in ("gelu", "normalized", "skipped")
+        ]
+        graph = onnx_helper.make_graph(
+            nodes,
+            "FusedNormalizationModel",
+            [X, skip],
+            [Y],
+            initializers,
+            value_info=value_info,
+        )
+        model = onnx_helper.make_model(
+            graph,
+            opset_imports=[
+                onnx_helper.make_opsetid("", 20),
+                onnx_helper.make_opsetid("com.microsoft", 1),
+            ],
+        )
+        model.ir_version = 8
+        return model
+
+    @staticmethod
+    def create_qlinear_softmax_model():
+        """Create a Microsoft QLinearSoftmax model."""
+        X = onnx_helper.make_tensor_value_info(  # noqa: N806
+            "X", onnx.TensorProto.UINT8, [1, 3]
+        )
+        Y = onnx_helper.make_tensor_value_info(  # noqa: N806
+            "Y", onnx.TensorProto.UINT8, [1, 3]
+        )
+        initializers = [
+            onnx_helper.make_tensor("x_scale", onnx.TensorProto.FLOAT, [], vals=[0.5]),
+            onnx_helper.make_tensor("x_zero", onnx.TensorProto.UINT8, [], vals=[128]),
+            onnx_helper.make_tensor("y_scale", onnx.TensorProto.FLOAT, [], vals=[1.0 / 256.0]),
+            onnx_helper.make_tensor("y_zero", onnx.TensorProto.UINT8, [], vals=[0]),
+        ]
+        node = onnx_helper.make_node(
+            "QLinearSoftmax",
+            ["X", "x_scale", "x_zero", "y_scale", "y_zero"],
+            ["Y"],
+            axis=-1,
+            opset=13,
+            domain="com.microsoft",
+        )
+        graph = onnx_helper.make_graph([node], "QLinearSoftmaxModel", [X], [Y], initializers)
+        model = onnx_helper.make_model(
+            graph,
+            opset_imports=[
+                onnx_helper.make_opsetid("", 20),
+                onnx_helper.make_opsetid("com.microsoft", 1),
+            ],
+        )
+        model.ir_version = 8
+        return model
+
+    @staticmethod
+    def create_qgemm_model():
+        """Create the quantized-output Microsoft QGemm form used by Smart Turn."""
+        A = onnx_helper.make_tensor_value_info(  # noqa: N806
+            "A", onnx.TensorProto.UINT8, [1, 2]
+        )
+        Y = onnx_helper.make_tensor_value_info(  # noqa: N806
+            "Y", onnx.TensorProto.UINT8, [1, 2]
+        )
+        initializers = [
+            onnx_helper.make_tensor("a_scale", onnx.TensorProto.FLOAT, [], vals=[0.5]),
+            onnx_helper.make_tensor("a_zero", onnx.TensorProto.UINT8, [], vals=[128]),
+            onnx_helper.make_tensor("B", onnx.TensorProto.INT8, [2, 2], vals=[1, 2, -1, 3]),
+            onnx_helper.make_tensor("b_scale", onnx.TensorProto.FLOAT, [2], vals=[0.5, 0.25]),
+            onnx_helper.make_tensor("b_zero", onnx.TensorProto.INT8, [2], vals=[0, 0]),
+            onnx_helper.make_tensor("bias", onnx.TensorProto.INT32, [2], vals=[1, -2]),
+            onnx_helper.make_tensor("y_scale", onnx.TensorProto.FLOAT, [], vals=[0.25]),
+            onnx_helper.make_tensor("y_zero", onnx.TensorProto.UINT8, [], vals=[100]),
+        ]
+        node = onnx_helper.make_node(
+            "QGemm",
+            [
+                "A",
+                "a_scale",
+                "a_zero",
+                "B",
+                "b_scale",
+                "b_zero",
+                "bias",
+                "y_scale",
+                "y_zero",
+            ],
+            ["Y"],
+            alpha=1.0,
+            transA=0,
+            transB=1,
+            domain="com.microsoft",
+        )
+        graph = onnx_helper.make_graph([node], "QGemmModel", [A], [Y], initializers)
+        model = onnx_helper.make_model(
+            graph,
+            opset_imports=[
+                onnx_helper.make_opsetid("", 20),
+                onnx_helper.make_opsetid("com.microsoft", 1),
+            ],
+        )
+        model.ir_version = 8
+        return model
+
+    @staticmethod
+    def create_qlinear_matmul_model():
+        """Create a per-output-channel standard QLinearMatMul model."""
+        A = onnx_helper.make_tensor_value_info(  # noqa: N806
+            "A", onnx.TensorProto.UINT8, [1, 2]
+        )
+        Y = onnx_helper.make_tensor_value_info(  # noqa: N806
+            "Y", onnx.TensorProto.UINT8, [1, 2]
+        )
+        initializers = [
+            onnx_helper.make_tensor("a_scale", onnx.TensorProto.FLOAT, [], vals=[0.5]),
+            onnx_helper.make_tensor("a_zero", onnx.TensorProto.UINT8, [], vals=[128]),
+            onnx_helper.make_tensor("B", onnx.TensorProto.INT8, [2, 2], vals=[1, -1, 2, 3]),
+            onnx_helper.make_tensor("b_scale", onnx.TensorProto.FLOAT, [2], vals=[0.5, 0.25]),
+            onnx_helper.make_tensor("b_zero", onnx.TensorProto.INT8, [2], vals=[0, 0]),
+            onnx_helper.make_tensor("y_scale", onnx.TensorProto.FLOAT, [], vals=[0.25]),
+            onnx_helper.make_tensor("y_zero", onnx.TensorProto.UINT8, [], vals=[100]),
+        ]
+        node = onnx_helper.make_node(
+            "QLinearMatMul",
+            [
+                "A",
+                "a_scale",
+                "a_zero",
+                "B",
+                "b_scale",
+                "b_zero",
+                "y_scale",
+                "y_zero",
+            ],
+            ["Y"],
+        )
+        graph = onnx_helper.make_graph([node], "QLinearMatMulModel", [A], [Y], initializers)
+        model = onnx_helper.make_model(graph, opset_imports=[onnx_helper.make_opsetid("", 20)])
+        model.ir_version = 8
+        return model
+
+    @staticmethod
+    def create_qlinear_conv_model():
+        """Create a per-channel QLinearConv3d model with bias."""
+        X = onnx_helper.make_tensor_value_info(  # noqa: N806
+            "X", onnx.TensorProto.UINT8, [1, 1, 2, 2, 2]
+        )
+        Y = onnx_helper.make_tensor_value_info(  # noqa: N806
+            "Y", onnx.TensorProto.UINT8, [1, 1, 2, 2, 2]
+        )
+        initializers = [
+            onnx_helper.make_tensor("x_scale", onnx.TensorProto.FLOAT, [], vals=[0.5]),
+            onnx_helper.make_tensor("x_zero", onnx.TensorProto.UINT8, [], vals=[128]),
+            onnx_helper.make_tensor("W", onnx.TensorProto.INT8, [1, 1, 1, 1, 1], vals=[1]),
+            onnx_helper.make_tensor("w_scale", onnx.TensorProto.FLOAT, [1], vals=[0.5]),
+            onnx_helper.make_tensor("w_zero", onnx.TensorProto.INT8, [1], vals=[0]),
+            onnx_helper.make_tensor("y_scale", onnx.TensorProto.FLOAT, [], vals=[0.25]),
+            onnx_helper.make_tensor("y_zero", onnx.TensorProto.UINT8, [], vals=[100]),
+            onnx_helper.make_tensor("bias", onnx.TensorProto.INT32, [1], vals=[1]),
+        ]
+        node = onnx_helper.make_node(
+            "QLinearConv",
+            [
+                "X",
+                "x_scale",
+                "x_zero",
+                "W",
+                "w_scale",
+                "w_zero",
+                "y_scale",
+                "y_zero",
+                "bias",
+            ],
+            ["Y"],
+            group=1,
+            strides=[1, 1, 1],
+            kernel_shape=[1, 1, 1],
+            pads=[0, 0, 0, 0, 0, 0],
+            auto_pad="NOTSET",
+            dilations=[1, 1, 1],
+        )
+        graph = onnx_helper.make_graph([node], "QLinearConvModel", [X], [Y], initializers)
+        model = onnx_helper.make_model(graph, opset_imports=[onnx_helper.make_opsetid("", 20)])
+        model.ir_version = 8
+        return model

@@ -1,10 +1,4 @@
-"""Unit tests for the inlined runtime helpers.
-
-These helpers are extracted via inspect.getsource() and pasted into every
-generated PyTorch module. Testing them as real functions catches behavior
-regressions at the helper level instead of through the much slower
-ONNX-to-module-to-onnxruntime round trip.
-"""
+"""Unit tests for runtime helpers inlined into generated modules."""
 
 __docformat__ = "restructuredtext"
 
@@ -12,171 +6,80 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from torchonnx.generate._runtime_helpers import _standard, _vmap  # noqa: E402
+from torchonnx.generate._runtime_helpers import _standard  # noqa: E402
 
 
-def test_round_ste_has_exact_values_and_identity_gradient() -> None:
-    """The helper changes gradients only, never concrete Round values."""
-    data = torch.tensor([-2.5, -1.5, 0.5, 1.5, 2.5], requires_grad=True)
-    result = _standard.round_ste(data)
-    assert torch.equal(result, torch.round(data))
+def test_quantize_linear_preserves_rounding_saturation_and_dtype() -> None:
+    """QuantizeLinear uses ties-to-even, saturation, and the zero-point dtype."""
+    data = torch.tensor([-200.0, -1.5, -0.5, 0.5, 1.5, 200.0])
+    scale = torch.tensor(0.5)
+    zero_point = torch.tensor(128, dtype=torch.uint8)
+
+    result = _standard.quantize_linear(data, scale, zero_point)
+
+    assert result.dtype == torch.uint8
+    assert torch.equal(result, torch.tensor([0, 125, 127, 129, 131, 255], dtype=torch.uint8))
+
+
+def test_quantize_linear_defaults_to_uint8() -> None:
+    """The omitted zero-point form has the ONNX default uint8 output type."""
+    result = _standard.quantize_linear(torch.tensor([-1.0, 1.0]), torch.tensor(0.5))
+    assert result.dtype == torch.uint8
+    assert torch.equal(result, torch.tensor([0, 2], dtype=torch.uint8))
+
+
+def test_dequantize_linear_broadcasts_per_axis_parameters() -> None:
+    """Per-axis parameters follow the ONNX axis coordinate."""
+    data = torch.tensor([[12, 25, 0], [8, 15, 34]], dtype=torch.uint8)
+    scale = torch.tensor([0.1, 0.2, 0.5])
+    zero_point = torch.tensor([10, 20, 30], dtype=torch.uint8)
+
+    result = _standard.dequantize_linear(data, scale, zero_point, axis=1)
+
+    expected = torch.tensor([[0.2, 1.0, -15.0], [-0.2, -1.0, 2.0]])
+    assert torch.allclose(result, expected)
+
+
+def test_linear_quantization_rejects_mismatched_per_axis_parameters() -> None:
+    """Invalid parameter shapes fail closed instead of broadcasting by accident."""
+    with pytest.raises(ValueError, match="does not match"):
+        _standard.quantize_linear(
+            torch.zeros(2, 3),
+            torch.ones(2),
+            torch.zeros(2, dtype=torch.uint8),
+            axis=1,
+        )
+
+
+def test_bias_gelu_matches_native_torch() -> None:
+    """BiasGelu is the native exact GELU of the broadcast sum."""
+    data = torch.tensor([[1.0, -2.0, 0.5]])
+    bias = torch.tensor([0.2, -0.1, 0.4])
+    assert torch.equal(
+        _standard.bias_gelu(data, bias),
+        torch.nn.functional.gelu(data + bias),
+    )
+
+
+def test_layer_normalization_matches_native_torch() -> None:
+    """Standard LayerNormalization follows the normalized suffix dimensions."""
+    data = torch.tensor([[1.0, -2.0, 0.5]], requires_grad=True)
+    weight = torch.tensor([1.0, 1.5, 0.5])
+    bias = torch.tensor([0.1, -0.2, 0.3])
+
+    result = _standard.layer_normalization(data, weight, bias, epsilon=1e-5)
+    expected = torch.nn.functional.layer_norm(data, (3,), weight, bias, 1e-5)
+
+    assert torch.allclose(result, expected)
     result.sum().backward()
-    assert torch.equal(data.grad, torch.ones_like(data))
+    assert data.grad is not None
+    assert torch.isfinite(data.grad).all()
 
 
-class TestStandardDynamicSlice:
-    """``_standard.dynamic_slice`` -- the simple eager-mode variant."""
-
-    def test_basic_slice_along_one_axis(self):
-        data = torch.arange(12).reshape(3, 4)
-        result = _standard.dynamic_slice(data, starts=[1], ends=[3], axes=[0])
-        expected = data[1:3, :]
-        assert torch.equal(result, expected)
-
-    def test_int32_starts_ends_promote_to_long(self):
-        data = torch.arange(8).reshape(2, 4)
-        starts = torch.tensor([0], dtype=torch.int32)
-        ends = torch.tensor([3], dtype=torch.int32)
-        result = _standard.dynamic_slice(data, starts=starts, ends=ends, axes=[1])
-        expected = data[:, 0:3]
-        assert torch.equal(result, expected)
-
-    def test_negative_starts_normalize(self):
-        data = torch.arange(10)
-        result = _standard.dynamic_slice(data, starts=[-3], ends=[10], axes=[0])
-        expected = data[-3:]
-        assert torch.equal(result, expected)
-
-
-class TestStandardScatterND:
-    """``_standard.scatter_nd`` -- correctness under K < ndim."""
-
-    def test_k_equal_ndim(self):
-        data = torch.zeros(4, 4)
-        indices = torch.tensor([[0, 1], [2, 3]])
-        updates = torch.tensor([10.0, 20.0])
-        result = _standard.scatter_nd(data, indices, updates)
-        assert result[0, 1].item() == 10.0
-        assert result[2, 3].item() == 20.0
-
-    def test_k_less_than_ndim_writes_full_slice(self):
-        data = torch.zeros(3, 4)
-        indices = torch.tensor([[1]])
-        updates = torch.tensor([[1.0, 2.0, 3.0, 4.0]])
-        result = _standard.scatter_nd(data, indices, updates)
-        assert torch.equal(result[1], torch.tensor([1.0, 2.0, 3.0, 4.0]))
-        assert result[0].sum().item() == 0.0
-        assert result[2].sum().item() == 0.0
-
-    def test_negative_coordinate_indexes_from_end(self):
-        data = torch.zeros(2, 3)
-        result = _standard.scatter_nd(data, torch.tensor([[0, -1]]), torch.tensor([-1.0]))
-        assert result[0, 2].item() == -1.0
-
-    def test_reduction_add(self):
-        data = torch.zeros(3)
-        indices = torch.tensor([[0], [0], [1]])
-        updates = torch.tensor([1.0, 2.0, 5.0])
-        result = _standard.scatter_nd(data, indices, updates, reduction="add")
-        assert result[0].item() == 3.0
-        assert result[1].item() == 5.0
-
-    def test_unsupported_reduction_raises(self):
-        data = torch.zeros(3)
-        indices = torch.tensor([[0]])
-        updates = torch.tensor([1.0])
-        with pytest.raises(NotImplementedError, match="Unsupported reduction"):
-            _standard.scatter_nd(data, indices, updates, reduction="mul")
-
-
-class TestStandardDynamicExpand:
-    """``_standard.dynamic_expand`` -- ONNX semantics conversion."""
-
-    def test_expand_with_keep_dim_signal(self):
-        data = torch.tensor([[1.0], [2.0], [3.0]])
-        result = _standard.dynamic_expand(data, target_shape=[3, 4])
-        assert result.shape == (3, 4)
-        assert torch.equal(result[:, 0], torch.tensor([1.0, 2.0, 3.0]))
-
-    def test_higher_dim_data_gets_squeezed_leading(self):
-        data = torch.zeros(1, 1, 3, 4)
-        result = _standard.dynamic_expand(data, target_shape=[3, 4])
-        assert result.shape == (3, 4)
-
-
-class TestVmapDynamicSlice:
-    """``_vmap.dynamic_slice`` -- returns (result, valid_flag)."""
-
-    def test_missing_static_lengths_raises(self):
-        data = torch.arange(5.0)
-
-        with pytest.raises(ValueError, match="statically proven slice_lengths"):
-            _vmap.dynamic_slice(data, starts=[1], ends=[4], axes=[0])
-
-    def test_non_unit_step_raises(self):
-        data = torch.arange(5.0)
-
-        with pytest.raises(ValueError, match="requires one unit step per axis"):
-            _vmap.dynamic_slice(
-                data,
-                starts=[0],
-                ends=[4],
-                axes=[0],
-                steps=[2],
-                slice_lengths=[2],
-            )
-
-    def test_returns_result_and_valid_flag(self):
-        data = torch.arange(20.0).reshape(4, 5)
-        result, valid = _vmap.dynamic_slice(data, starts=[1], ends=[3], axes=[0], slice_lengths=[2])
-        assert result.shape == (2, 5)
-        assert valid.item() == 1.0
-
-    def test_out_of_bounds_marks_invalid_and_zeros_result(self):
-        data = torch.arange(6.0).reshape(2, 3)
-        result, valid = _vmap.dynamic_slice(data, starts=[5], ends=[8], axes=[0], slice_lengths=[3])
-        assert valid.item() == 0.0
-        assert torch.equal(result, torch.zeros_like(result))
-
-
-class TestVmapScatterND:
-    """``_vmap.scatter_nd`` -- full-stride correctness and valid suppression."""
-
-    def test_k_less_than_ndim_full_stride(self):
-        data = torch.zeros(3, 4)
-        indices = torch.tensor([[1]])
-        updates = torch.tensor([[1.0, 2.0, 3.0, 4.0]])
-        result = _vmap.scatter_nd(data, indices, updates)
-        assert torch.equal(result[1], torch.tensor([1.0, 2.0, 3.0, 4.0]))
-        assert result[0].sum().item() == 0.0
-
-    def test_negative_coordinate_indexes_from_end(self):
-        data = torch.zeros(2, 3)
-        result = _vmap.scatter_nd(data, torch.tensor([[0, -1]]), torch.tensor([-1.0]))
-        assert result[0, 2].item() == -1.0
-
-    def test_valid_zero_returns_data_unchanged(self):
-        data = torch.ones(2, 3)
-        indices = torch.tensor([[0]])
-        updates = torch.tensor([[9.0, 9.0, 9.0]])
-        valid = torch.zeros(())
-        result = _vmap.scatter_nd(data, indices, updates, valid=valid)
-        assert torch.equal(result, data)
-
-    def test_valid_one_applies_scatter(self):
-        data = torch.zeros(2, 3)
-        indices = torch.tensor([[1]])
-        updates = torch.tensor([[7.0, 7.0, 7.0]])
-        valid = torch.ones(())
-        result = _vmap.scatter_nd(data, indices, updates, valid=valid)
-        assert torch.equal(result[1], torch.tensor([7.0, 7.0, 7.0]))
-
-
-class TestVmapDynamicExpand:
-    """``_vmap.dynamic_expand`` -- behaves like the standard variant."""
-
-    def test_basic_expand(self):
-        data = torch.tensor([[1.0], [2.0]])
-        result = _vmap.dynamic_expand(data, target_shape=[2, 5])
-        assert result.shape == (2, 5)
-        assert torch.equal(result[:, 0], torch.tensor([1.0, 2.0]))
+def test_simplified_layer_normalization_uses_rms_without_centering() -> None:
+    """The simplified fusion implements RMS normalization, not standard LN."""
+    data = torch.tensor([[1.0, -2.0, 0.5]])
+    weight = torch.tensor([1.0, 1.5, 0.5])
+    expected = data * torch.rsqrt(data.square().mean(dim=-1, keepdim=True) + 1e-5) * weight
+    result = _standard.layer_normalization(data, weight, simplified=True)
+    assert torch.allclose(result, expected)

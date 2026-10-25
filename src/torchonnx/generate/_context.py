@@ -45,7 +45,9 @@ class ForwardGenContext:
         self.needs_dynamic_slice: bool = False
         self.needs_scatter_nd: bool = False
         self.needs_dynamic_expand: bool = False
-        self.needs_round_ste: bool = False
+        self.needs_linear_quantization: bool = False
+        self.needs_bias_gelu: bool = False
+        self.needs_layer_normalization: bool = False
         # First input name for device inference (e.g., "x0").
         self.first_input_name: str | None = None
         # Vmap mode settings.

@@ -138,6 +138,7 @@ class TorchONNX:
         target_pth_path: str,
         vmap_mode: bool = True,
         source_label: str = "from_model",
+        infer_shapes: bool = True,
     ) -> None:
         """Convert a pre-loaded ModelProto to PyTorch.
 
@@ -149,6 +150,9 @@ class TorchONNX:
         :param vmap_mode: If True, generate vmap-compatible helpers.
         :param source_label: Descriptive label (used for class naming and
             metadata headers instead of a file path).
+        :param infer_shapes: Run native ONNX shape inference. Set to ``False``
+            only for caller-qualified graphs whose existing ``value_info`` is
+            authoritative, such as an ORT optimized attack graph.
         """
         _logger.info(f"TorchONNX: converting model ({source_label})")
         t_total = time.perf_counter()
@@ -158,11 +162,12 @@ class TorchONNX:
         model = preprocess_onnx_model(
             model,
             target_opset=20,
-            infer_shapes=True,
+            infer_shapes=infer_shapes,
             check_model=True,
             use_shapeonnx=self.use_shapeonnx,
         )
-        _logger.info(f"  Normalize: opset 20, shape inference ({time.perf_counter() - t:.4f}s)")
+        inference_label = "shape inference" if infer_shapes else "existing shapes"
+        _logger.info(f"  Normalize: opset 20, {inference_label} ({time.perf_counter() - t:.4f}s)")
 
         # Stage 2: Build structural IR
         t = time.perf_counter()

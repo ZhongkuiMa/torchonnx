@@ -1255,12 +1255,69 @@ def _handle_generic_method(layer: SemanticLayerIR, layer_name_mapping: dict[str,
     return f"{output} = {inputs[0]}.{method_name}({args_str})"
 
 
-def _handle_round_ste(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
-    """Emit exact-forward ONNX Round with an identity surrogate gradient."""
-    inputs = _get_input_code_names(layer)
-    if len(inputs) != 1:
-        raise ValueError(f"Round requires exactly one input, got {len(inputs)}")
-    return f"{layer.outputs[0].code_name} = round_ste({inputs[0]})"
+def _handle_linear_quantization(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
+    """Emit QuantizeLinear or DequantizeLinear with an optional zero point."""
+    if len(layer.inputs) not in (2, 3):
+        raise ValueError(
+            f"{layer.onnx_op_type} requires two or three inputs, got {len(layer.inputs)}"
+        )
+    inputs = [_get_input_code_name_selective(inp) for inp in layer.inputs[:2]]
+    if len(layer.inputs) == 3:
+        zero_point = layer.inputs[2]
+        inputs.append(
+            "None" if _is_absent_input(zero_point) else _get_input_code_name_selective(zero_point)
+        )
+    axis_arg = next((arg for arg in layer.arguments if arg.pytorch_name == "axis"), None)
+    if axis_arg is not None:
+        inputs.append(f"axis={format_argument(axis_arg.value)}")
+    return f"{layer.outputs[0].code_name} = {layer.pytorch_type}({', '.join(inputs)})"
+
+
+def _handle_bias_gelu(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
+    """Emit the two-input Microsoft BiasGelu fusion."""
+    if len(layer.inputs) != 2 or len(layer.outputs) != 1:
+        raise ValueError("BiasGelu requires exactly two inputs and one output")
+    return f"{layer.outputs[0].code_name} = bias_gelu({_format_args_with_inputs(layer)})"
+
+
+def _normalization_arguments(layer: SemanticLayerIR) -> list[str]:
+    """Render common LayerNormalization literal arguments."""
+    arguments = []
+    for name in ("axis", "epsilon"):
+        argument = next((arg for arg in layer.arguments if arg.pytorch_name == name), None)
+        if argument is not None:
+            arguments.append(f"{name}={format_argument(argument.value)}")
+    return arguments
+
+
+def _handle_layer_normalization(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
+    """Emit standard or simplified LayerNormalization search semantics."""
+    if len(layer.inputs) not in (2, 3) or len(layer.outputs) != 1:
+        raise ValueError(f"{layer.onnx_op_type} requires two or three inputs and one output")
+    inputs = [_get_input_code_name_selective(inp) for inp in layer.inputs[:2]]
+    if len(layer.inputs) == 3:
+        bias = layer.inputs[2]
+        inputs.append("None" if _is_absent_input(bias) else _get_input_code_name_selective(bias))
+    inputs.extend(_normalization_arguments(layer))
+    if layer.onnx_op_type == "SimplifiedLayerNormalization":
+        inputs.append("simplified=True")
+    return f"{layer.outputs[0].code_name} = layer_normalization({', '.join(inputs)})"
+
+
+def _handle_skip_layer_normalization(
+    layer: SemanticLayerIR, layer_name_mapping: dict[str, str]
+) -> str:
+    """Emit the Microsoft residual-add plus LayerNormalization fusion."""
+    if len(layer.inputs) not in (3, 4) or len(layer.outputs) != 1:
+        raise ValueError("SkipLayerNormalization requires three or four inputs and one output")
+    data = _get_input_code_name_selective(layer.inputs[0])
+    skip = _get_input_code_name_selective(layer.inputs[1])
+    inputs = [f"{data} + {skip}", _get_input_code_name_selective(layer.inputs[2])]
+    if len(layer.inputs) == 4:
+        bias = layer.inputs[3]
+        inputs.append("None" if _is_absent_input(bias) else _get_input_code_name_selective(bias))
+    inputs.extend(_normalization_arguments(layer))
+    return f"{layer.outputs[0].code_name} = layer_normalization({', '.join(inputs)})"
 
 
 def _handle_reshape(layer: SemanticLayerIR, layer_name_mapping: dict[str, str]) -> str:
@@ -1403,7 +1460,12 @@ def register_operation_handlers() -> None:
     register_handler("erf", _handle_generic_method)
     register_handler("sin", _handle_generic_method)
     register_handler("floor", _handle_generic_method)
-    register_handler("round_ste", _handle_round_ste)
+    register_handler("round", _handle_generic_method)
+    register_handler("quantize_linear", _handle_linear_quantization)
+    register_handler("dequantize_linear", _handle_linear_quantization)
+    register_handler("bias_gelu", _handle_bias_gelu)
+    register_handler("layer_normalization", _handle_layer_normalization)
+    register_handler("skip_layer_normalization", _handle_skip_layer_normalization)
     register_handler("abs", _handle_generic_method)
     register_handler("sqrt", _handle_generic_method)
     register_handler("exp", _handle_generic_method)

@@ -182,6 +182,36 @@ class TestConvertAPI:
         assert model.opset_import[0].version == 10
         assert len(model.graph.node[0].input) == 1
 
+    def test_convert_model_can_use_existing_shape_metadata(
+        self, linear_model, tmp_path, monkeypatch
+    ):
+        """Qualified in-memory graphs can bypass unsafe native re-inference."""
+        import torchonnx._torchonnx as implementation
+
+        model = onnx.load(linear_model)
+        observed: dict[str, bool] = {}
+        original = implementation.preprocess_onnx_model
+
+        def record_inference_flag(model, **kwargs):
+            observed["infer_shapes"] = kwargs["infer_shapes"]
+            return original(model, **kwargs)
+
+        monkeypatch.setattr(implementation, "preprocess_onnx_model", record_inference_flag)
+        output_py = tmp_path / "existing_shapes.py"
+        output_pth = tmp_path / "existing_shapes.pth"
+
+        TorchONNX().convert_model(
+            model,
+            target_py_path=str(output_py),
+            target_pth_path=str(output_pth),
+            source_label="existing_shapes",
+            infer_shapes=False,
+        )
+
+        assert observed == {"infer_shapes": False}
+        assert output_py.is_file()
+        assert output_pth.is_file()
+
     def test_convert_returns_valid_code_and_state_dict(self, linear_model, tmp_path):
         """Verify convert() output format is valid."""
         converter = TorchONNX()

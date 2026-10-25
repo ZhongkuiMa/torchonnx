@@ -284,8 +284,16 @@ def _get_helper_needs_from_ir(
             ctx.needs_scatter_nd = True
         elif layer.onnx_op_type == "Expand" and _check_expand_needs_helper(layer):
             ctx.needs_dynamic_expand = True
-        elif layer.onnx_op_type == "Round":
-            ctx.needs_round_ste = True
+        elif layer.onnx_op_type in {"QuantizeLinear", "DequantizeLinear"}:
+            ctx.needs_linear_quantization = True
+        elif layer.onnx_op_type == "BiasGelu":
+            ctx.needs_bias_gelu = True
+        elif layer.onnx_op_type in {
+            "LayerNormalization",
+            "SimplifiedLayerNormalization",
+            "SkipLayerNormalization",
+        }:
+            ctx.needs_layer_normalization = True
 
     return ctx
 
@@ -609,8 +617,14 @@ def _generate_helpers_from_context(ctx: ForwardGenContext, vmap_mode: bool = Tru
     if ctx.needs_dynamic_expand:
         helpers.append(EXPAND_VMAP_HELPER if vmap_mode else EXPAND_HELPER)
 
-    if ctx.needs_round_ste:
-        helpers.append(ROUND_STE_HELPER)
+    if ctx.needs_linear_quantization:
+        helpers.append(LINEAR_QUANTIZATION_HELPERS)
+
+    if ctx.needs_bias_gelu:
+        helpers.append(BIAS_GELU_HELPER)
+
+    if ctx.needs_layer_normalization:
+        helpers.append(LAYER_NORMALIZATION_HELPER)
 
     return "\n\n".join(helpers)
 
@@ -623,7 +637,14 @@ DYNAMIC_SLICE_HELPER = _helper_source(_standard.dynamic_slice)
 
 SCATTER_ND_HELPER = _helper_source(_standard.scatter_nd)
 EXPAND_HELPER = _helper_source(_standard.dynamic_expand)
-ROUND_STE_HELPER = _helper_source(_standard.round_ste)
+LINEAR_QUANTIZATION_HELPERS = "\n\n".join(
+    (
+        _helper_source(_standard.quantize_linear),
+        _helper_source(_standard.dequantize_linear),
+    )
+)
+BIAS_GELU_HELPER = _helper_source(_standard.bias_gelu)
+LAYER_NORMALIZATION_HELPER = _helper_source(_standard.layer_normalization)
 
 DYNAMIC_SLICE_VMAP_HELPER = _helper_source(_vmap.dynamic_slice)
 SCATTER_ND_VMAP_HELPER = _helper_source(_vmap.scatter_nd)

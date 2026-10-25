@@ -1053,6 +1053,69 @@ def round_model(tmp_path):
     return str(path)
 
 
+@pytest.fixture
+def qdq_model(tmp_path):
+    """Create and save a per-axis QuantizeLinear-DequantizeLinear model."""
+    model = SyntheticONNXModels.create_qdq_model()
+    path = tmp_path / "qdq.onnx"
+    onnx.save(model, str(path))
+    return str(path)
+
+
+@pytest.fixture
+def qlinear_add_model(tmp_path):
+    """Create and save a Microsoft QLinearAdd model."""
+    model = SyntheticONNXModels.create_qlinear_add_model()
+    path = tmp_path / "qlinear_add.onnx"
+    onnx.save(model, str(path))
+    return str(path)
+
+
+@pytest.fixture
+def fused_normalization_model(tmp_path):
+    """Create and save fused normalization semantic-function coverage."""
+    model = SyntheticONNXModels.create_fused_normalization_model()
+    path = tmp_path / "fused_normalization.onnx"
+    onnx.save(model, str(path))
+    return str(path)
+
+
+@pytest.fixture
+def qlinear_softmax_model(tmp_path):
+    """Create and save a Microsoft QLinearSoftmax model."""
+    model = SyntheticONNXModels.create_qlinear_softmax_model()
+    path = tmp_path / "qlinear_softmax.onnx"
+    onnx.save(model, str(path))
+    return str(path)
+
+
+@pytest.fixture
+def qgemm_model(tmp_path):
+    """Create and save the Smart Turn quantized-output QGemm form."""
+    model = SyntheticONNXModels.create_qgemm_model()
+    path = tmp_path / "qgemm.onnx"
+    onnx.save(model, str(path))
+    return str(path)
+
+
+@pytest.fixture
+def qlinear_matmul_model(tmp_path):
+    """Create and save a standard QLinearMatMul model."""
+    model = SyntheticONNXModels.create_qlinear_matmul_model()
+    path = tmp_path / "qlinear_matmul.onnx"
+    onnx.save(model, str(path))
+    return str(path)
+
+
+@pytest.fixture
+def qlinear_conv_model(tmp_path):
+    """Create and save a standard QLinearConv3d model."""
+    model = SyntheticONNXModels.create_qlinear_conv_model()
+    path = tmp_path / "qlinear_conv.onnx"
+    onnx.save(model, str(path))
+    return str(path)
+
+
 # ============================================================================
 # PHASE 15: Pattern-Specific Models for Deep Analysis Testing
 # ============================================================================

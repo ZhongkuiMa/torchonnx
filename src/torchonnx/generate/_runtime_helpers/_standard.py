@@ -6,27 +6,107 @@ or ``index_put_`` (legal in eager mode, forbidden under ``torch.vmap``).
 """
 
 __docformat__ = "restructuredtext"
-__all__ = ["dynamic_expand", "dynamic_slice", "round_ste", "scatter_nd"]
+__all__ = [
+    "bias_gelu",
+    "dequantize_linear",
+    "dynamic_expand",
+    "dynamic_slice",
+    "layer_normalization",
+    "quantize_linear",
+    "scatter_nd",
+]
 
 import torch
 
 
-def round_ste(data):
-    """Apply ONNX ties-to-even Round with an identity surrogate gradient.
+def bias_gelu(data, bias):
+    """Apply the Microsoft BiasGelu fusion with exact GELU semantics."""
+    return torch.nn.functional.gelu(data + bias)
 
-    The concrete value is ``torch.round(data)``.  The straight-through term
-    only changes autograd, which lets attack optimizers traverse quantization;
-    callers must still validate any witness against the original ONNX model.
-    """
-    exact = torch.round(data)
-    return exact.detach() + data - data.detach()
+
+def layer_normalization(data, weight, bias=None, axis=-1, epsilon=1e-5, simplified=False):
+    """Apply LayerNormalization or its RMS-only simplified form."""
+    normalized_axis = axis if axis >= 0 else axis + data.ndim
+    if normalized_axis < 0 or normalized_axis >= data.ndim:
+        raise ValueError(f"LayerNormalization axis {axis} is invalid for rank {data.ndim}")
+    normalized_shape = tuple(data.shape[normalized_axis:])
+    if tuple(weight.shape) != normalized_shape:
+        raise ValueError(
+            "LayerNormalization weight shape must match the normalized data dimensions"
+        )
+    if bias is not None and tuple(bias.shape) != normalized_shape:
+        raise ValueError("LayerNormalization bias shape must match the normalized data dimensions")
+
+    dimensions = tuple(range(normalized_axis, data.ndim))
+    centered = data if simplified else data - data.mean(dim=dimensions, keepdim=True)
+    variance = (centered * centered).mean(dim=dimensions, keepdim=True)
+    result = centered * torch.rsqrt(variance + epsilon) * weight
+    return result if bias is None else result + bias
+
+
+def quantize_linear(data, scale, zero_point=None, axis=1):
+    """Apply ONNX QuantizeLinear with scalar or per-axis parameters."""
+
+    def reshape_parameter(parameter):
+        if parameter.numel() == 1:
+            return parameter.reshape(())
+        if parameter.ndim != 1:
+            raise ValueError("QuantizeLinear scale and zero_point must be scalar or 1-D")
+        normalized_axis = axis if axis >= 0 else axis + data.ndim
+        if normalized_axis < 0 or normalized_axis >= data.ndim:
+            raise ValueError(f"QuantizeLinear axis {axis} is invalid for rank {data.ndim}")
+        if parameter.shape[0] != data.shape[normalized_axis]:
+            raise ValueError(
+                "QuantizeLinear per-axis parameter length does not match the data dimension"
+            )
+        shape = [1] * data.ndim
+        shape[normalized_axis] = parameter.shape[0]
+        return parameter.reshape(shape)
+
+    scale = reshape_parameter(scale).to(device=data.device)
+    if zero_point is None:
+        output_dtype = torch.uint8
+        zero = torch.zeros((), device=data.device, dtype=scale.dtype)
+    else:
+        if zero_point.dtype.is_floating_point:
+            raise ValueError("QuantizeLinear zero_point must have an integer dtype")
+        output_dtype = zero_point.dtype
+        zero = reshape_parameter(zero_point).to(device=data.device, dtype=scale.dtype)
+    qinfo = torch.iinfo(output_dtype)
+    quantized = torch.clamp(torch.round(data / scale) + zero, min=qinfo.min, max=qinfo.max)
+    return quantized.to(dtype=output_dtype)
+
+
+def dequantize_linear(data, scale, zero_point=None, axis=1):
+    """Apply ONNX DequantizeLinear with scalar or per-axis parameters."""
+
+    def reshape_parameter(parameter):
+        if parameter.numel() == 1:
+            return parameter.reshape(())
+        if parameter.ndim != 1:
+            raise ValueError("DequantizeLinear scale and zero_point must be scalar or 1-D")
+        normalized_axis = axis if axis >= 0 else axis + data.ndim
+        if normalized_axis < 0 or normalized_axis >= data.ndim:
+            raise ValueError(f"DequantizeLinear axis {axis} is invalid for rank {data.ndim}")
+        if parameter.shape[0] != data.shape[normalized_axis]:
+            raise ValueError(
+                "DequantizeLinear per-axis parameter length does not match the data dimension"
+            )
+        shape = [1] * data.ndim
+        shape[normalized_axis] = parameter.shape[0]
+        return parameter.reshape(shape)
+
+    scale = reshape_parameter(scale).to(device=data.device)
+    data = data.to(dtype=scale.dtype)
+    if zero_point is None:
+        zero = torch.zeros((), device=data.device, dtype=scale.dtype)
+    else:
+        zero = reshape_parameter(zero_point).to(device=data.device, dtype=scale.dtype)
+    return (data - zero) * scale
 
 
 def dynamic_slice(data, starts, ends, axes=None, steps=None):
     """Dynamic slice helper for ONNX Slice operation."""
-    # Force int64 (torch.long). ONNX exporters emit a mix of int32 / int64;
-    # downstream torch.clamp and torch.arange below require dtype parity with
-    # dim_sizes (int64), so mismatched int32 starts/ends would raise at runtime.
     starts = torch.as_tensor(starts, device=data.device).to(torch.long)
     ends = torch.as_tensor(ends, device=data.device).to(torch.long)
     if axes is None:
@@ -38,21 +118,14 @@ def dynamic_slice(data, starts, ends, axes=None, steps=None):
     else:
         steps = torch.as_tensor(steps, device=data.device).to(torch.long)
 
-    # Normalize negative starts/ends
     dims = torch.as_tensor(data.shape, device=data.device)
-    # axes tells where to read dim size
     dim_sizes = dims[axes]
-
     starts = torch.where(starts < 0, dim_sizes + starts, starts)
     ends = torch.where(ends < 0, dim_sizes + ends, ends)
-
-    # Clip to bounds (ONNX semantics)
-    # Use tensors for both min and max to avoid type mismatch
     zero = torch.zeros_like(dim_sizes, device=dim_sizes.device)
     starts = torch.clamp(starts, min=zero, max=dim_sizes)
     ends = torch.clamp(ends, min=zero, max=dim_sizes)
 
-    # Build index tuple dynamically
     index = [slice(None)] * data.ndim
     for i in range(axes.shape[0]):
         ax = axes[i].item()
@@ -63,21 +136,12 @@ def dynamic_slice(data, starts, ends, axes=None, steps=None):
 
 
 def scatter_nd(data, indices, updates, reduction="none"):
-    """PyTorch equivalent of ONNX ScatterND using tensor-based indexing.
-
-    indices: (..., K)
-    updates: broadcastable to indices[..., :-1] + data.shape[K:]
-    reduction: "none", "add" (ONNX opset >= 11)
-    """
+    """Apply ONNX ScatterND using tensor-based indexing."""
     result = data.clone()
     indices = indices.to(torch.long)
     dim_sizes = torch.as_tensor(data.shape[: indices.shape[-1]], device=data.device)
     indices = torch.where(indices < 0, indices + dim_sizes, indices)
-
-    # Ensure updates has the same dtype as result (important for float64 testing)
     updates = updates.to(result.dtype)
-
-    # Convert indices (..., K) -> tuple of K tensors
     idx_tuple = tuple(indices[..., i] for i in range(indices.shape[-1]))
 
     if reduction == "none":
@@ -91,42 +155,24 @@ def scatter_nd(data, indices, updates, reduction="none"):
 
 
 def dynamic_expand(data, target_shape):
-    """Dynamic expand helper for ONNX Expand operation.
-
-    Handles dimension mismatches and ONNX semantics conversion:
-    - ONNX allows expanding from higher dims to lower dims (e.g., 4D->3D)
-    - ONNX uses 1 to mean "keep dimension", PyTorch uses -1
-    """
-    # Ensure target_shape is a list of integers
+    """Apply ONNX Expand while accepting a runtime target shape."""
     if isinstance(target_shape, torch.Tensor):
         target_shape = target_shape.to(torch.int64).tolist()
-    # Convert to integers (handle cases where list contains floats or numpy ints)
     target_shape = [int(x) for x in target_shape]
 
-    # If data has more dimensions than target, squeeze leading dimensions
     if data.ndim > len(target_shape):
-        # Remove leading dimensions by reshaping to match target length
         new_shape = tuple(int(s) for s in data.shape[data.ndim - len(target_shape) :])
         data = data.reshape(new_shape)
 
-    # Convert ONNX semantics to PyTorch
-    # For each dimension in target_shape:
-    # - If target[i] == 1 and data has a non-1 dim at that position,
-    #   keep data's dim (-1)
-    # - Otherwise, use target[i]
     converted_shape = []
     for i in range(len(target_shape)):
         if i < len(target_shape) - data.ndim:
-            # Dimension doesn't exist in data, use target value
             converted_shape.append(int(target_shape[i]))
         else:
-            # Dimension exists in data
             data_idx = i - (len(target_shape) - data.ndim)
             if target_shape[i] == 1 and data.shape[data_idx] != 1:
-                # Keep data's dimension
                 converted_shape.append(-1)
             else:
-                # Use target dimension
                 converted_shape.append(int(target_shape[i]))
 
     return data.expand(converted_shape)

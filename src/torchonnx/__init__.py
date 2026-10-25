@@ -4,7 +4,7 @@
 """
 
 __docformat__ = "restructuredtext"
-__version__ = "2026.10.3"
+__version__ = "2026.10.4"
 __all__ = [
     "BENCHMARKS_WITHOUT_BATCH_DIM",
     "ONNXModelInterface",

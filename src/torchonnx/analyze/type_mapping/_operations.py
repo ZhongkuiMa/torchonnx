@@ -64,7 +64,13 @@ ONNX_TO_PYTORCH_OPERATIONS: dict[str, str] = {
     "Erf": "erf",
     "Sin": "sin",
     "Floor": "floor",
-    "Round": "round_ste",
+    "Round": "round",
+    "QuantizeLinear": "quantize_linear",
+    "DequantizeLinear": "dequantize_linear",
+    "BiasGelu": "bias_gelu",
+    "LayerNormalization": "layer_normalization",
+    "SimplifiedLayerNormalization": "layer_normalization",
+    "SkipLayerNormalization": "skip_layer_normalization",
     "Abs": "abs",
     "Sqrt": "sqrt",
     "Exp": "exp",
@@ -285,6 +291,31 @@ def _extract_conv_transpose_args(
     return pytorch_args
 
 
+def _extract_linear_quantization_args(
+    node: NodeProto, initializers: dict[str, TensorProto]
+) -> dict[str, Any]:
+    """Extract the per-axis coordinate for linear quantization."""
+    attrs = extract_onnx_attrs(node, initializers)
+    unsupported = set(attrs) - {"axis"}
+    if unsupported:
+        raise ValueError(f"{node.op_type} attributes {sorted(unsupported)} are not supported")
+    return {"axis": attrs["axis"]}
+
+
+def _extract_layer_normalization_args(
+    node: NodeProto, initializers: dict[str, TensorProto]
+) -> dict[str, Any]:
+    """Extract supported LayerNormalization-family attributes."""
+    attrs = extract_onnx_attrs(node, initializers)
+    stash_type = attrs.pop("stash_type", 1)
+    if stash_type != 1:
+        raise ValueError(f"{node.op_type} stash_type={stash_type} is not supported")
+    unsupported = set(attrs) - {"axis", "epsilon"}
+    if unsupported:
+        raise ValueError(f"{node.op_type} attributes {sorted(unsupported)} are not supported")
+    return {"axis": attrs.get("axis", -1), "epsilon": attrs.get("epsilon", 1e-5)}
+
+
 # Dispatch dictionary for operation argument extraction
 _OPERATION_ARGS_EXTRACTORS: dict[str, Any] = {
     "Pad": _extract_pad_args,
@@ -335,6 +366,12 @@ _OPERATION_ARGS_EXTRACTORS: dict[str, Any] = {
     "Sin": lambda node, initializers: {},
     "Floor": lambda node, initializers: {},
     "Round": lambda node, initializers: {},
+    "QuantizeLinear": _extract_linear_quantization_args,
+    "DequantizeLinear": _extract_linear_quantization_args,
+    "BiasGelu": lambda node, initializers: {},
+    "LayerNormalization": _extract_layer_normalization_args,
+    "SimplifiedLayerNormalization": _extract_layer_normalization_args,
+    "SkipLayerNormalization": _extract_layer_normalization_args,
     "Abs": lambda node, initializers: {},
     "Sqrt": lambda node, initializers: {},
     "Exp": lambda node, initializers: {},

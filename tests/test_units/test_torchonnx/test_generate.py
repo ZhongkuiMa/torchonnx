@@ -2022,10 +2022,10 @@ class TestPhase20FloorOperation:
 
 
 class TestPhase20RoundOperation:
-    """Test exact-forward Round with its attack surrogate gradient."""
+    """Test exact ONNX Round conversion."""
 
-    def test_round_forward_and_gradient(self, round_model):
-        """Preserve ties-to-even values while exposing identity gradients."""
+    def test_round_forward(self, round_model):
+        """Preserve ties-to-even values without changing autograd semantics."""
         normalized = load_and_preprocess_onnx_model(round_model)
         semantic_ir = build_semantic_ir(build_model_ir(normalized))
         module_code, state_dict = generate_pytorch_module(semantic_ir, vmap_mode=True)
@@ -2038,8 +2038,82 @@ class TestPhase20RoundOperation:
         output = module(inputs)
         assert torch.equal(output, torch.tensor([[-2.0, -2.0, 0.0, 2.0, 2.0]]))
         output.sum().backward()
-        assert torch.equal(inputs.grad, torch.ones_like(inputs))
-        assert "def round_ste" in module_code
+        assert torch.equal(inputs.grad, torch.zeros_like(inputs))
+        assert "x0.round()" in module_code
+        assert "round_ste" not in module_code
+
+
+class TestLinearQuantizationOperations:
+    """Test exact pure-PyTorch Q/DQ conversion."""
+
+    def test_qdq_forward_and_runtime_dependencies(self, qdq_model):
+        """Generate a per-axis Q/DQ graph with no external runtime fallback."""
+        normalized = load_and_preprocess_onnx_model(qdq_model)
+        semantic_ir = build_semantic_ir(build_model_ir(normalized))
+        module_code, state_dict = generate_pytorch_module(semantic_ir, vmap_mode=True)
+        namespace: dict[str, object] = {}
+        exec(module_code, namespace)
+        module = namespace["ONNXModel"]()
+        module.load_state_dict(state_dict)
+
+        inputs = torch.tensor([[0.2, 1.0, -20.0]], requires_grad=True)
+        output = module(inputs)
+        assert torch.allclose(output, torch.tensor([[0.2, 1.0, -15.0]]))
+        assert not output.requires_grad
+        batched = torch.stack((inputs.detach(), inputs.detach() + 0.1))
+        assert torch.vmap(module)(batched).shape == (2, 1, 3)
+        assert "def quantize_linear" in module_code
+        assert "def dequantize_linear" in module_code
+        assert "onnxruntime" not in module_code
+        assert "import onnx" not in module_code
+        assert "import numpy" not in module_code
+
+    def test_fused_normalization_forward_and_gradient(self, fused_normalization_model):
+        """Generate the BiasGelu, LayerNorm, SkipLayerNorm, and RMSNorm chain."""
+        normalized = load_and_preprocess_onnx_model(fused_normalization_model)
+        semantic_ir = build_semantic_ir(build_model_ir(normalized))
+        module_code, state_dict = generate_pytorch_module(semantic_ir, vmap_mode=True)
+        namespace: dict[str, object] = {}
+        exec(module_code, namespace)
+        module = namespace["ONNXModel"]()
+        module.load_state_dict(state_dict)
+
+        data = torch.tensor([[1.0, -2.0, 0.5]], requires_grad=True)
+        skip = torch.tensor([[0.1, 0.2, -0.3]])
+        output = module(data, skip)
+
+        weight = torch.tensor([1.0, 1.5, 0.5])
+        norm_bias = torch.tensor([0.1, -0.2, 0.3])
+        expected = torch.nn.functional.gelu(data + torch.tensor([0.2, -0.1, 0.4]))
+        expected = torch.nn.functional.layer_norm(expected, (3,), weight, norm_bias, 1e-5)
+        expected = torch.nn.functional.layer_norm(expected + skip, (3,), weight, norm_bias, 1e-5)
+        expected = (
+            expected * torch.rsqrt(expected.square().mean(dim=-1, keepdim=True) + 1e-5) * weight
+        )
+
+        assert torch.allclose(output, expected)
+        output.sum().backward()
+        assert data.grad is not None
+        assert torch.isfinite(data.grad).all()
+        assert "def bias_gelu" in module_code
+        assert "def layer_normalization" in module_code
+
+    @pytest.mark.parametrize(
+        "fixture_name",
+        [
+            "qlinear_add_model",
+            "qlinear_conv_model",
+            "qlinear_matmul_model",
+            "qlinear_softmax_model",
+            "qgemm_model",
+        ],
+    )
+    def test_fused_quantized_operators_fail_closed(self, fixture_name, request):
+        """Reject fused kernels until an exact pure-PyTorch conversion exists."""
+        model_path = request.getfixturevalue(fixture_name)
+        normalized = load_and_preprocess_onnx_model(model_path)
+        with pytest.raises(ValueError, match="Unsupported ONNX operator"):
+            build_semantic_ir(build_model_ir(normalized))
 
 
 class TestPhase20ShapeAndConstantOfShape:
